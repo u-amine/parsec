@@ -7,21 +7,21 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use error::Error;
-use id::{PublicId, SecretId};
+use id::{Proof, PublicId, SecretId};
 use maidsafe_utilities::serialisation::serialise;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::fmt::{self, Debug, Formatter};
+use std::fmt::Debug;
 
 /// A helper struct carrying some data and a signature of this data.
 #[serde(bound = "")]
-#[derive(Serialize, Deserialize, PartialEq, Clone)]
-pub struct Vote<T: Serialize + DeserializeOwned, P: PublicId> {
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct Vote<T: Serialize + DeserializeOwned + Debug, P: PublicId> {
     payload: T,
     signature: P::Signature,
 }
 
-impl<T: Serialize + DeserializeOwned, P: PublicId> Vote<T, P> {
+impl<T: Serialize + DeserializeOwned + Debug, P: PublicId> Vote<T, P> {
     /// Creates a `Vote` for `payload`.
     pub fn new<S: SecretId<PublicId = P>>(secret_id: &S, payload: T) -> Result<Self, Error> {
         let signature = secret_id.sign_detached(&serialise(&payload)?[..]);
@@ -39,20 +39,22 @@ impl<T: Serialize + DeserializeOwned, P: PublicId> Vote<T, P> {
     }
 
     /// Validates this `Vote`'s signature and payload against the given public ID.
-    pub fn validate_signature(&self, peer_id: &P) -> bool {
+    pub fn is_valid(&self, public_id: &P) -> bool {
         match serialise(&self.payload) {
-            Ok(data) => peer_id.verify_detached(&self.signature, &data[..]),
+            Ok(data) => public_id.verify_signature(&self.signature, &data[..]),
             Err(_) => false,
         }
     }
-}
 
-impl<T: Serialize + DeserializeOwned + Debug, P: PublicId> Debug for Vote<T, P> {
-    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
-        write!(
-            formatter,
-            "Vote{{ payload: {:?}, signature: ... }}",
-            self.payload
-        )
+    /// Creates a `Proof` from this `Vote`.  Returns `Err` if this `Vote` is not valid (i.e. if
+    /// `!self.is_valid()`).
+    pub fn create_proof(&self, public_id: &P) -> Result<Proof<P>, Error> {
+        if self.is_valid(public_id) {
+            return Ok(Proof {
+                public_id: public_id.clone(),
+                signature: self.signature.clone(),
+            });
+        }
+        Err(Error::SignatureFailure)
     }
 }

@@ -18,8 +18,8 @@ pub trait PublicId:
 {
     /// The signature type associated with the chosen asymmetric key scheme.
     type Signature: 'static + Send + Debug + Clone + Eq + Ord + Hash + Serialize + DeserializeOwned;
-    /// Verify `signature` against `data` using this `PublicId`.  Returns `true` if valid.
-    fn verify_detached(&self, signature: &Self::Signature, data: &[u8]) -> bool;
+    /// Verifies `signature` against `data` using this `PublicId`.  Returns `true` if valid.
+    fn verify_signature(&self, signature: &Self::Signature, data: &[u8]) -> bool;
 }
 
 /// The secret identity of a node.  It provides functionality to allow it to be used as an
@@ -29,7 +29,7 @@ pub trait SecretId {
     type PublicId: PublicId;
 
     /// Returns the associated public identity.
-    fn pub_id(&self) -> &Self::PublicId;
+    fn public_id(&self) -> &Self::PublicId;
 
     /// Creates a detached `Signature` of `data`.
     fn sign_detached(&self, data: &[u8]) -> <Self::PublicId as PublicId>::Signature;
@@ -37,7 +37,7 @@ pub trait SecretId {
     /// Creates a `Proof` of `data`.
     fn create_proof(&self, data: &[u8]) -> Proof<Self::PublicId> {
         Proof {
-            pub_id: self.pub_id().clone(),
+            public_id: self.public_id().clone(),
             signature: self.sign_detached(data),
         }
     }
@@ -48,6 +48,23 @@ pub trait SecretId {
 #[serde(bound = "")]
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Proof<P: PublicId> {
-    pub_id: P,
-    signature: P::Signature,
+    pub(super) public_id: P,
+    pub(super) signature: P::Signature,
+}
+
+impl<P: PublicId> Proof<P> {
+    /// Returns the associated public identity.
+    pub fn public_id(&self) -> &P {
+        &self.public_id
+    }
+
+    /// Returns the associated signature.
+    pub fn signature(&self) -> &P::Signature {
+        &self.signature
+    }
+
+    /// Verifies this `Proof` against `data`.  Returns `true` if valid.
+    pub fn is_valid(&self, data: &[u8]) -> bool {
+        self.public_id.verify_signature(&self.signature, data)
+    }
 }

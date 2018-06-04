@@ -10,8 +10,9 @@ use super::Content;
 use id::PublicId;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::fmt::Debug;
 
-pub struct PackedEvent<T: Serialize + DeserializeOwned, P: PublicId> {
+pub struct PackedEvent<T: Serialize + DeserializeOwned + Debug, P: PublicId> {
     content: Content<T, P>,
     // Creator's signature of `content`.
     signature: P::Signature,
