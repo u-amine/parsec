@@ -46,11 +46,11 @@ extern crate tiny_keccak;
 #[macro_use]
 extern crate unwrap;
 
-// mod block;
-// mod error;
-// mod gossip;
-// mod hash;
-// mod id;
-// mod parsec;
-// mod peer_manager;
-// mod vote;
+mod block;
+mod error;
+mod gossip;
+mod hash;
+mod id;
+mod parsec;
+mod peer_manager;
+mod vote;
