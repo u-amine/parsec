@@ -32,6 +32,8 @@ pub struct Parsec<T: Serialize + DeserializeOwned, S: SecretId> {
     extra_votes: BTreeMap<S::PublicId, Vec<Vote<T, S::PublicId>>>,
 }
 
+// TODO - remove
+#[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
 impl<T: Serialize + DeserializeOwned, S: SecretId> Parsec<T, S> {
     /// Create a new `Parsec` for a peer with the given ID and genesis peer IDs.
     pub fn new(our_id: S, genesis_group: &BTreeSet<S::PublicId>) -> Result<Self, Error> {

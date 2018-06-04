@@ -41,7 +41,7 @@ impl<T: Serialize + DeserializeOwned, P: PublicId> Vote<T, P> {
     /// Validates this `Vote`'s signature and payload against the given public ID.
     pub fn validate_signature(&self, peer_id: &P) -> bool {
         match serialise(&self.payload) {
-            Ok(data) => peer_id.verify_detached(&self.signature, &data[..]),
+            Ok(data) => peer_id.verify_signature(&self.signature, &data[..]),
             Err(_) => false,
         }
     }
