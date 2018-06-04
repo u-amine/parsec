@@ -11,8 +11,9 @@ use hash::Hash;
 use id::PublicId;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::fmt::Debug;
 
-pub struct Content<T: Serialize + DeserializeOwned, P: PublicId> {
+pub struct Content<T: Serialize + DeserializeOwned + Debug, P: PublicId> {
     // ID of peer which created this `Event`.
     creator: P,
     // Whether it was created by receiving a gossip request, response or by being
@@ -22,7 +23,7 @@ pub struct Content<T: Serialize + DeserializeOwned, P: PublicId> {
     self_parent: Option<Hash>,
 }
 
-impl<T: Serialize + DeserializeOwned, P: PublicId> Content<T, P> {
+impl<T: Serialize + DeserializeOwned + Debug, P: PublicId> Content<T, P> {
     pub fn other_parent(&self) -> Option<Hash> {
         match self.cause {
             Cause::Request(hash) | Cause::Response(hash) => Some(hash),

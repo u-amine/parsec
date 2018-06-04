@@ -56,3 +56,4 @@ mod peer_manager;
 mod vote;
 
 pub use id::{Proof, PublicId, SecretId};
+pub use vote::Vote;

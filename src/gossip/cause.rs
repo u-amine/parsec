@@ -10,9 +10,10 @@ use hash::Hash;
 use id::PublicId;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::fmt::Debug;
 use vote::Vote;
 
-pub enum Cause<T: Serialize + DeserializeOwned, P: PublicId> {
+pub enum Cause<T: Serialize + DeserializeOwned + Debug, P: PublicId> {
     // Hash is of the latest `Event` of the peer which sent the request.
     Request(Hash),
     // Hash is of the latest `Event` of the peer which sent the response.

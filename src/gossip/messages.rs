@@ -11,11 +11,12 @@ use id::PublicId;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::fmt::Debug;
 
-pub struct Request<T: Serialize + DeserializeOwned, P: PublicId> {
+pub struct Request<T: Serialize + DeserializeOwned + Debug, P: PublicId> {
     events: Vec<PackedEvent<T, P>>,
 }
 
-pub struct Response<T: Serialize + DeserializeOwned, P: PublicId> {
+pub struct Response<T: Serialize + DeserializeOwned + Debug, P: PublicId> {
     events: Vec<PackedEvent<T, P>>,
 }

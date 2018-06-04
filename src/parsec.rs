@@ -15,9 +15,10 @@ use peer_manager::PeerManager;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::fmt::Debug;
 use vote::Vote;
 
-pub struct Parsec<T: Serialize + DeserializeOwned, S: SecretId> {
+pub struct Parsec<T: Serialize + DeserializeOwned + Debug, S: SecretId> {
     // Holding PeerInfo of other nodes.
     peer_manager: PeerManager<S>,
     // Gossip events created locally and received from other peers.
@@ -34,7 +35,7 @@ pub struct Parsec<T: Serialize + DeserializeOwned, S: SecretId> {
 
 // TODO - remove
 #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
-impl<T: Serialize + DeserializeOwned, S: SecretId> Parsec<T, S> {
+impl<T: Serialize + DeserializeOwned + Debug, S: SecretId> Parsec<T, S> {
     /// Create a new `Parsec` for a peer with the given ID and genesis peer IDs.
     pub fn new(our_id: S, genesis_group: &BTreeSet<S::PublicId>) -> Result<Self, Error> {
         unimplemented!();
