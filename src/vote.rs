@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use error::Error;
-use id::{PublicId, SecretId};
+use id::{Proof, PublicId, SecretId};
 use maidsafe_utilities::serialisation::serialise;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -44,5 +44,17 @@ impl<T: Serialize + DeserializeOwned + Debug, P: PublicId> Vote<T, P> {
             Ok(data) => public_id.verify_signature(&self.signature, &data[..]),
             Err(_) => false,
         }
+    }
+
+    /// Creates a `Proof` from this `Vote`.  Returns `Err` if this `Vote` is not valid (i.e. if
+    /// `!self.is_valid()`).
+    pub fn create_proof(&self, public_id: &P) -> Result<Proof<P>, Error> {
+        if self.is_valid(public_id) {
+            return Ok(Proof {
+                public_id: public_id.clone(),
+                signature: self.signature.clone(),
+            });
+        }
+        Err(Error::SignatureFailure)
     }
 }

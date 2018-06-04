@@ -48,8 +48,8 @@ pub trait SecretId {
 #[serde(bound = "")]
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct Proof<P: PublicId> {
-    public_id: P,
-    signature: P::Signature,
+    pub(super) public_id: P,
+    pub(super) signature: P::Signature,
 }
 
 impl<P: PublicId> Proof<P> {
