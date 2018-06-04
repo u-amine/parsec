@@ -1,0 +1,18 @@
+[package]
+authors = ["MaidSafe Developers <dev@maidsafe.net>"]
+description = "Implementation of Protocol for Asynchronous, Reliable, Secure and Efficient Consensus"
+documentation = "https://docs.rs/parsec"
+homepage = "https://maidsafe.net"
+license = "GPL-3.0"
+name = "parsec"
+readme = "README.md"
+repository = "https://github.com/maidsafe/parsec"
+version = "0.1.0"
+
+[dependencies]
+maidsafe_utilities = "~0.15.0"
+quick-error = "~1.2.2"
+serde = "~1.0.66"
+serde_derive = "~1.0.66"
+tiny-keccak = "~1.4.2"
+unwrap = "~1.1.0"
