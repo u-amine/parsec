@@ -10,6 +10,11 @@ quick_error! {
     /// Parsec error variants.
     #[derive(Debug)]
     pub enum Error {
+        /// Proof already existed in the block.
+        ProofAlreadyExisted {
+            description("Proof already existed")
+            display("The proof is already existed in the targeted block.")
+        }
         /// Failed in verify signature.
         SignatureFailure {
             description("Signature cannot be verified")
