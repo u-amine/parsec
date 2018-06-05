@@ -53,10 +53,6 @@ impl<T: Serialize + DeserializeOwned + Debug, P: PublicId> Block<T, P> {
     /// Convert the vote to a proof and insert it into proofs of the block.
     pub fn add_vote(&mut self, peer_id: &P, vote: &Vote<T, P>) -> Result<bool, Error> {
         let proof = vote.create_proof(peer_id)?;
-        if self.proofs.insert(proof) {
-            Ok(true)
-        } else {
-            Err(Error::ProofAlreadyExisted)
-        }
+        Ok(self.proofs.insert(proof))
     }
 }
