@@ -16,12 +16,12 @@ use vote::Vote;
 
 #[serde(bound = "")]
 #[derive(Serialize, Debug, Deserialize, PartialEq, Eq, Ord, PartialOrd, Clone)]
-pub struct Block<T: Serialize + DeserializeOwned + Debug + PartialEq, P: PublicId> {
+pub struct Block<T: Serialize + DeserializeOwned + Debug + Eq, P: PublicId> {
     payload: T,
     proofs: BTreeSet<Proof<P>>,
 }
 
-impl<T: Serialize + DeserializeOwned + Debug + PartialEq, P: PublicId> Block<T, P> {
+impl<T: Serialize + DeserializeOwned + Debug + Eq, P: PublicId> Block<T, P> {
     /// Creates a `Block` from `payload` and `votes`.
     pub fn new(payload: T, votes: &BTreeMap<P, Vote<T, P>>) -> Result<Self, Error> {
         let proofs: BTreeSet<Proof<P>> = votes
