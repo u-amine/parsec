@@ -14,7 +14,7 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 
-pub struct Event<T: Serialize + DeserializeOwned + Debug, P: PublicId> {
+pub struct Event<T: Serialize + DeserializeOwned + Debug + PartialEq, P: PublicId> {
     content: Content<T, P>,
     // Creator's signature of `content`. signature: P::Signature,
     hash: Hash,

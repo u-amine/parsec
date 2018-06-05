@@ -16,12 +16,12 @@ use vote::Vote;
 
 #[serde(bound = "")]
 #[derive(Serialize, Debug, Deserialize, PartialEq, Eq, Ord, PartialOrd, Clone)]
-pub struct Block<T: Serialize + DeserializeOwned + Debug, P: PublicId> {
+pub struct Block<T: Serialize + DeserializeOwned + Debug + PartialEq, P: PublicId> {
     payload: T,
     proofs: BTreeSet<Proof<P>>,
 }
 
-impl<T: Serialize + DeserializeOwned + Debug, P: PublicId> Block<T, P> {
+impl<T: Serialize + DeserializeOwned + Debug + PartialEq, P: PublicId> Block<T, P> {
     /// Creates a `Block` from `payload` and `votes`.
     pub fn new(payload: T, votes: &BTreeMap<P, Vote<T, P>>) -> Result<Self, Error> {
         let proofs: BTreeSet<Proof<P>> = votes
@@ -52,6 +52,9 @@ impl<T: Serialize + DeserializeOwned + Debug, P: PublicId> Block<T, P> {
 
     /// Convert the vote to a proof and insert it into proofs of the block.
     pub fn add_vote(&mut self, peer_id: &P, vote: &Vote<T, P>) -> Result<bool, Error> {
+        if &self.payload != vote.payload() {
+            return Err(Error::MismatchedPayload);
+        }
         let proof = vote.create_proof(peer_id)?;
         Ok(self.proofs.insert(proof))
     }
