@@ -51,9 +51,15 @@ mod error;
 mod gossip;
 mod hash;
 mod id;
+mod network_event;
 mod parsec;
 mod peer_manager;
 mod vote;
 
+pub use block::Block;
+pub use error::Error;
+pub use gossip::{Request, Response};
 pub use id::{Proof, PublicId, SecretId};
+pub use network_event::NetworkEvent;
+pub use parsec::Parsec;
 pub use vote::Vote;

@@ -9,19 +9,17 @@
 use error::Error;
 use id::{Proof, PublicId, SecretId};
 use maidsafe_utilities::serialisation::serialise;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use std::fmt::Debug;
+use network_event::NetworkEvent;
 
 /// A helper struct carrying some data and a signature of this data.
 #[serde(bound = "")]
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
-pub struct Vote<T: Serialize + DeserializeOwned + Debug + Eq, P: PublicId> {
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Debug)]
+pub struct Vote<T: NetworkEvent, P: PublicId> {
     payload: T,
     signature: P::Signature,
 }
 
-impl<T: Serialize + DeserializeOwned + Debug + Eq, P: PublicId> Vote<T, P> {
+impl<T: NetworkEvent, P: PublicId> Vote<T, P> {
     /// Creates a `Vote` for `payload`.
     pub fn new<S: SecretId<PublicId = P>>(secret_id: &S, payload: T) -> Result<Self, Error> {
         let signature = secret_id.sign_detached(&serialise(&payload)?[..]);

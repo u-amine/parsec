@@ -20,12 +20,6 @@ quick_error! {
             description("Signature cannot be verified")
             display("The message or signature might be corrupted, or the signer is wrong.")
         }
-        /// IO error.
-        Io(error: ::std::io::Error) {
-            description(error.description())
-            display("I/O error: {}", error)
-            from()
-        }
         /// Serialisation Error.
         Serialisation(error: ::maidsafe_utilities::serialisation::SerialisationError) {
             description(error.description())
