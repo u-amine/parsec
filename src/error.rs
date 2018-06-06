@@ -10,6 +10,11 @@ quick_error! {
     /// Parsec error variants.
     #[derive(Debug)]
     pub enum Error {
+        /// Payload does not match.
+        MismatchedPayload {
+            description("Payload doesn't match")
+            display("The payload of the vote doesn't match the payload of targeted block.")
+        }
         /// Failed in verify signature.
         SignatureFailure {
             description("Signature cannot be verified")
