@@ -16,13 +16,15 @@ use std::fmt::Debug;
 
 pub struct Event<T: Serialize + DeserializeOwned + Debug + Eq, P: PublicId> {
     content: Content<T, P>,
-    // Creator's signature of `content`. signature: P::Signature,
-    hash: Hash,
+    // Creator's signature of `content`.
+    signature: P::Signature,
+    // Hash of the `content`.
+    pub(crate) hash: Hash,
     // Index used to simplify some calculations. It's always one more than the index
     // of the self-parent, or 1 for events without self-parent (0 is reserved).
-    pub(super) index: u64,
+    pub(crate) index: u64,
     // Index of last (latest) event by each peer that is ancestor of this event.
-    pub(super) last_ancestors: BTreeMap<P, u64>,
+    pub(crate) last_ancestors: BTreeMap<P, u64>,
     // Index of first (earliest) event by each peer that is descendant of this event.
-    pub(super) first_descendants: BTreeMap<P, u64>,
+    pub(crate) first_descendants: BTreeMap<P, u64>,
 }
