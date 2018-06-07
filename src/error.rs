@@ -36,5 +36,10 @@ quick_error! {
             description("Invalid event index")
             display("The given event has an invalid index.")
         }
+        /// The given event is invalid or malformed.
+        InvalidEvent {
+            description("Invalid event")
+            display("The given event is invalid or malformed.")
+        }
     }
 }
