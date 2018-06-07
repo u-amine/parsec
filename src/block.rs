@@ -51,7 +51,7 @@ impl<T: NetworkEvent, P: PublicId> Block<T, P> {
 
     /// Converts `vote` to a `Proof` and attempts to add it to the block.  Returns an error if
     /// `vote` is invalid (i.e. signature check fails or the `vote` is for a different network
-    /// event, `Ok(true)` if the `Proof` wasn't previously held in this `Block`, or `Ok(false)` if
+    /// event), `Ok(true)` if the `Proof` wasn't previously held in this `Block`, or `Ok(false)` if
     /// it was previously held.
     pub fn add_vote(&mut self, peer_id: &P, vote: &Vote<T, P>) -> Result<bool, Error> {
         if &self.payload != vote.payload() {

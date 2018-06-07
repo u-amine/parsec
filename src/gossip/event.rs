@@ -77,11 +77,13 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             return Err(Error::SignatureFailure);
         };
 
+        // All fields except `content`, `signature` and `hash` still need to be set correctly by the
+        // caller.
         Ok(Self {
             content: packed_event.content,
             signature: packed_event.signature,
             hash,
-            index: Some(0),
+            index: None,
             last_ancestors: BTreeMap::default(),
             first_descendants: BTreeMap::default(),
         })
@@ -126,11 +128,13 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             self_parent,
         };
         let serialised_content = serialise(&content)?;
+        // All fields except `content`, `signature` and `hash` still need to be set correctly by the
+        // caller.
         Ok(Self {
             content,
             signature: secret_id.sign_detached(&serialised_content),
             hash: Hash::from(serialised_content.as_slice()),
-            index: Some(0),
+            index: None,
             last_ancestors: BTreeMap::default(),
             first_descendants: BTreeMap::default(),
         })
