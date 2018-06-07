@@ -11,14 +11,14 @@ use error::Error;
 use gossip::{Event, Request, Response};
 use hash::Hash;
 use id::SecretId;
+use network_event::NetworkEvent;
 use peer_manager::PeerManager;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::fmt::Debug;
 use vote::Vote;
 
-pub struct Parsec<T: Serialize + DeserializeOwned + Debug + Eq, S: SecretId> {
+/// The main object which manages creating and receiving gossip about network events from peers, and
+/// which provides a sequence of consensused `Block`s by applying the PARSEC algorithm.
+pub struct Parsec<T: NetworkEvent, S: SecretId> {
     // Holding PeerInfo of other nodes.
     peer_manager: PeerManager<S>,
     // Gossip events created locally and received from other peers.
@@ -27,15 +27,11 @@ pub struct Parsec<T: Serialize + DeserializeOwned + Debug + Eq, S: SecretId> {
     polled_blocks: BTreeSet<Hash>,
     // Consensused network events that have not been returned via `poll()` yet.
     consensused_blocks: Vec<Block<T, S::PublicId>>,
-    // Strongly-seen votes for network events in `polled_blocks` which haven't already
-    // been returned via `poll()` (i.e. as part of the stable block) or via `extra_votes()`
-    // yet.
-    extra_votes: BTreeMap<S::PublicId, Vec<Vote<T, S::PublicId>>>,
 }
 
 // TODO - remove
 #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
-impl<T: Serialize + DeserializeOwned + Debug + Eq, S: SecretId> Parsec<T, S> {
+impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// Create a new `Parsec` for a peer with the given ID and genesis peer IDs.
     pub fn new(our_id: S, genesis_group: &BTreeSet<S::PublicId>) -> Result<Self, Error> {
         unimplemented!();

@@ -8,16 +8,18 @@
 
 use hash::Hash;
 use id::PublicId;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use std::fmt::Debug;
+use network_event::NetworkEvent;
 use vote::Vote;
 
-pub enum Cause<T: Serialize + DeserializeOwned + Debug + Eq, P: PublicId> {
+#[serde(bound = "")]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub(super) enum Cause<T: NetworkEvent, P: PublicId> {
     // Hash is of the latest `Event` of the peer which sent the request.
     Request(Hash),
     // Hash is of the latest `Event` of the peer which sent the response.
     Response(Hash),
     // Vote for a single network event of type `T`.
     Observation(Vote<T, P>),
+    // Initial empty `Event` of this peer.
+    Initial,
 }
