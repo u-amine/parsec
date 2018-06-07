@@ -32,5 +32,9 @@ quick_error! {
             display("Serialisation error: {}", error)
             from()
         }
+        UnknownPeer {
+            description("Peer is not known")
+            display("The peer_id is not known to this node's peer_manager.")
+        }
     }
 }

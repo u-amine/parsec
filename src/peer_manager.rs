@@ -6,13 +6,14 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use error::Error;
 use gossip::Event;
 use hash::Hash;
 use id::{PublicId, SecretId};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::cmp;
-use std::collections::{btree_map, BTreeMap};
+use std::collections::btree_map::{self, BTreeMap, Entry};
 use std::fmt::Debug;
 
 pub struct PeerManager<S: SecretId> {
@@ -46,9 +47,7 @@ impl<S: SecretId> PeerManager<S> {
 
     /// Returns all sorted peer_ids.
     pub fn all_ids(&self) -> Vec<&S::PublicId> {
-        let mut ids: Vec<_> = self.peers.keys().collect();
-        ids.sort();
-        ids
+        self.peers.keys().collect()
     }
 
     /// Returns an iterator of peers.
@@ -66,38 +65,38 @@ impl<S: SecretId> PeerManager<S> {
         3 * count > 2 * self.peers.len()
     }
 
-    /// Returns the index of the last event created by this peer. Returns 0 if cannot find.
-    pub fn get_last_created_event_index(&self, peer_id: &S::PublicId) -> u64 {
+    /// Returns the index of the last event created by this peer. Returns `None` if cannot find.
+    pub fn last_event_index(&self, peer_id: &S::PublicId) -> Option<u64> {
         self.peers
             .get(peer_id)
             .and_then(|events| events.keys().rev().next().cloned())
-            .unwrap_or(0)
     }
 
     /// Returns the hash of the last event created by this peer. Returns `None` if cannot find.
-    pub fn get_last_created_event_hash(&self, peer_id: &S::PublicId) -> Option<&Hash> {
+    pub fn last_event_hash(&self, peer_id: &S::PublicId) -> Option<&Hash> {
         self.peers
             .get(peer_id)
             .and_then(|events| events.values().rev().next())
     }
 
     /// Returns the hash of the indexed event.
-    pub fn get_created_event_by_index(&self, peer_id: &S::PublicId, index: u64) -> Option<&Hash> {
+    pub fn event_by_index(&self, peer_id: &S::PublicId, index: u64) -> Option<&Hash> {
         self.peers
             .get(peer_id)
             .and_then(|events| events.get(&index))
     }
 
-    /// Add event created by the peer.
-    pub fn add_created_event<T: Serialize + DeserializeOwned + Debug + Eq, P: PublicId>(
+    /// Add event created by the peer. Returns an error if `peer` is not known, `Ok(None)` if the
+    /// `index` wasn't previously held for that peer, or `Ok(Some(hash))` if it was previously held
+    /// and the previous hash is returned.
+    pub fn add_event<T: Serialize + DeserializeOwned + Debug + Eq, P: PublicId>(
         &mut self,
         peer_id: S::PublicId,
         event: &Event<T, P>,
-    ) {
-        let entry = self
-            .peers
-            .entry(peer_id)
-            .or_insert_with(BTreeMap::new)
-            .insert(event.index, event.hash);
+    ) -> Result<Option<Hash>, Error> {
+        match self.peers.entry(peer_id) {
+            Entry::Occupied(mut entry) => Ok(entry.get_mut().insert(event.index, event.hash)),
+            Entry::Vacant(_) => Err(Error::UnknownPeer),
+        }
     }
 }
