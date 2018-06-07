@@ -10,12 +10,12 @@ quick_error! {
     /// Parsec error variants.
     #[derive(Debug)]
     pub enum Error {
-        /// Payload does not match.
+        /// Payload of a `Vote` doesn't match the payload of a `Block`.
         MismatchedPayload {
             description("Payload doesn't match")
             display("The payload of the vote doesn't match the payload of targeted block.")
         }
-        /// Failed in verify signature.
+        /// Failed to verify signature.
         SignatureFailure {
             description("Signature cannot be verified")
             display("The message or signature might be corrupted, or the signer is wrong.")
@@ -26,9 +26,15 @@ quick_error! {
             display("Serialisation error: {}", error)
             from()
         }
+        /// Peer is not known to this node.
         UnknownPeer {
             description("Peer is not known")
             display("The peer_id is not known to this node's peer_manager.")
+        }
+        /// The given event has an invalid index.
+        InvalidEventIndex {
+            description("Invalid event index")
+            display("The given event has an invalid index.")
         }
     }
 }

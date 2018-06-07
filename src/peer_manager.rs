@@ -10,13 +10,10 @@ use error::Error;
 use gossip::Event;
 use hash::Hash;
 use id::{PublicId, SecretId};
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use std::cmp;
+use network_event::NetworkEvent;
 use std::collections::btree_map::{self, BTreeMap, Entry};
-use std::fmt::Debug;
 
-pub struct PeerManager<S: SecretId> {
+pub(crate) struct PeerManager<S: SecretId> {
     our_id: S,
     peers: BTreeMap<S::PublicId, BTreeMap<u64, Hash>>,
 }
@@ -55,12 +52,12 @@ impl<S: SecretId> PeerManager<S> {
         self.peers.iter()
     }
 
-    /// Add a peer into the map.
+    /// Adds a peer into the map.
     pub fn add_peer(&mut self, peer_id: S::PublicId) {
         let _ = self.peers.entry(peer_id).or_insert_with(BTreeMap::new);
     }
 
-    /// Check whether the input count becomes the super majority of the network.
+    /// Checks whether the input count becomes the super majority of the network.
     pub fn is_super_majority(&self, count: usize) -> bool {
         3 * count > 2 * self.peers.len()
     }
@@ -86,17 +83,35 @@ impl<S: SecretId> PeerManager<S> {
             .and_then(|events| events.get(&index))
     }
 
-    /// Add event created by the peer. Returns an error if `peer` is not known, `Ok(None)` if the
-    /// `index` wasn't previously held for that peer, or `Ok(Some(hash))` if it was previously held
-    /// and the previous hash is returned.
-    pub fn add_event<T: Serialize + DeserializeOwned + Debug + Eq, P: PublicId>(
+    /// Adds event created by the peer. Returns an error if `peer_id` is not known, or if we already
+    /// held an event from this peer with this index, but that event's hash is different to the one
+    /// being added (in which case `peers` is left unmodified).
+    pub fn add_event<T: NetworkEvent, P: PublicId>(
         &mut self,
-        peer_id: S::PublicId,
+        peer_id: &S::PublicId,
         event: &Event<T, P>,
-    ) -> Result<Option<Hash>, Error> {
-        match self.peers.entry(peer_id) {
-            Entry::Occupied(mut entry) => Ok(entry.get_mut().insert(event.index, event.hash)),
-            Entry::Vacant(_) => Err(Error::UnknownPeer),
+    ) -> Result<(), Error> {
+        let (peer, index) = if let Some(index) = event.index {
+            if let Some(peer) = self.peers.get_mut(peer_id) {
+                (peer, index)
+            } else {
+                return Err(Error::UnknownPeer);
+            }
+        } else {
+            return Err(Error::InvalidEventIndex);
+        };
+
+        match peer.entry(index) {
+            Entry::Occupied(mut entry) => {
+                if entry.get() != event.hash() {
+                    return Err(Error::InvalidEventIndex);
+                }
+            }
+            Entry::Vacant(mut entry) => {
+                let _ = entry.insert(*event.hash());
+            }
         }
+
+        Ok(())
     }
 }
