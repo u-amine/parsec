@@ -11,6 +11,7 @@ use error::Error;
 use gossip::{Event, Request, Response};
 use hash::Hash;
 use id::{PublicId, SecretId};
+use maidsafe_utilities::serialisation::serialise;
 use network_event::NetworkEvent;
 use peer_manager::PeerManager;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -84,17 +85,48 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
 impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// Create a new `Parsec` for a peer with the given ID and genesis peer IDs.
     pub fn new(our_id: S, genesis_group: &BTreeSet<S::PublicId>) -> Result<Self, Error> {
-        unimplemented!();
+        let mut peer_manager = PeerManager::new(our_id);
+        for peer_id in genesis_group.iter() {
+            peer_manager.add_peer(peer_id.clone());
+        }
+        Ok(Parsec {
+            peer_manager,
+            events: BTreeMap::new(),
+            polled_blocks: BTreeSet::new(),
+            consensused_blocks: Vec::new(),
+            meta_votes: BTreeMap::new(),
+        })
     }
 
     /// Add a vote for `network_event`.
-    pub fn vote_for(&mut self, network_event: T) {
-        unimplemented!();
+    pub fn vote_for(&mut self, network_event: T) -> Result<(), Error> {
+        if self.have_voted_for(&network_event)? {
+            return Err(Error::InvalidEvent);
+        }
+        let our_pub_id = self.peer_manager.our_id().public_id();
+        let next_index = if let Some(last_index) = self.peer_manager.last_event_index(our_pub_id) {
+            last_index + 1
+        } else {
+            return Err(Error::InvalidEvent);
+        };
+        let self_parent_hash =
+            if let Some(last_hash) = self.peer_manager.last_event_hash(our_pub_id) {
+                last_hash
+            } else {
+                return Err(Error::InvalidEvent);
+            };
+        let event = Event::new_from_observation(
+            self.peer_manager.our_id(),
+            *self_parent_hash,
+            network_event,
+        )?;
+        let _ = self.events.insert(event.hash().clone(), event);
+        Ok(())
     }
 
     /// Create a new message to be gossiped to a random peer.
     pub fn create_gossip(&self) -> Request<T, S::PublicId> {
-        unimplemented!();
+        Request::new(self.events.values())
     }
 
     /// Handle a received `Request` from `src` peer.  Returns a `Response` to be sent back to `src`
@@ -122,8 +154,19 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     /// Check if the given `network_event` has already been voted for by us.
-    pub fn have_voted_for(&self, network_event: &T) -> bool {
-        unimplemented!();
+    pub fn have_voted_for(&self, network_event: &T) -> Result<bool, Error> {
+        let serialised_content = serialise(network_event)?;
+        let hash = Hash::from(serialised_content.as_slice());
+        Ok(
+            self.polled_blocks.contains(&hash) || self.consensused_blocks.iter().any(|block| {
+                if let Ok(serialised_payload) = serialise(block.payload()) {
+                    let payload_hash = Hash::from(serialised_payload.as_slice());
+                    hash == payload_hash
+                } else {
+                    false
+                }
+            }),
+        )
     }
 
     fn self_parent<'a>(
