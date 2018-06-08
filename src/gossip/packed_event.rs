@@ -6,14 +6,27 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::Content;
+use gossip::content::Content;
 use id::PublicId;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use std::fmt::Debug;
+use network_event::NetworkEvent;
+use std::fmt::{self, Debug, Formatter};
 
-pub struct PackedEvent<T: Serialize + DeserializeOwned + Debug, P: PublicId> {
-    content: Content<T, P>,
-    // Creator's signature of `content`.
-    signature: P::Signature,
+#[serde(bound = "")]
+#[derive(Serialize, Deserialize, Clone)]
+pub(crate) struct PackedEvent<T: NetworkEvent, P: PublicId> {
+    pub(super) content: Content<T, P>,
+    pub(super) signature: P::Signature,
+}
+
+impl<T: NetworkEvent, P: PublicId> Debug for PackedEvent<T, P> {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        write!(
+            formatter,
+            "Event{{ {:?}, creator: {:?}, self_parent: {:?}, other_parent: {:?} }}",
+            self.content.cause,
+            self.content.creator,
+            self.content.self_parent,
+            self.content.other_parent()
+        )
+    }
 }

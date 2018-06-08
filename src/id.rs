@@ -13,11 +13,9 @@ use std::hash::Hash;
 
 /// The public identity of a node.  It provides functionality to allow it to be used as an
 /// asymmetric signing public key.
-pub trait PublicId:
-    'static + Send + Debug + Clone + Eq + Ord + Hash + Serialize + DeserializeOwned
-{
+pub trait PublicId: Clone + Eq + Ord + Hash + Serialize + DeserializeOwned + Debug {
     /// The signature type associated with the chosen asymmetric key scheme.
-    type Signature: 'static + Send + Debug + Clone + Eq + Ord + Hash + Serialize + DeserializeOwned;
+    type Signature: Clone + Eq + Ord + Hash + Serialize + DeserializeOwned + Debug;
     /// Verifies `signature` against `data` using this `PublicId`.  Returns `true` if valid.
     fn verify_signature(&self, signature: &Self::Signature, data: &[u8]) -> bool;
 }
@@ -46,7 +44,7 @@ pub trait SecretId {
 /// A basic helper to carry a given [`Signature`](trait.PublicId.html#associatedtype.Signature)
 /// along with the signer's [`PublicId`](trait.PublicId.html).
 #[serde(bound = "")]
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Debug)]
 pub struct Proof<P: PublicId> {
     pub(super) public_id: P,
     pub(super) signature: P::Signature,

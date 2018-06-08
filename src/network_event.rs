@@ -6,14 +6,10 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-mod cause;
-mod content;
-mod event;
-mod messages;
-mod packed_event;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use std::fmt::Debug;
 
-use self::cause::Cause;
-use self::content::Content;
-pub(super) use self::event::Event;
-pub use self::messages::{Request, Response};
-use self::packed_event::PackedEvent;
+/// This represents the type which will be voted for by peers; generally it is the set of
+/// constraints on `T` throughout this library.
+pub trait NetworkEvent: Clone + Eq + Ord + Serialize + DeserializeOwned + Debug {}

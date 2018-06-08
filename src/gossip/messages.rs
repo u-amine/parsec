@@ -6,17 +6,56 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::PackedEvent;
+use gossip::event::Event;
+use gossip::packed_event::PackedEvent;
 use id::PublicId;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+use network_event::NetworkEvent;
 use std::collections::BTreeMap;
-use std::fmt::Debug;
 
-pub struct Request<T: Serialize + DeserializeOwned + Debug, P: PublicId> {
-    events: Vec<PackedEvent<T, P>>,
+/// A gossip request message.
+#[serde(bound = "")]
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct Request<T: NetworkEvent, P: PublicId> {
+    packed_events: Vec<PackedEvent<T, P>>,
 }
 
-pub struct Response<T: Serialize + DeserializeOwned + Debug, P: PublicId> {
-    events: Vec<PackedEvent<T, P>>,
+impl<'a, T: 'a + NetworkEvent, P: 'a + PublicId> Request<T, P> {
+    pub(crate) fn new<I: Iterator<Item = &'a Event<T, P>>>(events_iter: I) -> Self {
+        Self {
+            packed_events: events_iter.map(Event::pack).collect(),
+        }
+    }
+}
+
+impl<T: NetworkEvent, P: PublicId> Request<T, P> {
+    pub(crate) fn unpack(self) -> Vec<Event<T, P>> {
+        self.packed_events
+            .into_iter()
+            .filter_map(|packed| Event::unpack(packed).ok())
+            .collect()
+    }
+}
+
+/// A gossip response message.
+#[serde(bound = "")]
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct Response<T: NetworkEvent, P: PublicId> {
+    packed_events: Vec<PackedEvent<T, P>>,
+}
+
+impl<'a, T: 'a + NetworkEvent, P: 'a + PublicId> Response<T, P> {
+    pub(crate) fn new<I: Iterator<Item = &'a Event<T, P>>>(events_iter: I) -> Self {
+        Self {
+            packed_events: events_iter.map(Event::pack).collect(),
+        }
+    }
+}
+
+impl<T: NetworkEvent, P: PublicId> Response<T, P> {
+    pub(crate) fn unpack(self) -> Vec<Event<T, P>> {
+        self.packed_events
+            .into_iter()
+            .filter_map(|packed| Event::unpack(packed).ok())
+            .collect()
+    }
 }

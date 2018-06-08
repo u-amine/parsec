@@ -10,22 +10,31 @@ quick_error! {
     /// Parsec error variants.
     #[derive(Debug)]
     pub enum Error {
-        /// Failed in verify signature.
+        /// Payload of a `Vote` doesn't match the payload of a `Block`.
+        MismatchedPayload {
+            description("Payload doesn't match")
+            display("The payload of the vote doesn't match the payload of targeted block.")
+        }
+        /// Failed to verify signature.
         SignatureFailure {
             description("Signature cannot be verified")
             display("The message or signature might be corrupted, or the signer is wrong.")
-        }
-        /// IO error.
-        Io(error: ::std::io::Error) {
-            description(error.description())
-            display("I/O error: {}", error)
-            from()
         }
         /// Serialisation Error.
         Serialisation(error: ::maidsafe_utilities::serialisation::SerialisationError) {
             description(error.description())
             display("Serialisation error: {}", error)
             from()
+        }
+        /// Peer is not known to this node.
+        UnknownPeer {
+            description("Peer is not known")
+            display("The peer_id is not known to this node's peer_manager.")
+        }
+        /// The given event is invalid or malformed.
+        InvalidEvent {
+            description("Invalid event")
+            display("The given event is invalid or malformed.")
         }
     }
 }
