@@ -139,21 +139,21 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let creator_id = event.creator().clone();
         let _ = event.first_descendants.insert(creator_id, event_index);
 
-        // Due to restrictions imposed by the borrow checker, we have to do this in two steps.
-        // First, collect the hashes of the events to modify...
-        let mut hashes = vec![];
         for (peer_id, peer_info) in self.peer_manager.iter() {
             let mut opt_hash = event
                 .last_ancestors
                 .get(peer_id)
-                .and_then(|index| peer_info.get(index));
+                .and_then(|index| peer_info.get(index))
+                .cloned();
 
             loop {
                 if let Some(hash) = opt_hash {
-                    if let Some(other_event) = self.events.get(hash) {
+                    if let Some(other_event) = self.events.get_mut(&hash) {
                         if !other_event.first_descendants.contains_key(event.creator()) {
-                            hashes.push(*hash);
-                            opt_hash = other_event.self_parent();
+                            let _ = other_event
+                                .first_descendants
+                                .insert(event.creator().clone(), event_index);
+                            opt_hash = other_event.self_parent().cloned();
                             continue;
                         }
                     }
@@ -162,14 +162,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             }
         }
 
-        // ...then actually modify the events.
-        for hash in hashes {
-            if let Some(other_event) = self.events.get_mut(&hash) {
-                let _ = other_event
-                    .first_descendants
-                    .insert(event.creator().clone(), event_index);
-            }
-        }
         Ok(())
     }
 }
