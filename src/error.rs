@@ -31,11 +31,6 @@ quick_error! {
             description("Peer is not known")
             display("The peer_id is not known to this node's peer_manager.")
         }
-        /// The given event has an invalid index.
-        InvalidEventIndex {
-            description("Invalid event index")
-            display("The given event has an invalid index.")
-        }
         /// The given event is invalid or malformed.
         InvalidEvent {
             description("Invalid event")
