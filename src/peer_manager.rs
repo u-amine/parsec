@@ -98,13 +98,13 @@ impl<S: SecretId> PeerManager<S> {
                 return Err(Error::UnknownPeer);
             }
         } else {
-            return Err(Error::InvalidEventIndex);
+            return Err(Error::InvalidEvent);
         };
 
         match peer.entry(index) {
             Entry::Occupied(mut entry) => {
                 if entry.get() != event.hash() {
-                    return Err(Error::InvalidEventIndex);
+                    return Err(Error::InvalidEvent);
                 }
             }
             Entry::Vacant(mut entry) => {

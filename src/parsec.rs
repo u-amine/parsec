@@ -75,4 +75,93 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     pub fn have_voted_for(&self, network_event: &T) -> bool {
         unimplemented!();
     }
+
+    fn self_parent<'a>(
+        &'a self,
+        event: &Event<T, S::PublicId>,
+    ) -> Option<&'a Event<T, S::PublicId>> {
+        event.self_parent().and_then(|hash| self.events.get(hash))
+    }
+
+    fn other_parent<'a>(
+        &'a self,
+        event: &Event<T, S::PublicId>,
+    ) -> Option<&'a Event<T, S::PublicId>> {
+        event.other_parent().and_then(|hash| self.events.get(hash))
+    }
+
+    // This should only be called once `event` has had its `index` set correctly.
+    fn set_last_ancestors(&self, event: &mut Event<T, S::PublicId>) -> Result<(), Error> {
+        let event_index = if let Some(index) = event.index {
+            index
+        } else {
+            return Err(Error::InvalidEvent);
+        };
+
+        if let Some(self_parent) = self.self_parent(event) {
+            event.last_ancestors = self_parent.last_ancestors.clone();
+
+            if let Some(other_parent) = self.other_parent(event) {
+                for (peer_id, _) in self.peer_manager.iter() {
+                    if let Some(other_index) = other_parent.last_ancestors.get(peer_id) {
+                        let existing_index = event
+                            .last_ancestors
+                            .entry(peer_id.clone())
+                            .or_insert(*other_index);
+                        if *existing_index < *other_index {
+                            *existing_index = *other_index;
+                        }
+                    }
+                }
+            }
+        } else if let Some(other_parent) = self.other_parent(event) {
+            // If we have no self-parent, we should also have no other-parent.
+            return Err(Error::InvalidEvent);
+        }
+
+        let creator_id = event.creator().clone();
+        let _ = event.last_ancestors.insert(creator_id, event_index);
+        Ok(())
+    }
+
+    // This should be called only once `event` has had its `index` and `last_ancestors` set
+    // correctly (i.e. after calling `Parsec::set_last_ancestors()` on it)
+    fn set_first_descendants(&mut self, event: &mut Event<T, S::PublicId>) -> Result<(), Error> {
+        if event.last_ancestors.is_empty() {
+            return Err(Error::InvalidEvent);
+        }
+
+        let event_index = if let Some(index) = event.index {
+            index
+        } else {
+            return Err(Error::InvalidEvent);
+        };
+        let creator_id = event.creator().clone();
+        let _ = event.first_descendants.insert(creator_id, event_index);
+
+        for (peer_id, peer_info) in self.peer_manager.iter() {
+            let mut opt_hash = event
+                .last_ancestors
+                .get(peer_id)
+                .and_then(|index| peer_info.get(index))
+                .cloned();
+
+            loop {
+                if let Some(hash) = opt_hash {
+                    if let Some(other_event) = self.events.get_mut(&hash) {
+                        if !other_event.first_descendants.contains_key(event.creator()) {
+                            let _ = other_event
+                                .first_descendants
+                                .insert(event.creator().clone(), event_index);
+                            opt_hash = other_event.self_parent().cloned();
+                            continue;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+
+        Ok(())
+    }
 }
