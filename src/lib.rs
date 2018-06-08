@@ -51,9 +51,11 @@ mod error;
 mod gossip;
 mod hash;
 mod id;
+mod meta_vote;
 mod network_event;
 mod parsec;
 mod peer_manager;
+mod round_hash;
 mod vote;
 
 pub use block::Block;

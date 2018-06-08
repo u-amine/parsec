@@ -10,7 +10,7 @@ use std::fmt::{self, Debug, Formatter};
 use tiny_keccak;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct Hash([u8; 32]);
+pub(crate) struct Hash([u8; 32]);
 
 impl<'a> From<&'a [u8]> for Hash {
     fn from(src: &'a [u8]) -> Self {

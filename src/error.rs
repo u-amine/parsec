@@ -36,5 +36,10 @@ quick_error! {
             description("Invalid event")
             display("The given event is invalid or malformed.")
         }
+        /// This event's self-parent or other-parent is unknown to this node.
+        UnknownParent {
+            description("Parent event(s) not known")
+            display("This event's self-parent or other-parent is unknown to this node.")
+        }
     }
 }

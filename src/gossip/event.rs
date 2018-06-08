@@ -14,7 +14,7 @@ use hash::Hash;
 use id::{PublicId, SecretId};
 use maidsafe_utilities::serialisation::serialise;
 use network_event::NetworkEvent;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use vote::Vote;
 
 pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
@@ -28,6 +28,11 @@ pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
     pub last_ancestors: BTreeMap<P, u64>,
     // Index of each peer's earliest event that is a descendant of this event.
     pub first_descendants: BTreeMap<P, u64>,
+    // The hashes of all events which comprise not-yet-stable blocks this event can see.
+    pub valid_blocks_carried: BTreeSet<Hash>,
+    // The set of peers for which this event can strongly-see an event by that peer which carries a
+    // valid block.  If there are a supermajority of peers here, this event is an "observer".
+    pub observations: BTreeSet<P>,
 }
 
 impl<T: NetworkEvent, P: PublicId> Event<T, P> {
@@ -86,6 +91,8 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             index: None,
             last_ancestors: BTreeMap::default(),
             first_descendants: BTreeMap::default(),
+            valid_blocks_carried: BTreeSet::default(),
+            observations: BTreeSet::default(),
         })
     }
 
@@ -117,6 +124,14 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         &self.signature
     }
 
+    pub fn vote(&self) -> Option<&Vote<T, P>> {
+        if let Cause::Observation(ref vote) = self.content.cause {
+            Some(vote)
+        } else {
+            None
+        }
+    }
+
     fn new<S: SecretId<PublicId = P>>(
         secret_id: &S,
         cause: Cause<T, P>,
@@ -137,6 +152,8 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             index: None,
             last_ancestors: BTreeMap::default(),
             first_descendants: BTreeMap::default(),
+            valid_blocks_carried: BTreeSet::default(),
+            observations: BTreeSet::default(),
         })
     }
 }
