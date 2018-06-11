@@ -120,7 +120,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             *self_parent_hash,
             network_event,
         )?;
-        let _ = self.events.insert(event.hash().clone(), event);
+        let _ = self.events.insert(*event.hash(), event);
         Ok(())
     }
 
@@ -160,8 +160,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Ok(
             self.polled_blocks.contains(&hash) || self.consensused_blocks.iter().any(|block| {
                 if let Ok(serialised_payload) = serialise(block.payload()) {
-                    let payload_hash = Hash::from(serialised_payload.as_slice());
-                    hash == payload_hash
+                    serialised_content == serialised_payload
                 } else {
                     false
                 }
