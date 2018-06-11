@@ -11,7 +11,6 @@ use error::Error;
 use gossip::{Event, Request, Response};
 use hash::Hash;
 use id::{PublicId, SecretId};
-use maidsafe_utilities::serialisation::serialise;
 use network_event::NetworkEvent;
 use peer_manager::PeerManager;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -100,9 +99,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     /// Add a vote for `network_event`.
     pub fn vote_for(&mut self, network_event: T) -> Result<(), Error> {
-        if self.have_voted_for(&network_event)? {
-            return Err(Error::InvalidEvent);
-        }
         let our_pub_id = self.peer_manager.our_id().public_id();
         let next_index = if let Some(last_index) = self.peer_manager.last_event_index(our_pub_id) {
             last_index + 1
@@ -154,18 +150,19 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     /// Check if the given `network_event` has already been voted for by us.
-    pub fn have_voted_for(&self, network_event: &T) -> Result<bool, Error> {
-        let serialised_content = serialise(network_event)?;
-        let hash = Hash::from(serialised_content.as_slice());
-        Ok(
-            self.polled_blocks.contains(&hash) || self.consensused_blocks.iter().any(|block| {
-                if let Ok(serialised_payload) = serialise(block.payload()) {
-                    serialised_content == serialised_payload
+    pub fn have_voted_for(&self, network_event: &T) -> bool {
+        let our_pub_id = self.peer_manager.our_id().public_id();
+        self.events.values().any(|event| {
+            if event.creator() == our_pub_id {
+                if let Some(voted) = event.vote() {
+                    voted.payload() == network_event
                 } else {
                     false
                 }
-            }),
-        )
+            } else {
+                false
+            }
+        })
     }
 
     fn self_parent<'a>(
