@@ -11,6 +11,7 @@ use error::Error;
 use gossip::{Event, Request, Response};
 use hash::Hash;
 use id::{PublicId, SecretId};
+use maidsafe_utilities::serialisation::serialise;
 use meta_vote::MetaVote;
 use network_event::NetworkEvent;
 use peer_manager::PeerManager;
@@ -227,29 +228,45 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     fn set_meta_votes(&mut self, event: &Event<T, S::PublicId>) -> Result<(), Error> {
         let total_peers = self.peer_manager.iter().count();
+        // If self-parent already has meta votes associated with it, derive this event's meta votes
+        // from those ones.
         if let Some(parent_votes) = self
             .self_parent(event)
-            .and_then(|parent| self.meta_votes.get(parent.hash()))
+            .and_then(|parent| self.meta_votes.get(parent.hash()).cloned())
         {
             for (peer_id, parent_vote) in parent_votes {
-                // Safe to unwrap as `self_parent(event)` returned `Some` just above.
-                let parent_hash = *unwrap!(event.self_parent());
-                let coin_toss = self.toss_coin(peer_id, parent_vote, parent_hash);
-                let other_votes = if parent_vote.estimates.is_empty() {
-                    // If `estimates` is empty, we've been waiting for the result of a coin toss.
-                    // In that case, we don't care about any other votes, we just need the coin toss
-                    // result.
-                    vec![]
-                } else {
-                    self.meta_votes
-                        .values()
-                        .filter_map(|meta_votes| meta_votes.get(peer_id))
-                        .collect::<Vec<_>>()
+                let coin_toss = self.toss_coin(&peer_id, &parent_vote, event);
+                let mut other_votes = vec![];
+                // If `estimates` is empty, we've been waiting for the result of a coin toss.  In
+                // that case, we don't care about other votes, we just need the coin toss result.
+                if !parent_vote.estimates.is_empty() {
+                    for creator in self.peer_manager.all_ids() {
+                        if let Some(meta_vote) = event.last_ancestors.get(creator).and_then(
+                            |creator_event_index| {
+                                self.most_recent_meta_vote(
+                                    creator,
+                                    *creator_event_index,
+                                    &peer_id,
+                                    parent_vote.round,
+                                    parent_vote.step,
+                                ).cloned()
+                            },
+                        ) {
+                            other_votes.push(meta_vote)
+                        }
+                    }
                 };
                 let meta_vote =
-                    MetaVote::next(parent_vote, other_votes.as_slice(), coin_toss, total_peers);
+                    MetaVote::next(&parent_vote, other_votes.as_slice(), coin_toss, total_peers);
+                if let Some(hashes) = self.round_hashes.get_mut(&peer_id) {
+                    while hashes.len() < meta_vote.round + 1 {
+                        let next_round_hash = hashes[hashes.len() - 1].next()?;
+                        hashes.push(next_round_hash);
+                    }
+                }
             }
         } else {
+            // This event's self-parent didn't have meta votes.  Check to see if we need to start.
         }
         // For each peer {
         //     For each peer {
@@ -272,8 +289,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         &self,
         peer_id: &S::PublicId,
         parent_vote: &MetaVote,
-        parent_hash: Hash,
+        event: &Event<T, S::PublicId>,
     ) -> Option<bool> {
+        // Get the round hash.
         let round = if parent_vote.estimates.is_empty() {
             // We're waiting for the coin toss result already.
             parent_vote.round - 1
@@ -288,7 +306,109 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             // Should be unreachable.
             return None;
         };
-        let mut all_peers = self.peer_manager.all_ids();
+
+        // Get the gradient of leadership.
+        let mut peer_id_hashes = self.peer_manager.peer_id_hashes().clone();
+        peer_id_hashes.sort_by(|lhs, rhs| round_hash.xor_cmp(&lhs.0, &rhs.0));
+
+        // Try to get the "most-leader"'s aux value.
+        let creator = &peer_id_hashes[0].1;
+        if let Some(creator_event_index) = event.last_ancestors.get(creator) {
+            if let Some(aux_value) = self.aux_value(creator, *creator_event_index, peer_id, round) {
+                return Some(aux_value);
+            }
+        }
+
+        // If we've already waited long enough, get the aux value of the highest ranking leader.
+        if self.stop_waiting(peer_id, round, event) {
+            for (_, creator) in &peer_id_hashes[1..] {
+                if let Some(creator_event_index) = event.last_ancestors.get(creator) {
+                    if let Some(aux_value) =
+                        self.aux_value(creator, *creator_event_index, peer_id, round)
+                    {
+                        return Some(aux_value);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    // Returns the aux value for the given peer, created by `creator`, at the given round and at
+    // step 2.
+    fn aux_value(
+        &self,
+        creator: &S::PublicId,
+        mut creator_event_index: u64,
+        peer_id: &S::PublicId,
+        round: usize,
+    ) -> Option<bool> {
+        self.most_recent_meta_vote(creator, creator_event_index, peer_id, round, 2)
+            .and_then(|meta_vote| meta_vote.aux_value)
+    }
+
+    // Skips back through our events until we've passed `responsiveness_threshold` response events
+    // and sees if we were waiting for this coin toss result then too.  If so, returns `true`.
+    fn stop_waiting(
+        &self,
+        peer_id: &S::PublicId,
+        round: usize,
+        event: &Event<T, S::PublicId>,
+    ) -> bool {
+        let mut response_count = 0;
+        let mut event_hash = *event.hash();
+        while response_count < self.responsiveness_threshold {
+            if let Some(evnt) = self.self_parent(event) {
+                if evnt.is_response() {
+                    response_count += 1;
+                    event_hash = *evnt.hash();
+                }
+            } else {
+                return false;
+            }
+        }
+
+        if let Some(meta_vote) = self
+            .meta_votes
+            .get(&event_hash)
+            .and_then(|meta_votes| meta_votes.get(peer_id))
+        {
+            // If we're waiting for a coin toss result, `estimates` is empty, and for that meta
+            // vote, the round has already been incremented by 1.
+            meta_vote.estimates.is_empty() && meta_vote.round == round + 1
+        } else {
+            false
+        }
+    }
+
+    // Returns the meta vote for the given peer, created by `creator`, at the given round and step.
+    // Starts iterating down the creator's events starting from `creator_event_index`.
+    fn most_recent_meta_vote(
+        &self,
+        creator: &S::PublicId,
+        mut creator_event_index: u64,
+        peer_id: &S::PublicId,
+        round: usize,
+        step: usize,
+    ) -> Option<&MetaVote> {
+        loop {
+            let event_hash = self
+                .peer_manager
+                .event_by_index(creator, creator_event_index)?;
+            let meta_vote = self
+                .meta_votes
+                .get(event_hash)
+                .and_then(|meta_votes| meta_votes.get(peer_id))?;
+            if meta_vote.round == round && meta_vote.step == step {
+                return Some(meta_vote);
+            }
+            if meta_vote.round > round && creator_event_index != 0 {
+                creator_event_index -= 1;
+            } else {
+                break;
+            }
+        }
         None
     }
 

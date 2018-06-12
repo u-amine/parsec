@@ -28,7 +28,7 @@ pub(crate) struct MetaVote {
 }
 
 impl MetaVote {
-    pub fn new(initial_estimate: bool, others: &[&MetaVote], total_peers: usize) -> Self {
+    pub fn new(initial_estimate: bool, others: &[MetaVote], total_peers: usize) -> Self {
         let mut initial = Self::default();
         initial.estimates = new_set_with_value(initial_estimate);
         Self::next(&initial, others, None, total_peers)
@@ -36,7 +36,7 @@ impl MetaVote {
 
     pub fn next(
         parent: &MetaVote,
-        others: &[&MetaVote],
+        others: &[MetaVote],
         coin_toss: Option<bool>,
         total_peers: usize,
     ) -> Self {
@@ -176,15 +176,11 @@ impl MetaVoteCounts {
     // Construct a `MetaVoteCounts` by collecting details from all meta votes which are for the
     // given `parent`'s `round` and `step`.  These results will include info from our own `parent`
     // meta vote.
-    fn new(parent: &MetaVote, others: &[&MetaVote], total_peers: usize) -> Self {
+    fn new(parent: &MetaVote, others: &[MetaVote], total_peers: usize) -> Self {
         let mut counts = MetaVoteCounts::default();
         counts.total_peers = total_peers;
 
-        for vote in others
-            .iter()
-            .filter(|vote| vote.round == parent.round && vote.step == parent.step)
-            .chain(iter::once(&parent))
-        {
+        for vote in others.iter().chain(iter::once(parent)) {
             if vote.estimates.contains(&true) {
                 counts.estimates_true += 1;
             }

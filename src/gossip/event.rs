@@ -132,6 +132,14 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         }
     }
 
+    pub fn is_response(&self) -> bool {
+        if let Cause::Response(_) = self.content.cause {
+            true
+        } else {
+            false
+        }
+    }
+
     fn new<S: SecretId<PublicId = P>>(
         secret_id: &S,
         cause: Cause<T, P>,

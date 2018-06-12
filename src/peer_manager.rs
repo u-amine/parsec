@@ -10,21 +10,28 @@ use error::Error;
 use gossip::Event;
 use hash::Hash;
 use id::{PublicId, SecretId};
+use maidsafe_utilities::serialisation::serialise;
 use network_event::NetworkEvent;
 use std::collections::btree_map::{self, BTreeMap, Entry};
 
 pub(crate) struct PeerManager<S: SecretId> {
     our_id: S,
     peers: BTreeMap<S::PublicId, BTreeMap<u64, Hash>>,
+    // Map of Hash(peer_id) => peer_id
+    peer_id_hashes: Vec<(Hash, S::PublicId)>,
 }
 
 impl<S: SecretId> PeerManager<S> {
     /// Constructor of `PeerManager`.
     pub fn new(our_id: S) -> Self {
-        let mut peers = BTreeMap::default();
-        let _ = peers.insert(our_id.public_id().clone(), BTreeMap::new());
-
-        PeerManager { our_id, peers }
+        let our_public_id = our_id.public_id().clone();
+        let mut peer_manager = PeerManager {
+            our_id,
+            peers: BTreeMap::new(),
+            peer_id_hashes: vec![],
+        };
+        peer_manager.add_peer(our_public_id);
+        peer_manager
     }
 
     /// Returns `our_id`.
@@ -47,6 +54,11 @@ impl<S: SecretId> PeerManager<S> {
         self.peers.keys().collect()
     }
 
+    /// Returns an unsorted map of Hash(peer_id) => peer_id
+    pub fn peer_id_hashes(&self) -> &Vec<(Hash, S::PublicId)> {
+        &self.peer_id_hashes
+    }
+
     /// Returns an iterator of peers.
     pub fn iter(&self) -> btree_map::Iter<S::PublicId, BTreeMap<u64, Hash>> {
         self.peers.iter()
@@ -54,7 +66,14 @@ impl<S: SecretId> PeerManager<S> {
 
     /// Adds a peer into the map.
     pub fn add_peer(&mut self, peer_id: S::PublicId) {
-        let _ = self.peers.entry(peer_id).or_insert_with(BTreeMap::new);
+        let _ = self
+            .peers
+            .entry(peer_id.clone())
+            .or_insert_with(BTreeMap::new);
+        if let Ok(serialised_id) = serialise(&peer_id) {
+            self.peer_id_hashes
+                .push((Hash::from(serialised_id.as_slice()), peer_id));
+        }
     }
 
     /// Checks whether the input count becomes the super majority of the network.
