@@ -34,9 +34,16 @@
     variant_size_differences
 )]
 
+#[macro_use]
+#[cfg(test)]
+extern crate lazy_static;
 extern crate maidsafe_utilities;
 #[macro_use]
 extern crate quick_error;
+#[cfg(test)]
+extern crate rand;
+#[cfg(test)]
+extern crate rust_sodium;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
@@ -52,6 +59,10 @@ mod network_event;
 mod parsec;
 mod peer_manager;
 mod round_hash;
+#[cfg(test)]
+mod test_utils;
+#[cfg(test)]
+mod tests;
 mod vote;
 
 pub use block::Block;
