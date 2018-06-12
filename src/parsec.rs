@@ -211,7 +211,52 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         {
             return Ok(());
         }
-        unimplemented!();
+        // Union of
+        // * my self_parent's valid_blocks_carried,
+        // * my other_parent's valid_blocks_carried,
+        // * any observation I made that makes a block valid
+        // Note that if any block becomes stable due to this gossip event, we will learn
+        // that fact later and prune valid_blocks_carried accordingly
+        let self_parents_valid_blocks = {
+            if let Some(self_parent) = self.self_parent(event) {
+                self_parent.valid_blocks_carried.clone()
+            } else {
+                BTreeSet::new()
+            }
+        };
+        let other_parents_valid_blocks = {
+            if let Some(other_parent) = self.other_parent(event) {
+                other_parent.valid_blocks_carried.clone()
+            } else {
+                BTreeSet::new()
+            }
+        };
+        let blocks_made_valid_now = {
+            if let Some(vote) = event.vote() {
+                let mut valid_votes: BTreeSet<Hash> = BTreeSet::new();
+                let n_same_votes = self
+                    .events
+                    .iter()
+                    .filter(|(_, value)| (**value).vote() == Some(vote))
+                    .count();
+                if self.peer_manager.is_super_majority(n_same_votes) {
+                    if !valid_votes.insert(event.hash().clone()) {
+                        return Err(Error::InvalidEvent);
+                    }
+                }
+                valid_votes
+            } else {
+                BTreeSet::new()
+            }
+        };
+        event.valid_blocks_carried = self_parents_valid_blocks
+            .union(&other_parents_valid_blocks)
+            .cloned()
+            .collect::<BTreeSet<_>>()
+            .union(&blocks_made_valid_now)
+            .cloned()
+            .collect();
+        Ok(())
     }
 
     fn set_observations(&mut self, event: &mut Event<T, S::PublicId>) -> Result<(), Error> {
@@ -279,7 +324,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // }
         // if we have decisions for all meta vote sets {
         //     calculate next stable block
-        //     clear all meta votes, valid-blocks-carried, and observers
+        //     clear all meta votes, and observers
+        //     prune valid-blocks-carried (Remove the hash of all gossip events that carried a vote for the
+        //     block that became stable)
         //     re-evaluate if we need to start new meta votes (set valid-blocks-carried and observers again)
         // }
         unimplemented!();
