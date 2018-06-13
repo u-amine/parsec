@@ -10,14 +10,12 @@ use block::Block;
 use error::Error;
 use gossip::{Event, Request, Response};
 use hash::Hash;
-use id::{PublicId, SecretId};
-use maidsafe_utilities::serialisation::serialise;
+use id::SecretId;
 use meta_vote::MetaVote;
 use network_event::NetworkEvent;
 use peer_manager::PeerManager;
 use round_hash::RoundHash;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use vote::Vote;
 
 /// The main object which manages creating and receiving gossip about network events from peers, and
 /// which provides a sequence of consensused `Block`s by applying the PARSEC algorithm.
@@ -28,8 +26,6 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     events: BTreeMap<Hash, Event<T, S::PublicId>>,
     // The sequence in which all gossip events were added to this `Parsec`.
     events_order: Vec<Hash>,
-    // The hash of every stable block already returned via `poll()`.
-    polled_blocks: BTreeSet<Hash>,
     // Consensused network events that have not been returned via `poll()` yet.
     consensused_blocks: VecDeque<Block<T, S::PublicId>>,
     // The meta votes of the events.
@@ -46,43 +42,41 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// Creates a new `Parsec` for a peer with the given ID and genesis peer IDs.
     pub fn new(our_id: S, genesis_group: &BTreeSet<S::PublicId>) -> Result<Self, Error> {
         let responsiveness_threshold = (genesis_group.len() as f64).log2().ceil() as usize;
+
         let mut peer_manager = PeerManager::new(our_id);
         for peer_id in genesis_group.iter() {
             peer_manager.add_peer(peer_id.clone());
         }
-        Ok(Parsec {
+
+        let mut parsec = Parsec {
             peer_manager,
             events: BTreeMap::new(),
             events_order: vec![],
-            polled_blocks: BTreeSet::new(),
             consensused_blocks: VecDeque::new(),
             meta_votes: BTreeMap::new(),
             round_hashes: BTreeMap::new(),
             responsiveness_threshold,
-        })
+        };
+        let initial_event = Event::new_initial(parsec.peer_manager.our_id())?;
+        parsec.add_initial_event(initial_event)?;
+        Ok(parsec)
     }
 
     /// Add a vote for `network_event`.
     pub fn vote_for(&mut self, network_event: T) -> Result<(), Error> {
-        let our_pub_id = self.peer_manager.our_id().public_id();
-        let next_index = if let Some(last_index) = self.peer_manager.last_event_index(our_pub_id) {
-            last_index + 1
-        } else {
-            return Err(Error::InvalidEvent);
-        };
+        let our_pub_id = self.peer_manager.our_id().public_id().clone();
         let self_parent_hash =
-            if let Some(last_hash) = self.peer_manager.last_event_hash(our_pub_id) {
-                last_hash
+            if let Some(last_hash) = self.peer_manager.last_event_hash(&our_pub_id) {
+                *last_hash
             } else {
                 return Err(Error::InvalidEvent);
             };
         let event = Event::new_from_observation(
             self.peer_manager.our_id(),
-            *self_parent_hash,
+            self_parent_hash,
             network_event,
         )?;
-        let _ = self.events.insert(*event.hash(), event);
-        Ok(())
+        self.add_event(event)
     }
 
     /// Creates a new message to be gossiped to a random peer.
@@ -92,6 +86,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     /// Handles a received `Request` from `src` peer.  Returns a `Response` to be sent back to `src`
     /// or `Err` if the request was not valid.
+    // TODO - remove
+    #[allow(unused)]
     pub fn handle_request(
         &mut self,
         src: &S::PublicId,
@@ -101,6 +97,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     /// Handles a received `Response` from `src` peer.  Returns `Err` if the response was not valid.
+    // TODO - remove
+    #[allow(unused)]
     pub fn handle_response(
         &mut self,
         src: &S::PublicId,
@@ -154,12 +152,22 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             return Ok(());
         }
 
-        if self.self_parent(&event).is_none() || self.other_parent(&event).is_none() {
-            return Err(Error::UnknownParent);
+        if self.self_parent(&event).is_none() {
+            if event.is_initial() {
+                return self.add_initial_event(event);
+            } else {
+                return Err(Error::UnknownParent);
+            }
+        }
+
+        if let Some(hash) = event.other_parent() {
+            if !self.events.contains_key(hash) {
+                return Err(Error::UnknownParent);
+            }
         }
 
         self.set_index(&mut event);
-        self.peer_manager.add_event(event.creator(), &event)?;
+        self.peer_manager.add_event(&event)?;
         self.set_last_ancestors(&mut event)?;
         self.set_first_descendants(&mut event)?;
         self.set_valid_blocks_carried(&mut event)?;
@@ -168,6 +176,17 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.events_order.push(event_hash);
         let _ = self.events.insert(event_hash, event);
         self.process_event(&event_hash)
+    }
+
+    fn add_initial_event(&mut self, mut event: Event<T, S::PublicId>) -> Result<(), Error> {
+        event.index = Some(0);
+        let creator_id = event.creator().clone();
+        let _ = event.first_descendants.insert(creator_id, 0);
+        let event_hash = *event.hash();
+        self.peer_manager.add_event(&event)?;
+        self.events_order.push(event_hash);
+        let _ = self.events.insert(event_hash, event);
+        Ok(())
     }
 
     fn process_event(&mut self, event_hash: &Hash) -> Result<(), Error> {
@@ -212,7 +231,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     }
                 }
             }
-        } else if let Some(other_parent) = self.other_parent(event) {
+        } else if self.other_parent(event).is_some() {
             // If we have no self-parent, we should also have no other-parent.
             return Err(Error::InvalidEvent);
         }
@@ -337,7 +356,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .into_iter()
             .filter(|peer| {
                 let last_hash = self.peer_manager.last_event_hash(peer);
-                match (last_hash) {
+                match last_hash {
                     Some(hash) => {
                         let last_event = &self.events[hash];
                         let oldest_event_with_valid_block = (*last_event)
@@ -359,7 +378,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             })
             .cloned()
             .collect();
-        let mut event = self.events.get_mut(event_hash).ok_or(Error::Logic)?;
+        let event = self.events.get_mut(event_hash).ok_or(Error::Logic)?;
         event.observations = observations;
         Ok(())
     }
@@ -477,7 +496,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn aux_value(
         &self,
         creator: &S::PublicId,
-        mut creator_event_index: u64,
+        creator_event_index: u64,
         peer_id: &S::PublicId,
         round: usize,
     ) -> Option<bool> {
@@ -580,6 +599,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         unimplemented!();
     }
 
+    // TODO - remove
+    #[allow(unused)]
     fn oldest_event_with_valid_block(
         &self,
         peer_id: &S::PublicId,
@@ -603,7 +624,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .cloned()
             .collect::<Vec<_>>();
         for event_hash in &events_hashes {
-            self.process_event(event_hash);
+            let _ = self.process_event(event_hash);
         }
     }
 
@@ -621,18 +642,5 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .count();
 
         self.peer_manager.is_super_majority(count)
-    }
-
-    // Returns whether event X is seeing event Y.
-    fn does_see(x: &Event<T, S::PublicId>, y: &Event<T, S::PublicId>) -> bool {
-        let target_index = if let Some(index) = x.index {
-            index
-        } else {
-            return false;
-        };
-        y.first_descendants
-            .get(x.creator())
-            .map(|&index| index <= target_index)
-            .unwrap_or(false)
     }
 }

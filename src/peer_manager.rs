@@ -9,7 +9,7 @@
 use error::Error;
 use gossip::Event;
 use hash::Hash;
-use id::{PublicId, SecretId};
+use id::SecretId;
 use maidsafe_utilities::serialisation::serialise;
 use network_event::NetworkEvent;
 use std::collections::btree_map::{self, BTreeMap, Entry};
@@ -38,16 +38,6 @@ impl<S: SecretId> PeerManager<S> {
     /// Returns `our_id`.
     pub fn our_id(&self) -> &S {
         &self.our_id
-    }
-
-    /// Returns our info: created events index and hash.
-    pub fn our_info(&self) -> &BTreeMap<u64, Hash> {
-        &self.peers[self.our_id.public_id()]
-    }
-
-    /// Returns peer info: created events index and hash.
-    pub fn peer_info(&self, peer_id: &S::PublicId) -> Option<&BTreeMap<u64, Hash>> {
-        self.peers.get(peer_id)
     }
 
     /// Returns all sorted peer_ids.
@@ -82,13 +72,6 @@ impl<S: SecretId> PeerManager<S> {
         3 * count > 2 * self.peers.len()
     }
 
-    /// Returns the index of the last event created by this peer. Returns `None` if cannot find.
-    pub fn last_event_index(&self, peer_id: &S::PublicId) -> Option<u64> {
-        self.peers
-            .get(peer_id)
-            .and_then(|events| events.keys().rev().next().cloned())
-    }
-
     /// Returns the hash of the last event created by this peer. Returns `None` if cannot find.
     pub fn last_event_hash(&self, peer_id: &S::PublicId) -> Option<&Hash> {
         self.peers
@@ -103,16 +86,15 @@ impl<S: SecretId> PeerManager<S> {
             .and_then(|events| events.get(&index))
     }
 
-    /// Adds event created by the peer. Returns an error if `peer_id` is not known, or if we already
-    /// held an event from this peer with this index, but that event's hash is different to the one
-    /// being added (in which case `peers` is left unmodified).
-    pub fn add_event<T: NetworkEvent, P: PublicId>(
+    /// Adds event created by the peer. Returns an error if the creator is not known, or if we
+    /// already held an event from this peer with this index, but that event's hash is different to
+    /// the one being added (in which case `peers` is left unmodified).
+    pub fn add_event<T: NetworkEvent>(
         &mut self,
-        peer_id: &S::PublicId,
-        event: &Event<T, P>,
+        event: &Event<T, S::PublicId>,
     ) -> Result<(), Error> {
         let (peer, index) = if let Some(index) = event.index {
-            if let Some(peer) = self.peers.get_mut(peer_id) {
+            if let Some(peer) = self.peers.get_mut(event.creator()) {
                 (peer, index)
             } else {
                 return Err(Error::UnknownPeer);
@@ -122,12 +104,12 @@ impl<S: SecretId> PeerManager<S> {
         };
 
         match peer.entry(index) {
-            Entry::Occupied(mut entry) => {
+            Entry::Occupied(entry) => {
                 if entry.get() != event.hash() {
                     return Err(Error::InvalidEvent);
                 }
             }
-            Entry::Vacant(mut entry) => {
+            Entry::Vacant(entry) => {
                 let _ = entry.insert(*event.hash());
             }
         }

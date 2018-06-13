@@ -12,8 +12,5 @@ mod event;
 mod messages;
 mod packed_event;
 
-use self::cause::Cause;
-use self::content::Content;
 pub(super) use self::event::Event;
 pub use self::messages::{Request, Response};
-use self::packed_event::PackedEvent;

@@ -21,6 +21,8 @@ pub(crate) struct RoundHash {
 
 impl RoundHash {
     // Constructs a new `RoundHash` with the given `public_id` and `latest_block_hash` for round 0.
+    // TODO - remove
+    #[allow(unused)]
     pub fn new<P: PublicId>(public_id: &P, latest_block_hash: Hash) -> Result<Self, Error> {
         let public_id_hash = Hash::from(serialise(&public_id)?.as_slice());
         let final_hash = Self::final_hash(&public_id_hash, &latest_block_hash, &0)?;
