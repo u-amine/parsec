@@ -29,7 +29,7 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     // The hash of every stable block already returned via `poll()`.
     polled_blocks: BTreeSet<Hash>,
     // Consensused network events that have not been returned via `poll()` yet.
-    consensused_blocks: Vec<Block<T, S::PublicId>>,
+    consensused_blocks: VecDeque<Block<T, S::PublicId>>,
     // The meta votes of the events.
     meta_votes: BTreeMap<Hash, BTreeMap<S::PublicId, MetaVote>>,
     // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
@@ -97,6 +97,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         event: &Event<T, S::PublicId>,
     ) -> Option<&'a Event<T, S::PublicId>> {
         event.other_parent().and_then(|hash| self.events.get(hash))
+    }
+
+    fn is_observer(&self, event: &Event<T, S::PublicId>) -> bool {
+        self.peer_manager
+            .is_super_majority(event.observations.len())
     }
 
     fn add_event(&mut self, mut event: Event<T, S::PublicId>) -> Result<(), Error> {
@@ -239,10 +244,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     .iter()
                     .filter(|(_, value)| (**value).vote() == Some(vote))
                     .count();
-                if self.peer_manager.is_super_majority(n_same_votes) {
-                    if !valid_votes.insert(event.hash().clone()) {
-                        return Err(Error::InvalidEvent);
-                    }
+                if self.peer_manager.is_super_majority(n_same_votes)
+                    && !valid_votes.insert(event.hash().clone())
+                {
+                    return Err(Error::InvalidEvent);
                 }
                 valid_votes
             } else {
@@ -273,6 +278,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     fn set_meta_votes(&mut self, event: &Event<T, S::PublicId>) -> Result<(), Error> {
         let total_peers = self.peer_manager.iter().count();
+        let mut meta_votes = BTreeMap::new();
         // If self-parent already has meta votes associated with it, derive this event's meta votes
         // from those ones.
         if let Some(parent_votes) = self
@@ -281,55 +287,49 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         {
             for (peer_id, parent_vote) in parent_votes {
                 let coin_toss = self.toss_coin(&peer_id, &parent_vote, event);
-                let mut other_votes = vec![];
-                // If `estimates` is empty, we've been waiting for the result of a coin toss.  In
-                // that case, we don't care about other votes, we just need the coin toss result.
-                if !parent_vote.estimates.is_empty() {
-                    for creator in self.peer_manager.all_ids() {
-                        if let Some(meta_vote) = event.last_ancestors.get(creator).and_then(
-                            |creator_event_index| {
-                                self.most_recent_meta_vote(
-                                    creator,
-                                    *creator_event_index,
-                                    &peer_id,
-                                    parent_vote.round,
-                                    parent_vote.step,
-                                ).cloned()
-                            },
-                        ) {
-                            other_votes.push(meta_vote)
-                        }
-                    }
+                let other_votes = if parent_vote.estimates.is_empty() {
+                    // If `estimates` is empty, we've been waiting for the result of a coin toss.
+                    // In that case, we don't care about other votes, we just need the coin toss
+                    // result.
+                    vec![]
+                } else {
+                    self.collect_other_meta_votes(
+                        &peer_id,
+                        parent_vote.round,
+                        parent_vote.step,
+                        event,
+                    )
                 };
-                let meta_vote =
-                    MetaVote::next(&parent_vote, other_votes.as_slice(), coin_toss, total_peers);
+                let meta_vote = MetaVote::next(&parent_vote, &other_votes, coin_toss, total_peers);
                 if let Some(hashes) = self.round_hashes.get_mut(&peer_id) {
                     while hashes.len() < meta_vote.round + 1 {
                         let next_round_hash = hashes[hashes.len() - 1].next()?;
                         hashes.push(next_round_hash);
                     }
                 }
+                let _ = meta_votes.insert(peer_id, meta_vote);
             }
-        } else {
-            // This event's self-parent didn't have meta votes.  Check to see if we need to start.
+        } else if self.is_observer(event) {
+            // Start meta votes for this event.
+            for peer_id in self.peer_manager.all_ids() {
+                let other_votes = self.collect_other_meta_votes(peer_id, 0, 0, event);
+                let initial_estimate = event.observations.contains(peer_id);
+                let _ = meta_votes.insert(
+                    peer_id.clone(),
+                    MetaVote::new(initial_estimate, &other_votes, total_peers),
+                );
+            }
         }
-        // For each peer {
-        //     For each peer {
-        //         Get the meta vote from the parent event
-        //         Get all other meta votes
-        //         Get the round hash
-        //         Construct new meta vote
-        //         Update round hash if returned meta vote shows its changed
-        //     }
-        // }
-        // if we have decisions for all meta vote sets {
-        //     calculate next stable block
-        //     clear all meta votes, and observers
-        //     prune valid-blocks-carried (Remove the hash of all gossip events that carried a vote for the
-        //     block that became stable)
-        //     re-evaluate if we need to start new meta votes (set valid-blocks-carried and observers again)
-        // }
-        unimplemented!();
+
+        if !meta_votes.is_empty() {
+            let _ = self.meta_votes.insert(*event.hash(), meta_votes);
+        }
+
+        while let Some(block) = self.next_stable_block() {
+            self.consensused_blocks.push_back(block);
+            self.restart_consensus();
+        }
+        Ok(())
     }
 
     fn toss_coin(
@@ -459,6 +459,39 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         None
     }
 
+    // Returns the set of meta votes held by all peers other than the creator of `event` which are
+    // votes by `peer_id` at the given `round` and `step`.
+    fn collect_other_meta_votes(
+        &self,
+        peer_id: &S::PublicId,
+        round: usize,
+        step: usize,
+        event: &Event<T, S::PublicId>,
+    ) -> Vec<MetaVote> {
+        let mut other_votes = vec![];
+        for creator in self.peer_manager.all_ids() {
+            if let Some(meta_vote) = event.last_ancestors.get(creator).and_then(
+                |creator_event_index| {
+                    self.most_recent_meta_vote(creator, *creator_event_index, &peer_id, round, step)
+                        .cloned()
+                },
+            ) {
+                other_votes.push(meta_vote)
+            }
+        }
+        other_votes
+    }
+
+    fn next_stable_block(&mut self) -> Option<Block<T, S::PublicId>> {
+        // calculate next stable block
+        // clear all meta votes, and observers
+        // prune valid-blocks-carried (Remove the hash of all gossip events that carried a vote for
+        // the block that became stable)
+        unimplemented!();
+    }
+
+    fn restart_consensus(&mut self) {}
+
     // Returns whether event X can strongly see the event Y.
     fn does_strongly_see(&self, x: &Event<T, S::PublicId>, y: &Event<T, S::PublicId>) -> bool {
         let count = y
@@ -487,71 +520,4 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .map(|&index| index <= target_index)
             .unwrap_or(false)
     }
-
-    // // Crawls along the graph started from the event till the events of last consensused, to collect
-    // // the meta votes.
-    // fn collect_meta_votes(
-    //     &self,
-    //     cur_round: usize,
-    //     cur_step: usize,
-    //     voter: &S::PublicId,
-    //     event: &Event<T, S::PublicId>,
-    //     collections: &mut MetaVoteCollection<S::PublicId>,
-    //     last_consensused_events: &BTreeMap<S::PublicId, Event<T, S::PublicId>>,
-    // ) {
-    //     self.collect_parent_meta_votes(
-    //         cur_round,
-    //         cur_step,
-    //         voter,
-    //         self.self_parent(event),
-    //         collections,
-    //         last_consensused_events,
-    //     );
-    //     self.collect_parent_meta_votes(
-    //         cur_round,
-    //         cur_step,
-    //         voter,
-    //         self.other_parent(event),
-    //         collections,
-    //         last_consensused_events,
-    //     );
-    // }
-
-    // // Collects the meta votes of the parent event.
-    // fn collect_parent_meta_votes(
-    //     &self,
-    //     cur_round: usize,
-    //     cur_step: usize,
-    //     voter: &S::PublicId,
-    //     parent_event: Option<&Event<T, S::PublicId>>,
-    //     collections: &mut MetaVoteCollection<S::PublicId>,
-    //     last_consensused_events: &BTreeMap<S::PublicId, Event<T, S::PublicId>>,
-    // ) {
-    //     if let Some(parent) = parent_event {
-    //         if let Some(meta_vote) = self
-    //             .meta_votes
-    //             .get(parent.hash())
-    //             .and_then(|votes| votes.get(voter))
-    //         {
-    //             if meta_vote.round == cur_round && meta_vote.step == cur_step {
-    //                 collections.union(parent.creator(), meta_vote);
-    //             }
-    //         }
-    //         let cur_index = parent.index.unwrap_or(0);
-    //         let boundary_index = last_consensused_events
-    //             .get(parent.creator())
-    //             .and_then(|event| event.index)
-    //             .unwrap_or(0);
-    //         if cur_index > boundary_index {
-    //             self.collect_meta_votes(
-    //                 cur_round,
-    //                 cur_step,
-    //                 voter,
-    //                 parent,
-    //                 collections,
-    //                 last_consensused_events,
-    //             );
-    //         }
-    //     }
-    // }
 }
