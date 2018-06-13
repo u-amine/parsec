@@ -273,7 +273,37 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         {
             return Ok(());
         }
-        unimplemented!();
+        // Grab latest event from each peer
+        // If they can strongly see an event that carries a valid block, add the peer's public id
+        event.observations = self
+            .peer_manager
+            .all_ids()
+            .into_iter()
+            .filter(|peer| {
+                let last_hash = self.peer_manager.last_event_hash(peer);
+                match (last_hash) {
+                    Some(hash) => {
+                        let last_event = &self.events[hash];
+                        let oldest_event_with_valid_block = (*last_event)
+                            .valid_blocks_carried
+                            .iter()
+                            .map(|hash| &self.events[hash])
+                            .min_by(|lhs_event, rhs_event| {
+                                let lhs_index = lhs_event.index.unwrap_or(u64::max_value());
+                                let rhs_index = rhs_event.index.unwrap_or(u64::max_value());
+                                lhs_index.cmp(&rhs_index)
+                            });
+                        match oldest_event_with_valid_block {
+                            Some(event) => self.does_strongly_see(event, last_event),
+                            None => false,
+                        }
+                    }
+                    None => false,
+                }
+            })
+            .cloned()
+            .collect();
+        Ok(())
     }
 
     fn set_meta_votes(&mut self, event: &Event<T, S::PublicId>) -> Result<(), Error> {
