@@ -30,6 +30,7 @@ impl<S: SecretId> PeerManager<S> {
             peers: BTreeMap::new(),
             peer_id_hashes: vec![],
         };
+        // TODO - we shouldn't just automatically add ourself once we begin work on milestone 2.
         peer_manager.add_peer(our_public_id);
         peer_manager
     }

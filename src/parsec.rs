@@ -26,6 +26,8 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     peer_manager: PeerManager<S>,
     // Gossip events created locally and received from other peers.
     events: BTreeMap<Hash, Event<T, S::PublicId>>,
+    // The sequence in which all gossip events were added to this `Parsec`.
+    events_order: Vec<Hash>,
     // The hash of every stable block already returned via `poll()`.
     polled_blocks: BTreeSet<Hash>,
     // Consensused network events that have not been returned via `poll()` yet.
@@ -51,6 +53,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Ok(Parsec {
             peer_manager,
             events: BTreeMap::new(),
+            events_order: vec![],
             polled_blocks: BTreeSet::new(),
             consensused_blocks: VecDeque::new(),
             meta_votes: BTreeMap::new(),
@@ -160,9 +163,20 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.set_last_ancestors(&mut event)?;
         self.set_first_descendants(&mut event)?;
         self.set_valid_blocks_carried(&mut event)?;
-        self.set_observations(&mut event)?;
-        self.set_meta_votes(&event)?;
-        let _ = self.events.insert(*event.hash(), event);
+
+        let event_hash = *event.hash();
+        self.events_order.push(event_hash);
+        let _ = self.events.insert(event_hash, event);
+        self.process_event(&event_hash)
+    }
+
+    fn process_event(&mut self, event_hash: &Hash) -> Result<(), Error> {
+        self.set_observations(event_hash)?;
+        self.set_meta_votes(event_hash)?;
+        if let Some(block) = self.next_stable_block() {
+            self.consensused_blocks.push_back(block);
+            self.restart_consensus();
+        }
         Ok(())
     }
 
@@ -306,10 +320,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Ok(())
     }
 
-    fn set_observations(&mut self, event: &mut Event<T, S::PublicId>) -> Result<(), Error> {
+    fn set_observations(&mut self, event_hash: &Hash) -> Result<(), Error> {
         // If this node already has meta votes running, no need to calculate `observations`.
         if self
-            .self_parent(event)
+            .self_parent(self.events.get(event_hash).ok_or(Error::Logic)?)
             .and_then(|parent| self.meta_votes.get(parent.hash()))
             .is_some()
         {
@@ -317,7 +331,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
         // Grab latest event from each peer
         // If they can strongly see an event that carries a valid block, add the peer's public id
-        event.observations = self
+        let observations = self
             .peer_manager
             .all_ids()
             .into_iter()
@@ -345,18 +359,21 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             })
             .cloned()
             .collect();
+        let mut event = self.events.get_mut(event_hash).ok_or(Error::Logic)?;
+        event.observations = observations;
         Ok(())
     }
 
-    fn set_meta_votes(&mut self, event: &Event<T, S::PublicId>) -> Result<(), Error> {
+    fn set_meta_votes(&mut self, event_hash: &Hash) -> Result<(), Error> {
         let total_peers = self.peer_manager.iter().count();
         let mut meta_votes = BTreeMap::new();
         // If self-parent already has meta votes associated with it, derive this event's meta votes
         // from those ones.
-        if let Some(parent_votes) = self
-            .self_parent(event)
+        let event_hash = if let Some(parent_votes) = self
+            .self_parent(self.events.get(event_hash).ok_or(Error::Logic)?)
             .and_then(|parent| self.meta_votes.get(parent.hash()).cloned())
         {
+            let event = self.events.get(event_hash).ok_or(Error::Logic)?;
             for (peer_id, parent_vote) in parent_votes {
                 let coin_toss = self.toss_coin(&peer_id, &parent_vote, event);
                 let other_votes = if parent_vote.estimates.is_empty() {
@@ -381,26 +398,27 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 }
                 let _ = meta_votes.insert(peer_id, meta_vote);
             }
-        } else if self.is_observer(event) {
-            // Start meta votes for this event.
-            for peer_id in self.peer_manager.all_ids() {
-                let other_votes = self.collect_other_meta_votes(peer_id, 0, 0, event);
-                let initial_estimate = event.observations.contains(peer_id);
-                let _ = meta_votes.insert(
-                    peer_id.clone(),
-                    MetaVote::new(initial_estimate, &other_votes, total_peers),
-                );
+            *event.hash()
+        } else {
+            let event = self.events.get(event_hash).ok_or(Error::Logic)?;
+            if self.is_observer(event) {
+                // Start meta votes for this event.
+                for peer_id in self.peer_manager.all_ids() {
+                    let other_votes = self.collect_other_meta_votes(peer_id, 0, 0, event);
+                    let initial_estimate = event.observations.contains(peer_id);
+                    let _ = meta_votes.insert(
+                        peer_id.clone(),
+                        MetaVote::new(initial_estimate, &other_votes, total_peers),
+                    );
+                }
             }
-        }
+            *event.hash()
+        };
 
         if !meta_votes.is_empty() {
-            let _ = self.meta_votes.insert(*event.hash(), meta_votes);
+            let _ = self.meta_votes.insert(event_hash, meta_votes);
         }
 
-        while let Some(block) = self.next_stable_block() {
-            self.consensused_blocks.push_back(block);
-            self.restart_consensus();
-        }
         Ok(())
     }
 
@@ -562,7 +580,32 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         unimplemented!();
     }
 
-    fn restart_consensus(&mut self) {}
+    fn oldest_event_with_valid_block(
+        &self,
+        peer_id: &S::PublicId,
+    ) -> Option<&Event<T, S::PublicId>> {
+        unimplemented!();
+    }
+
+    fn restart_consensus(&mut self) {
+        // Start from the oldest event with a valid block considering all creators' events.
+        let all_oldest_events_with_valid_block = self
+            .peer_manager
+            .all_ids()
+            .iter()
+            .filter_map(|peer_id| self.oldest_event_with_valid_block(peer_id).map(Event::hash))
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let events_hashes = self
+            .events_order
+            .iter()
+            .skip_while(|hash| !all_oldest_events_with_valid_block.contains(hash))
+            .cloned()
+            .collect::<Vec<_>>();
+        for event_hash in &events_hashes {
+            self.process_event(event_hash);
+        }
+    }
 
     // Returns whether event X can strongly see the event Y.
     fn does_strongly_see(&self, x: &Event<T, S::PublicId>, y: &Event<T, S::PublicId>) -> bool {
