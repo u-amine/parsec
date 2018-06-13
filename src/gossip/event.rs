@@ -97,6 +97,15 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         }
     }
 
+    /// Returns `Some(vote)` if the event is for a vote of network event, otherwise returns `None`.
+    pub fn vote(&self) -> Option<&Vote<T, P>> {
+        if let Cause::Observation(ref vote) = self.content.cause {
+            Some(vote)
+        } else {
+            None
+        }
+    }
+
     pub fn creator(&self) -> &P {
         &self.content.creator
     }
