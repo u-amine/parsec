@@ -7,6 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use block::Block;
+use dump_network::dump_gossip_graph;
 use error::Error;
 use gossip::{Event, Request, Response};
 use hash::Hash;
@@ -17,6 +18,7 @@ use network_event::NetworkEvent;
 use peer_manager::PeerManager;
 use round_hash::RoundHash;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::fmt::{self, Debug, Formatter};
 
 /// The main object which manages creating and receiving gossip about network events from peers, and
 /// which provides a sequence of consensused `Block`s by applying the PARSEC algorithm.
@@ -830,5 +832,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             Event::new_from_response(self.peer_manager.our_id(), self_parent, other_parent)
         }?;
         self.add_event(sync_event)
+    }
+}
+
+impl<T: NetworkEvent, S: SecretId> Debug for Parsec<T, S> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        dump_gossip_graph::<T, S>(f, &self.events, &self.meta_votes)
     }
 }

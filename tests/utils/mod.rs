@@ -114,6 +114,13 @@ impl PublicId for PeerId {
     fn verify_signature(&self, signature: &Self::Signature, data: &[u8]) -> bool {
         sign::verify_detached(signature, data, &self.pk)
     }
+    fn first_char(&self) -> char {
+        if let Some(name) = friendly_names::get(self) {
+            name.chars().next().unwrap()
+        } else {
+            self.pk.0[0] as char
+        }
+    }
 }
 
 pub struct FullId {

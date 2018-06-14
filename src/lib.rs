@@ -43,6 +43,7 @@ extern crate serde_derive;
 extern crate tiny_keccak;
 
 mod block;
+mod dump_network;
 mod error;
 mod gossip;
 mod hash;
