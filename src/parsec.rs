@@ -87,6 +87,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// Handles a received `Request` from `src` peer.  Returns a `Response` to be sent back to `src`
     /// or `Err` if the request was not valid.
     // TODO - remove
+
     #[allow(unused)]
     pub fn handle_request(
         &mut self,
@@ -193,14 +194,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.set_observations(event_hash)?;
         self.set_meta_votes(event_hash)?;
         if let Some(block) = self.next_stable_block() {
+            self.clear_consensus_data(block.payload());
             self.consensused_blocks.push_back(block);
-            //TODO
-            // clear the meta votes
-            // clear all observers
-            // clear the round hashes
-            // and observations
-            // prune valid-blocks-carried (Remove the hash of all gossip events that carried a vote for
-            // the block that became stable)
             self.restart_consensus();
         }
         Ok(())
@@ -658,14 +653,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                                 .count();
                             lhs_count.cmp(&rhs_count)
                         })
-                        .unwrap_or(&None)
-                        .clone();
+                        .unwrap_or(&None);
                     let votes = elected_gossip_events
                         .iter()
                         .flat_map(|event| event.valid_blocks_carried.clone())
                         .map(|hash| &self.events[&hash])
                         .filter_map(|event| {
-                            if event.vote() == winning_vote {
+                            if event.vote() == *winning_vote {
                                 event
                                     .vote()
                                     .map(|vote| (event.creator().clone(), vote.clone()))
@@ -677,6 +671,37 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     winning_vote.and_then(|vote| Block::new(vote.payload().clone(), &votes).ok())
                 }
             })
+    }
+
+    fn clear_consensus_data(&mut self, payload: &T) {
+        // Clear all leftover data from previous consensus
+        self.round_hashes = BTreeMap::new();
+        self.meta_votes = BTreeMap::new();
+        let stable_blocks_carried: BTreeSet<Hash> = self
+            .events
+            .iter()
+            .filter_map(|(hash, event)| {
+                if event.vote().map(|vote| vote.payload()) == Some(payload) {
+                    Some(*hash)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        self.events.iter_mut().for_each(|(_hash, event)| {
+            event.observations = BTreeSet::new();
+            let stable_blocks_carried = event
+                .valid_blocks_carried
+                .iter()
+                .filter(|hash| stable_blocks_carried.contains(&hash))
+                .cloned()
+                .collect::<BTreeSet<Hash>>();
+            event.valid_blocks_carried = event
+                .valid_blocks_carried
+                .difference(&stable_blocks_carried)
+                .cloned()
+                .collect();
+        });
     }
 
     fn restart_consensus(&mut self) {
