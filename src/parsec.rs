@@ -593,7 +593,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         event: &Event<T, S::PublicId>,
     ) -> Vec<MetaVote> {
         let mut other_votes = vec![];
-        for creator in self.peer_manager.all_ids() {
+        for creator in self.peer_manager.all_other_ids() {
             if let Some(meta_vote) = event.last_ancestors.get(creator).and_then(
                 |creator_event_index| {
                     self.most_recent_meta_vote(creator, *creator_event_index, &peer_id, round, step)

@@ -45,6 +45,14 @@ impl<S: SecretId> PeerManager<S> {
         self.peers.keys().collect()
     }
 
+    /// Returns all sorted peer_ids but ours
+    pub fn all_other_ids(&self) -> Vec<&S::PublicId> {
+        self.peers
+            .keys()
+            .filter(|key| *key != self.our_id.public_id())
+            .collect()
+    }
+
     /// Returns an unsorted map of Hash(peer_id) => peer_id
     pub fn peer_id_hashes(&self) -> &Vec<(Hash, S::PublicId)> {
         &self.peer_id_hashes
