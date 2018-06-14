@@ -11,6 +11,7 @@ use error::Error;
 use gossip::{Event, Request, Response};
 use hash::Hash;
 use id::SecretId;
+use maidsafe_utilities::serialisation::serialise;
 use meta_vote::MetaVote;
 use network_event::NetworkEvent;
 use peer_manager::PeerManager;
@@ -195,8 +196,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.set_meta_votes(event_hash)?;
         if let Some(block) = self.next_stable_block() {
             self.clear_consensus_data(block.payload());
+            let block_hash = Hash::from(serialise(&block)?.as_slice());
             self.consensused_blocks.push_back(block);
-            self.restart_consensus();
+            self.restart_consensus(&block_hash)?;
         }
         Ok(())
     }
@@ -704,7 +706,18 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         });
     }
 
-    fn restart_consensus(&mut self) {
+    fn restart_consensus(&mut self, latest_block_hash: &Hash) -> Result<(), Error> {
+        self.round_hashes = self
+            .peer_manager
+            .all_ids()
+            .iter()
+            .filter_map(|peer| {
+                let peer_id = *peer;
+                RoundHash::new(*peer, *latest_block_hash)
+                    .ok()
+                    .map(|round_hash| (peer_id.clone(), vec![round_hash]))
+            })
+            .collect();
         // Start from the oldest event with a valid block considering all creators' events.
         let all_oldest_events_with_valid_block = self
             .peer_manager
@@ -722,6 +735,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         for event_hash in &events_hashes {
             let _ = self.process_event(event_hash);
         }
+        Ok(())
     }
 
     // Returns whether event X can strongly see the event Y.
