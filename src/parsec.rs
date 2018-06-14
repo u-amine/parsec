@@ -36,8 +36,6 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     responsiveness_threshold: usize,
 }
 
-// TODO - remove
-#[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
 impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// Creates a new `Parsec` for a peer with the given ID and genesis peer IDs.
     pub fn new(our_id: S, genesis_group: &BTreeSet<S::PublicId>) -> Result<Self, Error> {
@@ -86,26 +84,42 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     /// Handles a received `Request` from `src` peer.  Returns a `Response` to be sent back to `src`
     /// or `Err` if the request was not valid.
-    // TODO - remove
-
-    #[allow(unused)]
     pub fn handle_request(
         &mut self,
         src: &S::PublicId,
         req: Request<T, S::PublicId>,
     ) -> Result<Response<T, S::PublicId>, Error> {
-        unimplemented!();
+        for event in req.unpack() {
+            self.add_event(event)?;
+        }
+        self.create_sync_event(src, true)?;
+
+        // Return all the events we think `src` doesn't yet know about, packed into a `Response`.
+        let other_parent_hash = self.peer_manager.last_event_hash(src).ok_or(Error::Logic)?;
+        let other_parent = self.events.get(other_parent_hash).ok_or(Error::Logic)?;
+        let last_ancestors_hashes = other_parent
+            .last_ancestors
+            .iter()
+            .filter_map(|(peer_id, &index)| self.peer_manager.event_by_index(peer_id, index))
+            .collect::<BTreeSet<_>>();
+        let response_events_iter = self
+            .events_order
+            .iter()
+            .skip_while(|hash| !last_ancestors_hashes.contains(hash))
+            .filter_map(|hash| self.events.get(hash));
+        Ok(Response::new(response_events_iter))
     }
 
     /// Handles a received `Response` from `src` peer.  Returns `Err` if the response was not valid.
-    // TODO - remove
-    #[allow(unused)]
     pub fn handle_response(
         &mut self,
         src: &S::PublicId,
         resp: Response<T, S::PublicId>,
     ) -> Result<(), Error> {
-        unimplemented!();
+        for event in resp.unpack() {
+            self.add_event(event)?;
+        }
+        self.create_sync_event(src, false)
     }
 
     /// Steps the algorithm and returns the next stable block, if any.
@@ -738,5 +752,21 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .count();
 
         self.peer_manager.is_super_majority(count)
+    }
+
+    // Constructs a sync event to prove receipt of a `Request` or `Response` (depending on the value
+    // of `is_request`) from `src`, then add it to our graph.
+    fn create_sync_event(&mut self, src: &S::PublicId, is_request: bool) -> Result<(), Error> {
+        let self_parent = *self
+            .peer_manager
+            .last_event_hash(self.peer_manager.our_id().public_id())
+            .ok_or(Error::Logic)?;
+        let other_parent = *self.peer_manager.last_event_hash(src).ok_or(Error::Logic)?;
+        let sync_event = if is_request {
+            Event::new_from_request(self.peer_manager.our_id(), self_parent, other_parent)
+        } else {
+            Event::new_from_response(self.peer_manager.our_id(), self_parent, other_parent)
+        }?;
+        self.add_event(sync_event)
     }
 }
