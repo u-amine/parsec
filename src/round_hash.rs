@@ -35,7 +35,7 @@ impl RoundHash {
     }
 
     // Constructs a new `RoundHash` with the same values as `self` but with `round += 1`.
-    pub fn next(&self) -> Result<Self, Error> {
+    pub fn increment_round(&self) -> Result<Self, Error> {
         Ok(Self {
             public_id_hash: self.public_id_hash,
             latest_block_hash: self.latest_block_hash,

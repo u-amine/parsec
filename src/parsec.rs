@@ -424,7 +424,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 let meta_vote = MetaVote::next(&parent_vote, &other_votes, coin_toss, total_peers);
                 if let Some(hashes) = self.round_hashes.get_mut(&peer_id) {
                     while hashes.len() < meta_vote.round + 1 {
-                        let next_round_hash = hashes[hashes.len() - 1].next()?;
+                        let next_round_hash = hashes[hashes.len() - 1].increment_round()?;
                         hashes.push(next_round_hash);
                     }
                 }
