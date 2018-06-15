@@ -59,22 +59,21 @@ impl MetaVote {
             if let Some(coin_toss_result) = coin_toss {
                 new_meta_vote.estimates = new_set_with_value(coin_toss_result);
             }
-            return new_meta_vote;
         }
 
         // Collect the meta vote counts for the current round and step.
-        let counts = MetaVoteCounts::new(parent, others, total_peers);
+        let mut counts = MetaVoteCounts::new(parent, others, total_peers);
 
         if counts.is_super_majority(counts.aux_values_set()) {
             // We're going to the next step.
             Self::increase_step(&mut new_meta_vote, &counts, coin_toss);
+            // Calculate the counts again
+            counts = MetaVoteCounts::new(parent, others, total_peers);
         }
-        new_meta_vote.estimates =
-            MetaVote::calculate_new_estimates(&new_meta_vote, &parent, &counts);
-        new_meta_vote.bin_values =
-            MetaVote::calculate_new_bin_values(&new_meta_vote, &parent, &counts);
-        new_meta_vote.aux_value = MetaVote::calculate_new_auxiliary_value(&new_meta_vote, parent);
-        new_meta_vote.decision = MetaVote::calculate_new_decision(&new_meta_vote, parent, &counts);
+        new_meta_vote.estimates = Self::calculate_new_estimates(&new_meta_vote, &parent, &counts);
+        new_meta_vote.bin_values = Self::calculate_new_bin_values(&new_meta_vote, &parent, &counts);
+        new_meta_vote.aux_value = Self::calculate_new_auxiliary_value(&new_meta_vote, parent);
+        new_meta_vote.decision = Self::calculate_new_decision(&new_meta_vote, parent, &counts);
 
         new_meta_vote
     }
