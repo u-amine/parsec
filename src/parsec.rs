@@ -79,7 +79,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     /// Creates a new message to be gossiped to a random peer.
     pub fn create_gossip(&self) -> Request<T, S::PublicId> {
-        Request::new(self.events.values())
+        Request::new(
+            self.events_order
+                .iter()
+                .filter_map(|hash| self.events.get(hash)),
+        )
     }
 
     /// Handles a received `Request` from `src` peer.  Returns a `Response` to be sent back to `src`
