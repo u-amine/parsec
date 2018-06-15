@@ -211,11 +211,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     // This should only be called once `event` has had its `index` set correctly.
     fn set_last_ancestors(&self, event: &mut Event<T, S::PublicId>) -> Result<(), Error> {
-        let event_index = if let Some(index) = event.index {
-            index
-        } else {
-            return Err(Error::InvalidEvent);
-        };
+        let event_index = event.index.ok_or(Error::InvalidEvent)?;
 
         if let Some(self_parent) = self.self_parent(event) {
             event.last_ancestors = self_parent.last_ancestors.clone();
@@ -250,11 +246,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             return Err(Error::InvalidEvent);
         }
 
-        let event_index = if let Some(index) = event.index {
-            index
-        } else {
-            return Err(Error::InvalidEvent);
-        };
+        let event_index = event.index.ok_or(Error::InvalidEvent)?;
         let creator_id = event.creator().clone();
         let _ = event.first_descendants.insert(creator_id, event_index);
 
@@ -353,8 +345,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         &self,
         peer_id: &S::PublicId,
     ) -> Option<&Event<T, S::PublicId>> {
-        match self.last_event(peer_id) {
-            Some(last_event) => (*last_event)
+        self.last_event(peer_id).and_then(|last_event| {
+            (*last_event)
                 .valid_blocks_carried
                 .iter()
                 .map(|hash| &self.events[hash])
@@ -362,9 +354,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     let lhs_index = lhs_event.index.unwrap_or(u64::max_value());
                     let rhs_index = rhs_event.index.unwrap_or(u64::max_value());
                     lhs_index.cmp(&rhs_index)
-                }),
-            None => None,
-        }
+                })
+        })
     }
 
     fn set_observations(&mut self, event_hash: &Hash) -> Result<(), Error> {
