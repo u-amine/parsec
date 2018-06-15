@@ -65,11 +65,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     /// Add a vote for `network_event`.
     pub fn vote_for(&mut self, network_event: T) -> Result<(), Error> {
-        let self_parent_hash = if let Some(last_hash) = self.our_last_event_hash() {
-            last_hash
-        } else {
-            return Err(Error::InvalidEvent);
-        };
+        let self_parent_hash = self.our_last_event_hash().ok_or(Error::InvalidEvent)?;
         let event = Event::new_from_observation(
             self.peer_manager.our_id(),
             self_parent_hash,
