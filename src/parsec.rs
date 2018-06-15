@@ -40,7 +40,7 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
 // TODO - remove
 #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
 impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
-    /// Creates a new `Parsec` for a peer with the given ID and genesis peer IDs.
+    /// Creates a new `Parsec` for a peer with the given ID and genesis peer IDs (ours included).
     pub fn new(our_id: S, genesis_group: &BTreeSet<S::PublicId>) -> Result<Self, Error> {
         let responsiveness_threshold = (genesis_group.len() as f64).log2().ceil() as usize;
 
