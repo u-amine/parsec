@@ -18,8 +18,6 @@ pub trait PublicId: Clone + Eq + Ord + Hash + Serialize + DeserializeOwned + Deb
     type Signature: Clone + Eq + Ord + Hash + Serialize + DeserializeOwned + Debug;
     /// Verifies `signature` against `data` using this `PublicId`.  Returns `true` if valid.
     fn verify_signature(&self, signature: &Self::Signature, data: &[u8]) -> bool;
-    /// Returns the first charater of the public id.
-    fn first_char(&self) -> char;
 }
 
 /// The secret identity of a node.  It provides functionality to allow it to be used as an

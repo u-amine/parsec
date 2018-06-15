@@ -13,8 +13,12 @@ use rand::{self, Rng, SeedableRng, XorShiftRng};
 use rust_sodium;
 use rust_sodium::crypto::sign::{self, PublicKey, SecretKey};
 use std::collections::{BTreeMap, BTreeSet};
+use std::env;
 use std::fmt::{self, Debug};
+use std::fs::{self, File};
+use std::io::Write;
 use std::panic;
+use std::thread;
 
 /// Test network.
 pub struct Network {
@@ -82,6 +86,31 @@ impl Network {
     }
 }
 
+impl Drop for Network {
+    fn drop(&mut self) {
+        if thread::panicking() {
+            let folder_name = rand::thread_rng()
+                .gen_ascii_chars()
+                .take(6)
+                .collect::<String>();
+            let dir = env::temp_dir().join("parsec_graphs").join(folder_name);
+            if let Err(error) = fs::create_dir_all(&dir) {
+                println!("Failed to create folder for dot files: {:?}", error);
+            } else {
+                println!("Writing dot files in {:?}", dir);
+            }
+            for (peer_id, peer) in &self.peers {
+                let file_path = dir.join(format!("{:?}.dot", peer_id));
+                if let Ok(mut file) = File::create(&file_path) {
+                    let _ = write!(file, "{:?}", peer);
+                } else {
+                    println!("Failed to create {:?}", file_path);
+                }
+            }
+        }
+    }
+}
+
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct PeerId {
     pk: PublicKey,
@@ -113,13 +142,6 @@ impl PublicId for PeerId {
     type Signature = sign::Signature;
     fn verify_signature(&self, signature: &Self::Signature, data: &[u8]) -> bool {
         sign::verify_detached(signature, data, &self.pk)
-    }
-    fn first_char(&self) -> char {
-        if let Some(name) = friendly_names::get(self) {
-            name.chars().next().unwrap()
-        } else {
-            self.pk.0[0] as char
-        }
     }
 }
 
