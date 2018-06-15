@@ -65,13 +65,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     /// Add a vote for `network_event`.
     pub fn vote_for(&mut self, network_event: T) -> Result<(), Error> {
-        let our_pub_id = self.peer_manager.our_id().public_id().clone();
-        let self_parent_hash =
-            if let Some(last_hash) = self.peer_manager.last_event_hash(&our_pub_id) {
-                *last_hash
-            } else {
-                return Err(Error::InvalidEvent);
-            };
+        let self_parent_hash = if let Some(last_hash) = self.our_last_event_hash() {
+            last_hash
+        } else {
+            return Err(Error::InvalidEvent);
+        };
         let event = Event::new_from_observation(
             self.peer_manager.our_id(),
             self_parent_hash,
@@ -116,9 +114,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     /// Checks if the given `network_event` has already been voted for by us.
     pub fn have_voted_for(&self, network_event: &T) -> bool {
-        let our_pub_id = self.peer_manager.our_id().public_id();
         self.events.values().any(|event| {
-            if event.creator() == our_pub_id {
+            if event.creator() == self.our_pub_id() {
                 if let Some(voted) = event.vote() {
                     voted.payload() == network_event
                 } else {
@@ -128,6 +125,16 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 false
             }
         })
+    }
+
+    fn our_pub_id(&self) -> &S::PublicId {
+        self.peer_manager.our_id().public_id()
+    }
+
+    fn our_last_event_hash(&self) -> Option<Hash> {
+        self.peer_manager
+            .last_event_hash(self.our_pub_id())
+            .cloned()
     }
 
     fn self_parent<'a>(
@@ -618,72 +625,69 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn next_stable_block(&mut self) -> Option<Block<T, S::PublicId>> {
-        let us = self.peer_manager.our_id().public_id();
-        self.peer_manager
-            .last_event_hash(us)
-            .and_then(|our_last_event| {
-                let our_decided_meta_votes = self.meta_votes[our_last_event]
-                    .iter()
-                    .filter(|(_id, vote)| vote.decision.is_some());
-                if our_decided_meta_votes.clone().count() < self.peer_manager.all_ids().len() {
-                    None
-                } else {
-                    let mut elected_gossip_events = our_decided_meta_votes
-                        .filter_map(|(id, vote)| {
-                            if vote.decision == Some(true) {
-                                self.oldest_event_with_valid_block(id)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<_>>();
-                    // We sort the events by their vote to avoid ties when picking the event
-                    // with the most represented payload.
-                    // Because `max_by` guarentees that "If several elements are equally
-                    // maximum, the last element is returned.", this should be enough to break
-                    // any tie.
-                    elected_gossip_events.sort_by(|lhs, rhs| lhs.vote().cmp(&rhs.vote()));
+        self.our_last_event_hash().and_then(|our_last_event| {
+            let our_decided_meta_votes = self.meta_votes[&our_last_event]
+                .iter()
+                .filter(|(_id, vote)| vote.decision.is_some());
+            if our_decided_meta_votes.clone().count() < self.peer_manager.all_ids().len() {
+                None
+            } else {
+                let mut elected_gossip_events = our_decided_meta_votes
+                    .filter_map(|(id, vote)| {
+                        if vote.decision == Some(true) {
+                            self.oldest_event_with_valid_block(id)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                // We sort the events by their vote to avoid ties when picking the event
+                // with the most represented payload.
+                // Because `max_by` guarentees that "If several elements are equally
+                // maximum, the last element is returned.", this should be enough to break
+                // any tie.
+                elected_gossip_events.sort_by(|lhs, rhs| lhs.vote().cmp(&rhs.vote()));
 
-                    let votes = elected_gossip_events
-                        .iter()
-                        .map(|event| event.vote())
-                        .collect::<Vec<_>>();
-                    let copied_votes = votes.clone();
-                    let winning_vote = copied_votes
-                        .iter()
-                        .max_by(|lhs_event, rhs_event| {
-                            let lhs_count = votes
-                                .iter()
-                                .filter(|vote| {
-                                    vote.map(|x| x.payload()) == lhs_event.map(|x| x.payload())
-                                })
-                                .count();
-                            let rhs_count = votes
-                                .iter()
-                                .filter(|vote| {
-                                    vote.map(|x| x.payload()) == rhs_event.map(|x| x.payload())
-                                })
-                                .count();
-                            lhs_count.cmp(&rhs_count)
-                        })
-                        .unwrap_or(&None);
-                    let votes = elected_gossip_events
-                        .iter()
-                        .flat_map(|event| event.valid_blocks_carried.clone())
-                        .map(|hash| &self.events[&hash])
-                        .filter_map(|event| {
-                            if event.vote() == *winning_vote {
-                                event
-                                    .vote()
-                                    .map(|vote| (event.creator().clone(), vote.clone()))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<BTreeMap<_, _>>();
-                    winning_vote.and_then(|vote| Block::new(vote.payload().clone(), &votes).ok())
-                }
-            })
+                let votes = elected_gossip_events
+                    .iter()
+                    .map(|event| event.vote())
+                    .collect::<Vec<_>>();
+                let copied_votes = votes.clone();
+                let winning_vote = copied_votes
+                    .iter()
+                    .max_by(|lhs_event, rhs_event| {
+                        let lhs_count = votes
+                            .iter()
+                            .filter(|vote| {
+                                vote.map(|x| x.payload()) == lhs_event.map(|x| x.payload())
+                            })
+                            .count();
+                        let rhs_count = votes
+                            .iter()
+                            .filter(|vote| {
+                                vote.map(|x| x.payload()) == rhs_event.map(|x| x.payload())
+                            })
+                            .count();
+                        lhs_count.cmp(&rhs_count)
+                    })
+                    .unwrap_or(&None);
+                let votes = elected_gossip_events
+                    .iter()
+                    .flat_map(|event| event.valid_blocks_carried.clone())
+                    .map(|hash| &self.events[&hash])
+                    .filter_map(|event| {
+                        if event.vote() == *winning_vote {
+                            event
+                                .vote()
+                                .map(|vote| (event.creator().clone(), vote.clone()))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<BTreeMap<_, _>>();
+                winning_vote.and_then(|vote| Block::new(vote.payload().clone(), &votes).ok())
+            }
+        })
     }
 
     fn clear_consensus_data(&mut self, payload: &T) {
