@@ -111,15 +111,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// Checks if the given `network_event` has already been voted for by us.
     pub fn have_voted_for(&self, network_event: &T) -> bool {
         self.events.values().any(|event| {
-            if event.creator() == self.our_pub_id() {
-                if let Some(voted) = event.vote() {
-                    voted.payload() == network_event
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
+            event.creator() == self.our_pub_id()
+                && event
+                    .vote()
+                    .map_or(false, |voted| voted.payload() == network_event)
         })
     }
 
