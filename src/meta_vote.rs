@@ -52,58 +52,104 @@ impl MetaVote {
         // Collect the meta vote counts for the current round and step.
         let counts = MetaVoteCounts::new(parent, others, total_peers);
 
-        if let Some(decision) = parent.decision {
-            // If we already have a decision, calculate the new meta vote's estimates, bin_values,
-            // and aux_value.
-            new_meta_vote.estimates = new_set_with_value(decision);
-            new_meta_vote.bin_values = new_meta_vote.estimates.clone();
-            new_meta_vote.aux_value = Some(decision);
-        } else if counts.is_super_majority(counts.aux_values_true + counts.aux_values_false) {
+        if counts.is_super_majority(counts.aux_values_set()) {
             // We're going to the next step.
             Self::increase_step(&mut new_meta_vote, &counts, coin_toss);
         } else {
-            // Calculate the new meta vote's estimates.
-            if counts.at_least_one_third(counts.estimates_true) {
-                let _ = new_meta_vote.estimates.insert(true);
-            }
-            if counts.at_least_one_third(counts.estimates_false) {
-                let _ = new_meta_vote.estimates.insert(false);
-            }
-
-            // Calculate the new meta vote's bin_values.
-            if counts.is_super_majority(counts.estimates_true) {
-                let _ = new_meta_vote.bin_values.insert(true);
-            }
-            if counts.is_super_majority(counts.estimates_false) {
-                let _ = new_meta_vote.bin_values.insert(false);
-            }
-
-            // Calculate the new meta vote's aux_value.
-            if parent.aux_value.is_none() && parent.bin_values.is_empty() {
-                if new_meta_vote.bin_values.len() == 1 {
-                    new_meta_vote.aux_value = Some(new_meta_vote.bin_values.contains(&true));
-                } else if new_meta_vote.bin_values.len() == 2 {
-                    new_meta_vote.aux_value = Some(true);
-                }
-            }
+            new_meta_vote.estimates =
+                MetaVote::calculate_new_estimates(&new_meta_vote, &parent, &counts);
+            new_meta_vote.bin_values =
+                MetaVote::calculate_new_bin_values(&new_meta_vote, &parent, &counts);
+            new_meta_vote.aux_value =
+                MetaVote::calculate_new_auxiliary_value(&new_meta_vote, parent);
         };
 
-        // Calculate the new meta vote's decision.
+        new_meta_vote.decision = MetaVote::calculate_new_decision(&new_meta_vote, parent, &counts);
+
+        new_meta_vote
+    }
+
+    fn calculate_new_estimates(
+        new_meta_vote: &MetaVote,
+        parent: &MetaVote,
+        counts: &MetaVoteCounts,
+    ) -> BTreeSet<bool> {
+        if let Some(decision) = parent.decision {
+            new_set_with_value(decision)
+        } else {
+            let mut new_estimates = new_meta_vote.estimates.clone();
+            if counts.at_least_one_third(counts.estimates_true) {
+                let _ = new_estimates.insert(true);
+            }
+            if counts.at_least_one_third(counts.estimates_false) {
+                let _ = new_estimates.insert(false);
+            }
+            new_estimates
+        }
+    }
+
+    fn calculate_new_bin_values(
+        new_meta_vote: &MetaVote,
+        parent: &MetaVote,
+        counts: &MetaVoteCounts,
+    ) -> BTreeSet<bool> {
+        if let Some(decision) = parent.decision {
+            new_set_with_value(decision)
+        } else {
+            let mut new_bin_values = new_meta_vote.bin_values.clone();
+            if counts.is_super_majority(counts.estimates_true) {
+                let _ = new_bin_values.insert(true);
+            }
+            if counts.is_super_majority(counts.estimates_false) {
+                let _ = new_bin_values.insert(false);
+            }
+            new_bin_values
+        }
+    }
+
+    fn calculate_new_auxiliary_value(new_meta_vote: &MetaVote, parent: &MetaVote) -> Option<bool> {
+        if let Some(decision) = parent.decision {
+            Some(decision)
+        } else if parent.aux_value.is_none() && parent.bin_values.is_empty() {
+            if new_meta_vote.bin_values.len() == 1 {
+                Some(new_meta_vote.bin_values.contains(&true))
+            } else if new_meta_vote.bin_values.len() == 2 {
+                Some(true)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn calculate_new_decision(
+        new_meta_vote: &MetaVote,
+        parent: &MetaVote,
+        counts: &MetaVoteCounts,
+    ) -> Option<bool> {
         if new_meta_vote.decision.is_none() {
+            // Forced true step
             if parent.step == 0
                 && new_meta_vote.bin_values.contains(&true)
                 && counts.is_super_majority(counts.aux_values_true)
             {
-                new_meta_vote.decision = Some(true);
-            } else if parent.step == 1
+                Some(true)
+            }
+            // Forced false step
+            else if parent.step == 1
                 && new_meta_vote.bin_values.contains(&false)
                 && counts.is_super_majority(counts.aux_values_false)
             {
-                new_meta_vote.decision = Some(false);
+                Some(false)
             }
+            // No decision is ever taken outside of a forced step
+            else {
+                None
+            }
+        } else {
+            None
         }
-
-        new_meta_vote
     }
 
     fn increase_step(
@@ -199,6 +245,10 @@ impl MetaVoteCounts {
             }
         }
         counts
+    }
+
+    fn aux_values_set(&self) -> usize {
+        self.aux_values_true + self.aux_values_false
     }
 
     fn is_super_majority(&self, count: usize) -> bool {
