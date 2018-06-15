@@ -55,15 +55,12 @@ impl MetaVote {
         if counts.is_super_majority(counts.aux_values_set()) {
             // We're going to the next step.
             Self::increase_step(&mut new_meta_vote, &counts, coin_toss);
-        } else {
-            new_meta_vote.estimates =
-                MetaVote::calculate_new_estimates(&new_meta_vote, &parent, &counts);
-            new_meta_vote.bin_values =
-                MetaVote::calculate_new_bin_values(&new_meta_vote, &parent, &counts);
-            new_meta_vote.aux_value =
-                MetaVote::calculate_new_auxiliary_value(&new_meta_vote, parent);
-        };
-
+        }
+        new_meta_vote.estimates =
+            MetaVote::calculate_new_estimates(&new_meta_vote, &parent, &counts);
+        new_meta_vote.bin_values =
+            MetaVote::calculate_new_bin_values(&new_meta_vote, &parent, &counts);
+        new_meta_vote.aux_value = MetaVote::calculate_new_auxiliary_value(&new_meta_vote, parent);
         new_meta_vote.decision = MetaVote::calculate_new_decision(&new_meta_vote, parent, &counts);
 
         new_meta_vote
