@@ -15,11 +15,24 @@ fn new_set_with_value(value: bool) -> BTreeSet<bool> {
     set
 }
 
+#[derive(Clone, PartialEq)]
+pub(crate) enum Step {
+    ForcedTrue,
+    ForcedFalse,
+    GenuineFlip,
+}
+
+impl Default for Step {
+    fn default() -> Step {
+        Step::ForcedTrue
+    }
+}
+
 // This holds the state of a (binary) meta vote about which we're trying to achieve consensus.
 #[derive(Clone, Default)]
 pub(crate) struct MetaVote {
     pub round: usize,
-    pub step: usize,
+    pub step: Step,
     pub estimates: BTreeSet<bool>,
     pub bin_values: BTreeSet<bool>,
     pub aux_value: Option<bool>,
@@ -126,23 +139,22 @@ impl MetaVote {
         counts: &MetaVoteCounts,
     ) -> Option<bool> {
         if new_meta_vote.decision.is_none() {
-            // Forced true step
-            if parent.step == 0
-                && new_meta_vote.bin_values.contains(&true)
-                && counts.is_super_majority(counts.aux_values_true)
-            {
-                Some(true)
-            }
-            // Forced false step
-            else if parent.step == 1
-                && new_meta_vote.bin_values.contains(&false)
-                && counts.is_super_majority(counts.aux_values_false)
-            {
-                Some(false)
-            }
-            // No decision is ever taken outside of a forced step
-            else {
-                None
+            match parent.step {
+                Step::ForcedTrue => if new_meta_vote.bin_values.contains(&true)
+                    && counts.is_super_majority(counts.aux_values_true)
+                {
+                    Some(true)
+                } else {
+                    None
+                },
+                Step::ForcedFalse => if new_meta_vote.bin_values.contains(&false)
+                    && counts.is_super_majority(counts.aux_values_false)
+                {
+                    Some(false)
+                } else {
+                    None
+                },
+                Step::GenuineFlip => None,
             }
         } else {
             None
@@ -154,36 +166,28 @@ impl MetaVote {
         counts: &MetaVoteCounts,
         coin_toss: Option<bool>,
     ) {
-        // Increase the new meta vote's round and step, and clear the bin_values and aux_value.
-        if new_meta_vote.step == 2 {
-            new_meta_vote.round += 1;
-            new_meta_vote.step = 0;
-        } else {
-            new_meta_vote.step += 1;
-        }
         new_meta_vote.bin_values.clear();
         new_meta_vote.aux_value = None;
 
         // Set the estimates as per the concrete coin toss rules.
         match new_meta_vote.step {
-            1 => {
-                // Forced true step
+            Step::ForcedTrue => {
                 if counts.is_super_majority(counts.aux_values_false) {
                     new_meta_vote.estimates = new_set_with_value(false);
                 } else if !counts.is_super_majority(counts.aux_values_true) {
                     new_meta_vote.estimates = new_set_with_value(true);
                 }
+                new_meta_vote.step = Step::ForcedFalse;
             }
-            2 => {
-                // Forced false step
+            Step::ForcedFalse => {
                 if counts.is_super_majority(counts.aux_values_true) {
                     new_meta_vote.estimates = new_set_with_value(true);
                 } else if !counts.is_super_majority(counts.aux_values_false) {
                     new_meta_vote.estimates = new_set_with_value(false);
                 }
+                new_meta_vote.step = Step::GenuineFlip;
             }
-            0 => {
-                // Flipped coin step
+            Step::GenuineFlip => {
                 if counts.is_super_majority(counts.aux_values_true) {
                     new_meta_vote.estimates = new_set_with_value(true);
                 } else if counts.is_super_majority(counts.aux_values_false) {
@@ -195,8 +199,9 @@ impl MetaVote {
                     // gossiped to try and get the coin toss result.
                     new_meta_vote.estimates.clear();
                 }
+                new_meta_vote.step = Step::ForcedTrue;
+                new_meta_vote.round += 1;
             }
-            _ => unreachable!(),
         }
     }
 }

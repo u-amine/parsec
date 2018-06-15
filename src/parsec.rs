@@ -12,7 +12,7 @@ use gossip::{Event, Request, Response};
 use hash::Hash;
 use id::SecretId;
 use maidsafe_utilities::serialisation::serialise;
-use meta_vote::MetaVote;
+use meta_vote::{MetaVote, Step};
 use network_event::NetworkEvent;
 use peer_manager::PeerManager;
 use round_hash::RoundHash;
@@ -419,7 +419,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     self.collect_other_meta_votes(
                         &peer_id,
                         parent_vote.round,
-                        parent_vote.step,
+                        parent_vote.step.clone(),
                         event,
                     )
                 };
@@ -438,7 +438,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             if self.is_observer(event) {
                 // Start meta votes for this event.
                 for peer_id in self.peer_manager.all_ids() {
-                    let other_votes = self.collect_other_meta_votes(peer_id, 0, 0, event);
+                    let other_votes =
+                        self.collect_other_meta_votes(peer_id, 0, Step::ForcedTrue, event);
                     let initial_estimate = event.observations.contains(peer_id);
                     let _ = meta_votes.insert(
                         peer_id.clone(),
@@ -466,7 +467,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let round = if parent_vote.estimates.is_empty() {
             // We're waiting for the coin toss result already.
             parent_vote.round - 1
-        } else if parent_vote.step == 2 {
+        } else if parent_vote.step == Step::GenuineFlip {
             parent_vote.round
         } else {
             return None;
@@ -507,7 +508,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     // Returns the aux value for the given peer, created by `creator`, at the given round and at
-    // step 2.
+    // the genuine flip step.
     fn aux_value(
         &self,
         creator: &S::PublicId,
@@ -515,8 +516,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         peer_id: &S::PublicId,
         round: usize,
     ) -> Option<bool> {
-        self.most_recent_meta_vote(creator, creator_event_index, peer_id, round, 2)
-            .and_then(|meta_vote| meta_vote.aux_value)
+        self.most_recent_meta_vote(
+            creator,
+            creator_event_index,
+            peer_id,
+            round,
+            Step::GenuineFlip,
+        ).and_then(|meta_vote| meta_vote.aux_value)
     }
 
     // Skips back through our events until we've passed `responsiveness_threshold` response events
@@ -561,7 +567,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         mut creator_event_index: u64,
         peer_id: &S::PublicId,
         round: usize,
-        step: usize,
+        step: Step,
     ) -> Option<&MetaVote> {
         loop {
             let event_hash = self
@@ -589,15 +595,20 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         &self,
         peer_id: &S::PublicId,
         round: usize,
-        step: usize,
+        step: Step,
         event: &Event<T, S::PublicId>,
     ) -> Vec<MetaVote> {
         let mut other_votes = vec![];
         for creator in self.peer_manager.all_other_ids() {
             if let Some(meta_vote) = event.last_ancestors.get(creator).and_then(
                 |creator_event_index| {
-                    self.most_recent_meta_vote(creator, *creator_event_index, &peer_id, round, step)
-                        .cloned()
+                    self.most_recent_meta_vote(
+                        creator,
+                        *creator_event_index,
+                        &peer_id,
+                        round,
+                        step.clone(),
+                    ).cloned()
                 },
             ) {
                 other_votes.push(meta_vote)
