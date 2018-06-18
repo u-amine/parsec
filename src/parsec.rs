@@ -192,6 +192,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn process_event(&mut self, event_hash: &Hash) -> Result<(), Error> {
         self.set_observations(event_hash)?;
         self.set_meta_votes(event_hash)?;
+        self.update_round_hashes(event_hash)?;
         if let Some(block) = self.next_stable_block() {
             self.clear_consensus_data(block.payload());
             let block_hash = Hash::from(serialise(&block)?.as_slice());
@@ -398,44 +399,21 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .and_then(|parent| self.meta_votes.get(parent.hash()).cloned())
         {
             for (peer_id, parent_event_votes) in parent_votes {
-                let mut new_event_votes = parent_event_votes.clone();
-                if let Some(parent_vote) = parent_event_votes.last() {
-                    let meta_vote = {
-                        let other_votes = self.collect_other_meta_votes(
-                            &peer_id,
-                            parent_vote.round,
-                            parent_vote.step.clone(),
-                            event,
-                        );
-                        let coin_toss = self.toss_coin(&peer_id, &parent_vote, event);
-                        MetaVote::next(&parent_vote, &other_votes, coin_toss, total_peers)
-                    };
-                    if let Some(hashes) = self.round_hashes.get_mut(&peer_id) {
-                        while hashes.len() < meta_vote.round + 1 {
-                            let next_round_hash = hashes[hashes.len() - 1].increment_round()?;
-                            hashes.push(next_round_hash);
-                        }
-                    }
-                    if meta_vote.round == parent_vote.round && meta_vote.step == parent_vote.step {
-                        if let Some(mut parent_vote) = new_event_votes.last_mut() {
-                            *parent_vote = meta_vote;
-                        }
-                    } else {
-                        new_event_votes.push(meta_vote);
-                    };
-
-                    let _ = meta_votes.insert(peer_id, new_event_votes);
+                let new_meta_votes = {
+                    let other_votes = self.collect_other_meta_votes(&peer_id, event);
+                    let coin_tosses = self.toss_coins(&peer_id, &parent_event_votes, event);
+                    MetaVote::next(&parent_event_votes, &other_votes, &coin_tosses, total_peers)
                 };
+                let _ = meta_votes.insert(peer_id, new_meta_votes);
             }
         } else if self.is_observer(event) {
             // Start meta votes for this event.
             for peer_id in self.peer_manager.all_ids() {
-                let other_votes =
-                    self.collect_other_meta_votes(peer_id, 0, Step::ForcedTrue, event);
+                let other_votes = self.collect_other_meta_votes(peer_id, event);
                 let initial_estimate = event.observations.contains(peer_id);
                 let _ = meta_votes.insert(
                     peer_id.clone(),
-                    vec![MetaVote::new(initial_estimate, &other_votes, total_peers)],
+                    MetaVote::new(initial_estimate, &other_votes, total_peers),
                 );
             }
         };
@@ -443,8 +421,37 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         if !meta_votes.is_empty() {
             let _ = self.meta_votes.insert(*event_hash, meta_votes);
         }
-
         Ok(())
+    }
+
+    fn update_round_hashes(&mut self, event_hash: &Hash) -> Result<(), Error> {
+        let meta_votes = self.meta_votes.get(event_hash).ok_or(Error::Logic)?;
+        for (peer_id, event_votes) in meta_votes.iter() {
+            for meta_vote in event_votes {
+                if let Some(hashes) = self.round_hashes.get_mut(&peer_id) {
+                    while hashes.len() < meta_vote.round + 1 {
+                        let next_round_hash = hashes[hashes.len() - 1].increment_round()?;
+                        hashes.push(next_round_hash);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn toss_coins(
+        &self,
+        peer_id: &S::PublicId,
+        parent_votes: &[MetaVote],
+        event: &Event<T, S::PublicId>,
+    ) -> BTreeMap<usize, bool> {
+        parent_votes
+            .iter()
+            .filter_map(|parent_vote| {
+                self.toss_coin(peer_id, parent_vote, event)
+                    .map(|coin| (parent_vote.round, coin))
+            })
+            .collect()
     }
 
     fn toss_coin(
@@ -506,13 +513,14 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         peer_id: &S::PublicId,
         round: usize,
     ) -> Option<bool> {
-        self.most_recent_meta_vote(
+        self.meta_votes_since_round_and_step(
             creator,
             creator_event_index,
             peer_id,
             round,
             Step::GenuineFlip,
-        ).and_then(|meta_vote| meta_vote.aux_value)
+        ).first()
+            .and_then(|meta_vote| meta_vote.aux_value)
     }
 
     // Skips back through our events until we've passed `responsiveness_threshold` response events
@@ -547,50 +555,65 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             })
     }
 
-    // Returns the meta vote for the given peer, created by `creator`, at the given round and step.
+    // Returns the meta votes for the given peer, created by `creator`, since the given round and step.
     // Starts iterating down the creator's events starting from `creator_event_index`.
-    fn most_recent_meta_vote(
+    fn meta_votes_since_round_and_step(
         &self,
         creator: &S::PublicId,
         creator_event_index: u64,
         peer_id: &S::PublicId,
         round: usize,
         step: Step,
-    ) -> Option<&MetaVote> {
-        let event_hash = self
+    ) -> Vec<MetaVote> {
+        if let Some(event_hash) = self
             .peer_manager
-            .event_by_index(creator, creator_event_index)?;
-        self.meta_votes
-            .get(event_hash)
-            .and_then(|meta_votes| meta_votes.get(peer_id))?
-            .iter()
-            .filter(|meta_vote| meta_vote.round == round && meta_vote.step == step)
-            .last()
+            .event_by_index(creator, creator_event_index)
+        {
+            if let Some(latest_votes) = self
+                .meta_votes
+                .get(event_hash)
+                .and_then(|meta_votes| meta_votes.get(peer_id))
+                .map(|meta_votes| {
+                    meta_votes
+                        .iter()
+                        .filter(|meta_vote| {
+                            meta_vote.round > round
+                                || meta_vote.round == round && meta_vote.step >= step
+                        })
+                        .cloned()
+                        .collect()
+                }) {
+                latest_votes
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        }
     }
 
     // Returns the set of meta votes held by all peers other than the creator of `event` which are
-    // votes by `peer_id` at the given `round` and `step`.
+    // votes by `peer_id` since the given `round` and `step`.
     fn collect_other_meta_votes(
         &self,
         peer_id: &S::PublicId,
-        round: usize,
-        step: Step,
         event: &Event<T, S::PublicId>,
-    ) -> Vec<MetaVote> {
+    ) -> Vec<Vec<MetaVote>> {
         let mut other_votes = vec![];
         for creator in self.peer_manager.all_other_ids() {
-            if let Some(meta_vote) = event.last_ancestors.get(creator).and_then(
-                |creator_event_index| {
-                    self.most_recent_meta_vote(
+            if let Some(meta_votes) = event
+                .last_ancestors
+                .get(creator)
+                .map(|creator_event_index| {
+                    self.meta_votes_since_round_and_step(
                         creator,
                         *creator_event_index,
                         &peer_id,
-                        round,
-                        step.clone(),
-                    ).cloned()
-                },
-            ) {
-                other_votes.push(meta_vote)
+                        0,
+                        Step::ForcedTrue,
+                    )
+                }) {
+                other_votes.push(meta_votes)
             }
         }
         other_votes

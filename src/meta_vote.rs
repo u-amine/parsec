@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::iter;
 
 fn new_set_with_value(value: bool) -> BTreeSet<bool> {
@@ -15,7 +15,7 @@ fn new_set_with_value(value: bool) -> BTreeSet<bool> {
     set
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, PartialOrd)]
 pub(crate) enum Step {
     ForcedTrue,
     ForcedFalse,
@@ -40,53 +40,82 @@ pub(crate) struct MetaVote {
 }
 
 impl MetaVote {
-    pub fn new(initial_estimate: bool, others: &[MetaVote], total_peers: usize) -> Self {
+    pub fn new(initial_estimate: bool, others: &[Vec<MetaVote>], total_peers: usize) -> Vec<Self> {
         let mut initial = Self::default();
         initial.estimates = new_set_with_value(initial_estimate);
-        Self::next(&initial, others, None, total_peers)
+        Self::next(&[initial], others, &BTreeMap::new(), total_peers)
+    }
+    pub fn next(
+        parent: &[MetaVote],
+        others: &[Vec<MetaVote>],
+        coin_tosses: &BTreeMap<usize, bool>,
+        total_peers: usize,
+    ) -> Vec<Self> {
+        let mut next = parent
+            .iter()
+            .map(|meta_vote| {
+                let counts = MetaVoteCounts::new(meta_vote, others, total_peers);
+                Self::update_meta_vote(meta_vote, &counts, &coin_tosses)
+            })
+            .collect::<Vec<_>>();
+        while let Some(next_meta_vote) =
+            Self::next_meta_vote(next.last(), others, &coin_tosses, total_peers)
+        {
+            next.push(next_meta_vote);
+        }
+        next
     }
 
-    pub fn next(
-        parent: &MetaVote,
-        others: &[MetaVote],
-        coin_toss: Option<bool>,
+    fn update_meta_vote(
+        meta_vote: &MetaVote,
+        counts: &MetaVoteCounts,
+        coin_tosses: &BTreeMap<usize, bool>,
+    ) -> MetaVote {
+        let coin_toss = coin_tosses.get(&meta_vote.round);
+        MetaVote {
+            round: meta_vote.round,
+            step: meta_vote.step.clone(),
+            estimates: Self::calculate_new_estimates(&meta_vote, &counts, coin_toss),
+            bin_values: Self::calculate_new_bin_values(&meta_vote, &counts),
+            aux_value: Self::calculate_new_auxiliary_value(&meta_vote),
+            decision: Self::calculate_new_decision(&meta_vote, &counts),
+        }
+    }
+
+    fn next_meta_vote(
+        parent: Option<&MetaVote>,
+        others: &[Vec<MetaVote>],
+        coin_tosses: &BTreeMap<usize, bool>,
         total_peers: usize,
-    ) -> Self {
-        let mut new_meta_vote = parent.clone();
-
-        // If `estimates` is empty, we've been waiting for the result of a coin toss.
-        if new_meta_vote.estimates.is_empty() {
-            if let Some(coin_toss_result) = coin_toss {
-                new_meta_vote.estimates = new_set_with_value(coin_toss_result);
+    ) -> Option<MetaVote> {
+        parent.and_then(|parent| {
+            let counts = MetaVoteCounts::new(parent, others, total_peers);
+            if counts.is_super_majority(counts.aux_values_set()) {
+                let coin_toss = coin_tosses.get(&parent.round);
+                let mut next = parent.clone();
+                Self::increase_step(&mut next, &counts, coin_toss.cloned());
+                Some(next)
+            } else {
+                None
             }
-        }
-
-        // Collect the meta vote counts for the current round and step.
-        let mut counts = MetaVoteCounts::new(parent, others, total_peers);
-
-        if counts.is_super_majority(counts.aux_values_set()) {
-            // We're going to the next step.
-            Self::increase_step(&mut new_meta_vote, &counts, coin_toss);
-            // Calculate the counts again
-            counts = MetaVoteCounts::new(parent, others, total_peers);
-        }
-        new_meta_vote.estimates = Self::calculate_new_estimates(&new_meta_vote, &parent, &counts);
-        new_meta_vote.bin_values = Self::calculate_new_bin_values(&new_meta_vote, &parent, &counts);
-        new_meta_vote.aux_value = Self::calculate_new_auxiliary_value(&new_meta_vote, parent);
-        new_meta_vote.decision = Self::calculate_new_decision(&new_meta_vote, parent, &counts);
-
-        new_meta_vote
+        })
     }
 
     fn calculate_new_estimates(
-        new_meta_vote: &MetaVote,
-        parent: &MetaVote,
+        meta_vote: &MetaVote,
         counts: &MetaVoteCounts,
+        coin_toss: Option<&bool>,
     ) -> BTreeSet<bool> {
-        if let Some(decision) = parent.decision {
+        if let Some(decision) = meta_vote.decision {
             new_set_with_value(decision)
+        } else if meta_vote.estimates.is_empty() {
+            if let Some(toss) = coin_toss {
+                new_set_with_value(*toss)
+            } else {
+                BTreeSet::new()
+            }
         } else {
-            let mut new_estimates = new_meta_vote.estimates.clone();
+            let mut new_estimates = meta_vote.estimates.clone();
             if counts.at_least_one_third(counts.estimates_true) {
                 let _ = new_estimates.insert(true);
             }
@@ -97,15 +126,11 @@ impl MetaVote {
         }
     }
 
-    fn calculate_new_bin_values(
-        new_meta_vote: &MetaVote,
-        parent: &MetaVote,
-        counts: &MetaVoteCounts,
-    ) -> BTreeSet<bool> {
-        if let Some(decision) = parent.decision {
+    fn calculate_new_bin_values(meta_vote: &MetaVote, counts: &MetaVoteCounts) -> BTreeSet<bool> {
+        if let Some(decision) = meta_vote.decision {
             new_set_with_value(decision)
         } else {
-            let mut new_bin_values = new_meta_vote.bin_values.clone();
+            let mut new_bin_values = meta_vote.bin_values.clone();
             if counts.is_super_majority(counts.estimates_true) {
                 let _ = new_bin_values.insert(true);
             }
@@ -116,13 +141,13 @@ impl MetaVote {
         }
     }
 
-    fn calculate_new_auxiliary_value(new_meta_vote: &MetaVote, parent: &MetaVote) -> Option<bool> {
-        if let Some(decision) = parent.decision {
+    fn calculate_new_auxiliary_value(meta_vote: &MetaVote) -> Option<bool> {
+        if let Some(decision) = meta_vote.decision {
             Some(decision)
-        } else if parent.aux_value.is_none() && parent.bin_values.is_empty() {
-            if new_meta_vote.bin_values.len() == 1 {
-                Some(new_meta_vote.bin_values.contains(&true))
-            } else if new_meta_vote.bin_values.len() == 2 {
+        } else if meta_vote.aux_value.is_none() && meta_vote.bin_values.is_empty() {
+            if meta_vote.bin_values.len() == 1 {
+                Some(meta_vote.bin_values.contains(&true))
+            } else if meta_vote.bin_values.len() == 2 {
                 Some(true)
             } else {
                 None
@@ -132,21 +157,17 @@ impl MetaVote {
         }
     }
 
-    fn calculate_new_decision(
-        new_meta_vote: &MetaVote,
-        parent: &MetaVote,
-        counts: &MetaVoteCounts,
-    ) -> Option<bool> {
-        if new_meta_vote.decision.is_none() {
-            match parent.step {
-                Step::ForcedTrue => if new_meta_vote.bin_values.contains(&true)
+    fn calculate_new_decision(meta_vote: &MetaVote, counts: &MetaVoteCounts) -> Option<bool> {
+        if meta_vote.decision.is_none() {
+            match meta_vote.step {
+                Step::ForcedTrue => if meta_vote.bin_values.contains(&true)
                     && counts.is_super_majority(counts.aux_values_true)
                 {
                     Some(true)
                 } else {
                     None
                 },
-                Step::ForcedFalse => if new_meta_vote.bin_values.contains(&false)
+                Step::ForcedFalse => if meta_vote.bin_values.contains(&false)
                     && counts.is_super_majority(counts.aux_values_false)
                 {
                     Some(false)
@@ -222,11 +243,19 @@ impl MetaVoteCounts {
     // Construct a `MetaVoteCounts` by collecting details from all meta votes which are for the
     // given `parent`'s `round` and `step`.  These results will include info from our own `parent`
     // meta vote.
-    fn new(parent: &MetaVote, others: &[MetaVote], total_peers: usize) -> Self {
+    fn new(parent: &MetaVote, others: &[Vec<MetaVote>], total_peers: usize) -> Self {
         let mut counts = MetaVoteCounts::default();
         counts.total_peers = total_peers;
-
-        for vote in others.iter().chain(iter::once(parent)) {
+        for vote in others
+            .iter()
+            .filter_map(|other| {
+                other
+                    .iter()
+                    .filter(|vote| vote.round == parent.round && vote.step == parent.step)
+                    .last()
+            })
+            .chain(iter::once(parent))
+        {
             if vote.estimates.contains(&true) {
                 counts.estimates_true += 1;
             }
