@@ -400,13 +400,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             for (peer_id, parent_event_votes) in parent_votes {
                 let mut new_event_votes = parent_event_votes.clone();
                 if let Some(parent_vote) = parent_event_votes.last() {
-                    let other_votes = self.collect_other_meta_votes(
-                        &peer_id,
-                        parent_vote.round,
-                        parent_vote.step.clone(),
-                        event,
-                    );
                     let meta_vote = {
+                        let other_votes = self.collect_other_meta_votes(
+                            &peer_id,
+                            parent_vote.round,
+                            parent_vote.step.clone(),
+                            event,
+                        );
                         let coin_toss = self.toss_coin(&peer_id, &parent_vote, event);
                         MetaVote::next(&parent_vote, &other_votes, coin_toss, total_peers)
                     };
