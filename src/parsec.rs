@@ -401,19 +401,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 let mut new_event_votes = parent_event_votes.clone();
                 if let Some(parent_vote) = parent_event_votes.last() {
                     let coin_toss = self.toss_coin(&peer_id, &parent_vote, event);
-                    let other_votes = if parent_vote.estimates.is_empty() {
-                        // If `estimates` is empty, we've been waiting for the result of a coin toss.
-                        // In that case, we don't care about other votes, we just need the coin toss
-                        // result.
-                        vec![]
-                    } else {
-                        self.collect_other_meta_votes(
-                            &peer_id,
-                            parent_vote.round,
-                            parent_vote.step.clone(),
-                            event,
-                        )
-                    };
+                    let other_votes = self.collect_other_meta_votes(
+                        &peer_id,
+                        parent_vote.round,
+                        parent_vote.step.clone(),
+                        event,
+                    );
                     let meta_vote =
                         MetaVote::next(&parent_vote, &other_votes, coin_toss, total_peers);
                     if let Some(hashes) = self.round_hashes.get_mut(&peer_id) {
