@@ -401,7 +401,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             for (peer_id, parent_event_votes) in parent_votes {
                 let new_meta_votes = {
                     let other_votes = self.collect_other_meta_votes(&peer_id, event);
-                    let coin_tosses = self.toss_coins(&peer_id, &parent_event_votes, event);
+                    let coin_tosses = self.toss_coins(&peer_id, &parent_event_votes, event)?;
                     MetaVote::next(&parent_event_votes, &other_votes, &coin_tosses, total_peers)
                 };
                 let _ = meta_votes.insert(peer_id, new_meta_votes);
@@ -444,12 +444,14 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         peer_id: &S::PublicId,
         parent_votes: &[MetaVote],
         event: &Event<T, S::PublicId>,
-    ) -> BTreeMap<usize, bool> {
+    ) -> Result<BTreeMap<usize, bool>, Error> {
         parent_votes
             .iter()
             .filter_map(|parent_vote| {
-                self.toss_coin(peer_id, parent_vote, event)
-                    .map(|coin| (parent_vote.round, coin))
+                let coin_result = self.toss_coin(peer_id, parent_vote, event);
+                coin_result
+                    .map(|coin_option| coin_option.map(|coin| (parent_vote.round, coin)))
+                    .transpose()
             })
             .collect()
     }
@@ -459,21 +461,26 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         peer_id: &S::PublicId,
         parent_vote: &MetaVote,
         event: &Event<T, S::PublicId>,
-    ) -> Option<bool> {
+    ) -> Result<Option<bool>, Error> {
         // Get the round hash.
         let round = if parent_vote.estimates.is_empty() {
             // We're waiting for the coin toss result already.
+            if parent_vote.round == 0 {
+                // This should never happen as estimates get cleared only in increase step when the
+                // step is Step::GenuineFlip and the round gets incremented
+                return Err(Error::Logic);
+            }
             parent_vote.round - 1
         } else if parent_vote.step == Step::GenuineFlip {
             parent_vote.round
         } else {
-            return None;
+            return Ok(None);
         };
         let round_hash = if let Some(hashes) = self.round_hashes.get(peer_id) {
             hashes[round].value()
         } else {
             // Should be unreachable.
-            return None;
+            return Err(Error::Logic);
         };
 
         // Get the gradient of leadership.
@@ -484,7 +491,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let creator = &peer_id_hashes[0].1;
         if let Some(creator_event_index) = event.last_ancestors.get(creator) {
             if let Some(aux_value) = self.aux_value(creator, *creator_event_index, peer_id, round) {
-                return Some(aux_value);
+                return Ok(Some(aux_value));
             }
         }
 
@@ -495,13 +502,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     if let Some(aux_value) =
                         self.aux_value(creator, *creator_event_index, peer_id, round)
                     {
-                        return Some(aux_value);
+                        return Ok(Some(aux_value));
                     }
                 }
             }
         }
 
-        None
+        Ok(None)
     }
 
     // Returns the aux value for the given peer, created by `creator`, at the given round and at
