@@ -104,8 +104,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     /// Steps the algorithm and returns the next stable block, if any.
-    pub fn poll(&mut self) -> Result<Option<Block<T, S::PublicId>>, Error> {
-        unimplemented!();
+    pub fn poll(&mut self) -> Option<Block<T, S::PublicId>> {
+        self.consensused_blocks.pop_front()
     }
 
     /// Checks if the given `network_event` has already been voted for by us.
