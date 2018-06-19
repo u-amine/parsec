@@ -312,7 +312,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 let n_same_votes = self
                     .events
                     .iter()
-                    .filter(|(_, value)| (**value).vote() == Some(vote))
+                    .filter(|(_, value)| {
+                        (**value)
+                            .vote()
+                            .map_or(false, |iter_vote| iter_vote.payload() == vote.payload())
+                    })
                     .count();
                 if self.peer_manager.is_super_majority(n_same_votes)
                     && !valid_votes.insert(event.hash().clone())
@@ -376,7 +380,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .into_iter()
             .filter(|peer| match self.oldest_event_with_valid_block(peer) {
                 Some(event) => match self.last_event(peer) {
-                    Some(last_event) => self.does_strongly_see(event, last_event),
+                    Some(last_event) => self.does_strongly_see(last_event, event),
                     None => false,
                 },
                 None => false,
@@ -682,13 +686,15 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                         .flat_map(|event| event.valid_blocks_carried.clone())
                         .map(|hash| &self.events[&hash])
                         .filter_map(|event| {
-                            if event.vote() == *winning_vote {
-                                event
-                                    .vote()
-                                    .map(|vote| (event.creator().clone(), vote.clone()))
-                            } else {
-                                None
-                            }
+                            event.vote().and_then(|iter_vote| {
+                                winning_vote.and_then(|win_vote| {
+                                    if iter_vote.payload() == win_vote.payload() {
+                                        Some((event.creator().clone(), iter_vote.clone()))
+                                    } else {
+                                        None
+                                    }
+                                })
+                            })
                         })
                         .collect::<BTreeMap<_, _>>();
                     winning_vote.and_then(|vote| Block::new(vote.payload().clone(), &votes).ok())
