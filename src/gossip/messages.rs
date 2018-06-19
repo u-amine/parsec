@@ -10,7 +10,6 @@ use gossip::event::Event;
 use gossip::packed_event::PackedEvent;
 use id::PublicId;
 use network_event::NetworkEvent;
-use std::collections::BTreeMap;
 
 /// A gossip request message.
 #[serde(bound = "")]
@@ -28,6 +27,8 @@ impl<'a, T: 'a + NetworkEvent, P: 'a + PublicId> Request<T, P> {
 }
 
 impl<T: NetworkEvent, P: PublicId> Request<T, P> {
+    // TODO - remove
+    #[allow(unused)]
     pub(crate) fn unpack(self) -> Vec<Event<T, P>> {
         self.packed_events
             .into_iter()
@@ -44,6 +45,8 @@ pub struct Response<T: NetworkEvent, P: PublicId> {
 }
 
 impl<'a, T: 'a + NetworkEvent, P: 'a + PublicId> Response<T, P> {
+    // TODO - remove
+    #[allow(unused)]
     pub(crate) fn new<I: Iterator<Item = &'a Event<T, P>>>(events_iter: I) -> Self {
         Self {
             packed_events: events_iter.map(Event::pack).collect(),
@@ -52,6 +55,8 @@ impl<'a, T: 'a + NetworkEvent, P: 'a + PublicId> Response<T, P> {
 }
 
 impl<T: NetworkEvent, P: PublicId> Response<T, P> {
+    // TODO - remove
+    #[allow(unused)]
     pub(crate) fn unpack(self) -> Vec<Event<T, P>> {
         self.packed_events
             .into_iter()

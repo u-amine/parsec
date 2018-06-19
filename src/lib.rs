@@ -33,8 +33,6 @@
     box_pointers, missing_copy_implementations, missing_debug_implementations,
     variant_size_differences
 )]
-// TODO - remove
-#![allow(unused)]
 
 extern crate maidsafe_utilities;
 #[macro_use]
@@ -43,17 +41,17 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate tiny_keccak;
-#[macro_use]
-extern crate unwrap;
 
 mod block;
 mod error;
 mod gossip;
 mod hash;
 mod id;
+mod meta_vote;
 mod network_event;
 mod parsec;
 mod peer_manager;
+mod round_hash;
 mod vote;
 
 pub use block::Block;

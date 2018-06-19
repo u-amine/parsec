@@ -6,11 +6,28 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use std::cmp::Ordering;
 use std::fmt::{self, Debug, Formatter};
 use tiny_keccak;
 
+const HASH_LEN: usize = 32;
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct Hash([u8; 32]);
+pub(crate) struct Hash([u8; HASH_LEN]);
+
+impl Hash {
+    // Compares the distance of the arguments to `self`.  Returns `Less` if `lhs` is closer,
+    // `Greater` if `rhs` is closer, and `Equal` if `lhs == rhs`.  (The XOR distance can only be
+    // equal if the arguments are equal.)
+    pub fn xor_cmp(&self, lhs: &Self, rhs: &Self) -> Ordering {
+        for i in 0..HASH_LEN {
+            if lhs.0[i] != rhs.0[i] {
+                return Ord::cmp(&(lhs.0[i] ^ self.0[i]), &(rhs.0[i] ^ self.0[i]));
+            }
+        }
+        Ordering::Equal
+    }
+}
 
 impl<'a> From<&'a [u8]> for Hash {
     fn from(src: &'a [u8]) -> Self {
