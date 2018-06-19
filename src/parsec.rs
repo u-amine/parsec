@@ -445,15 +445,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         parent_votes: &[MetaVote],
         event: &Event<T, S::PublicId>,
     ) -> Result<BTreeMap<usize, bool>, Error> {
-        parent_votes
-            .iter()
-            .filter_map(|parent_vote| {
-                let coin_result = self.toss_coin(peer_id, parent_vote, event);
-                coin_result
-                    .map(|coin_option| coin_option.map(|coin| (parent_vote.round, coin)))
-                    .transpose()
-            })
-            .collect()
+        let mut coin_tosses = BTreeMap::new();
+        for parent_vote in parent_votes {
+            let _ = self
+                .toss_coin(peer_id, parent_vote, event)?
+                .map(|coin| coin_tosses.insert(parent_vote.round, coin));
+        }
+        Ok(coin_tosses)
     }
 
     fn toss_coin(
