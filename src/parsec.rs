@@ -101,11 +101,23 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // Return all the events we think `src` doesn't yet know about, packed into a `Response`.
         let other_parent_hash = self.peer_manager.last_event_hash(src).ok_or(Error::Logic)?;
         let other_parent = self.events.get(other_parent_hash).ok_or(Error::Logic)?;
-        let last_ancestors_hashes = other_parent
+        let mut last_ancestors_hashes = other_parent
             .last_ancestors
             .iter()
             .filter_map(|(peer_id, &index)| self.peer_manager.event_by_index(peer_id, index))
             .collect::<BTreeSet<_>>();
+        // As `src` doesn't guaranteed to have last_ancestor_hash for all peers (which will happen
+        // during the early stage when a node has not heard from all others), this may cause the
+        // early events in the event_order be skipped mistakenly. To avoid this, if there are any
+        // peers for which `src` doesn't have a `last_ancestors` entry, add those peers' oldest
+        // events we know about to the list of hashes.
+        for (peer, events) in self.peer_manager.iter() {
+            if !other_parent.last_ancestors.contains_key(peer) {
+                if let Some(hash) = events.get(&0) {
+                    let _ = last_ancestors_hashes.insert(hash);
+                }
+            }
+        }
         let response_events_iter = self
             .events_order
             .iter()
