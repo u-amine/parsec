@@ -37,8 +37,6 @@ pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
 
 impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     // Creates a new event as the result of receiving a gossip request message.
-    // TODO - remove
-    #[allow(unused)]
     pub fn new_from_request<S: SecretId<PublicId = P>>(
         secret_id: &S,
         self_parent: Hash,
@@ -48,8 +46,6 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     }
 
     // Creates a new event as the result of receiving a gossip response message.
-    // TODO - remove
-    #[allow(unused)]
     pub fn new_from_response<S: SecretId<PublicId = P>>(
         secret_id: &S,
         self_parent: Hash,
@@ -74,8 +70,6 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     }
 
     // Creates an event from a `PackedEvent`.
-    // TODO - remove
-    #[allow(unused)]
     pub(super) fn unpack(packed_event: PackedEvent<T, P>) -> Result<Self, Error> {
         let serialised_content = serialise(&packed_event.content)?;
         let hash = if packed_event
