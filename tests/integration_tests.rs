@@ -80,6 +80,70 @@ fn minimal_network() {
 
 #[ignore]
 #[test]
+fn multiple_votes_before_gossip() {
+    let mut rng = utils::init_rng(None);
+    let num_peers = 4;
+    let num_transactions = 10;
+
+    let mut network = Network::new(num_peers);
+    let mut transactions = (0..num_transactions)
+        .map(|_| rng.gen())
+        .collect::<Vec<Transaction>>();
+
+    // Have each peer vote for all transactions in random order.
+    for peer in &mut network.peers {
+        rng.shuffle(&mut transactions);
+        for transaction in &transactions {
+            unwrap!(peer.parsec.vote_for(transaction.clone()));
+        }
+    }
+
+    // Gossip to let all peers reach consensus on all the blocks.
+    utils::loop_with_max_iterations(100, || {
+        network.send_random_syncs(&mut rng);
+        for peer in &mut network.peers {
+            peer.poll();
+        }
+        network
+            .peers
+            .iter()
+            .all(|peer| peer.blocks.len() >= num_transactions)
+    });
+
+    assert!(network.blocks_all_in_sequence());
+}
+
+#[ignore]
+#[test]
+fn duplicate_votes_before_gossip() {
+    let mut rng = utils::init_rng(None);
+    let num_peers = 4;
+
+    let mut network = Network::new(num_peers);
+    let transaction: Transaction = rng.gen();
+
+    // Have each peer vote for the single transaction multiple times.
+    for peer in &mut network.peers {
+        unwrap!(peer.parsec.vote_for(transaction.clone()));
+        for _ in 0..9 {
+            assert!(peer.parsec.vote_for(transaction.clone()).is_err())
+        }
+    }
+
+    // Gossip to let all peers reach consensus on all the blocks.
+    utils::loop_with_max_iterations(100, || {
+        network.send_random_syncs(&mut rng);
+        for peer in &mut network.peers {
+            peer.poll();
+        }
+        network.peers.iter().all(|peer| !peer.blocks.is_empty())
+    });
+
+    assert!(network.peers.iter().all(|peer| peer.blocks.len() == 1));
+}
+
+#[ignore]
+#[test]
 fn faulty_third_never_gossip() {
     let mut rng = utils::init_rng(None);
     let num_peers = 10;

@@ -63,8 +63,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Ok(parsec)
     }
 
-    /// Adds a vote for `network_event`.
+    /// Adds a vote for `network_event`.  Returns an error if we have already voted for this.
     pub fn vote_for(&mut self, network_event: T) -> Result<(), Error> {
+        if self.have_voted_for(&network_event) {
+            return Err(Error::DuplicateVote);
+        }
         let self_parent_hash = self.our_last_event_hash().ok_or(Error::InvalidEvent)?;
         let event = Event::new_from_observation(
             self.peer_manager.our_id(),

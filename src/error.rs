@@ -41,6 +41,11 @@ quick_error! {
             description("Parent event(s) not known")
             display("This event's self-parent or other-parent is unknown to this node.")
         }
+        /// This node has already voted for this network event.
+        DuplicateVote {
+            description("Duplicate vote")
+            display("This node has already voted for this network event.")
+        }
         /// Logic error.
         Logic {
             description("Logic error")
