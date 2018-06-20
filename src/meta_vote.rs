@@ -7,6 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{self, Debug, Formatter};
 use std::iter;
 
 fn new_set_with_value(value: bool) -> BTreeSet<bool> {
@@ -28,6 +29,17 @@ impl Default for Step {
     }
 }
 
+impl Debug for Step {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let step = match self {
+            Step::ForcedTrue => 0,
+            Step::ForcedFalse => 1,
+            Step::GenuineFlip => 2,
+        };
+        write!(f, "{}", step)
+    }
+}
+
 // This holds the state of a (binary) meta vote about which we're trying to achieve consensus.
 #[derive(Clone, Default)]
 pub(crate) struct MetaVote {
@@ -37,6 +49,66 @@ pub(crate) struct MetaVote {
     pub bin_values: BTreeSet<bool>,
     pub aux_value: Option<bool>,
     pub decision: Option<bool>,
+}
+
+impl Debug for MetaVote {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{{ {}/{:?}, ", self.round, self.step)?;
+
+        if self.estimates.is_empty() {
+            write!(f, "est:{{}}")?;
+        } else {
+            write!(f, "est:{{")?;
+            for estimate in &self.estimates {
+                if *estimate {
+                    write!(f, "t")?;
+                } else if self.estimates.len() > 1 {
+                    write!(f, "f,")?;
+                } else {
+                    write!(f, "f")?;
+                }
+            }
+            write!(f, "}}, ")?;
+        }
+
+        if self.bin_values.is_empty() {
+            write!(f, "bin:{{}}, ")?;
+        } else {
+            write!(f, "bin:{{")?;
+            for bin_value in &self.bin_values {
+                if *bin_value {
+                    write!(f, "t")?;
+                } else if self.bin_values.len() > 1 {
+                    write!(f, "f,")?;
+                } else {
+                    write!(f, "f")?;
+                }
+            }
+            write!(f, "}}, ")?;
+        }
+
+        if let Some(aux_vote) = self.aux_value {
+            if aux_vote {
+                write!(f, "aux:{{t}}, ")?;
+            } else {
+                write!(f, "aux:{{f}}, ")?;
+            }
+        } else {
+            write!(f, "aux:{{}}, ")?;
+        }
+
+        if let Some(dec) = self.decision {
+            if dec {
+                write!(f, "dec:{{t}}")?;
+            } else {
+                write!(f, "dec:{{f}}")?;
+            }
+        } else {
+            write!(f, "dec:{{}} ")?;
+        }
+
+        write!(f, "}}")
+    }
 }
 
 impl MetaVote {

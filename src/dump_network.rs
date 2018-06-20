@@ -8,15 +8,15 @@
 
 use gossip::Event;
 use hash::Hash;
-use id::{PublicId, SecretId};
+use id::SecretId;
 use meta_vote::MetaVote;
 use network_event::NetworkEvent;
 use std::cmp;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 
 fn first_char<D: Debug>(id: &D) -> char {
-    unwrap!(format!("{:?}", id).chars().next())
+    format!("{:?}", id).chars().next().unwrap_or('E')
 }
 
 fn write_self_parents<T: NetworkEvent, S: SecretId>(
@@ -110,7 +110,7 @@ fn write_nodes<S: SecretId>(f: &mut Formatter, nodes: &[S::PublicId]) -> fmt::Re
 fn write_evaluates<T: NetworkEvent, S: SecretId>(
     f: &mut Formatter,
     gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
-    meta_votes: &BTreeMap<Hash, BTreeMap<S::PublicId, MetaVote>>,
+    meta_votes: &BTreeMap<Hash, BTreeMap<S::PublicId, Vec<MetaVote>>>,
     initial_events: &[Hash],
 ) -> fmt::Result {
     for (event_hash, event) in gossip_graph.iter() {
@@ -126,73 +126,20 @@ fn write_evaluates<T: NetworkEvent, S: SecretId>(
                     event.index.unwrap_or(0)
                 )?;
 
-                write!(f, "\nRound: [")?;
-                for (peer, meta_vote) in event_meta_votes.iter() {
-                    write!(f, " {}:{} ", first_char(peer), meta_vote.round)?;
-                }
-                write!(f, "]")?;
-
-                write!(f, "\nStep: [")?;
-                for (peer, meta_vote) in event_meta_votes.iter() {
-                    write!(f, " {}:{} ", first_char(peer), meta_vote.step)?;
-                }
-                write!(f, "]")?;
-
-                write!(f, "\nEst: [")?;
-                for (peer, meta_vote) in event_meta_votes.iter() {
-                    write!(f, "{}:{{", first_char(peer))?;
-                    for estimate in &meta_vote.estimates {
-                        if *estimate {
-                            write!(f, "t")?;
-                        } else if meta_vote.estimates.len() > 1 {
-                            write!(f, "f,")?;
-                        } else {
-                            write!(f, "f")?;
-                        }
-                    }
-                    write!(f, "}} ")?;
-                }
-                write!(f, "]")?;
-
-                write!(f, "\nBin: [")?;
-                for (peer, meta_vote) in event_meta_votes.iter() {
-                    write!(f, "{}:{{", first_char(peer))?;
-                    for bool_value in &meta_vote.bin_values {
-                        if *bool_value {
-                            write!(f, "t")?;
-                        } else if meta_vote.bin_values.len() > 1 {
-                            write!(f, "f,")?;
-                        } else {
-                            write!(f, "f")?;
-                        }
-                    }
-                    write!(f, "}} ")?;
-                }
-                write!(f, "]")?;
-
-                write!(f, "\nAux: [")?;
-                for (peer, meta_vote) in event_meta_votes.iter() {
-                    if let Some(aux_vote) = meta_vote.aux_value {
-                        if aux_vote {
-                            write!(f, "{}:{{t}} ", first_char(peer))?;
-                        } else {
-                            write!(f, "{}:{{f}} ", first_char(peer))?;
+                for (peer, votes) in event_meta_votes.iter() {
+                    if votes.is_empty() {
+                        write!(f, "\n{}: []", first_char(peer))?;
+                    } else {
+                        write!(f, "\n{}: [ ", first_char(peer))?;
+                        for i in 0..votes.len() {
+                            if i == votes.len() - 1 {
+                                write!(f, "{:?}]", votes[i])?;
+                            } else {
+                                writeln!(f, "{:?}", votes[i])?;
+                            }
                         }
                     }
                 }
-                write!(f, "]")?;
-
-                write!(f, "\nDec: [")?;
-                for (peer, meta_vote) in event_meta_votes.iter() {
-                    if let Some(decision) = meta_vote.decision {
-                        if decision {
-                            write!(f, "{}:{{t}} ", first_char(peer))?;
-                        } else {
-                            write!(f, "{}:{{f}} ", first_char(peer))?;
-                        }
-                    }
-                }
-                write!(f, "]")?;
 
                 writeln!(f, "\"]")?;
             } else {
@@ -250,7 +197,7 @@ fn update_pos<T: NetworkEvent, S: SecretId>(
 fn write_gossip_graph_dot<T: NetworkEvent, S: SecretId>(
     f: &mut Formatter,
     gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
-    meta_votes: &BTreeMap<Hash, BTreeMap<S::PublicId, MetaVote>>,
+    meta_votes: &BTreeMap<Hash, BTreeMap<S::PublicId, Vec<MetaVote>>>,
     initial_events: &[Hash],
 ) -> fmt::Result {
     let mut nodes = Vec::new();
@@ -296,7 +243,7 @@ fn write_gossip_graph_dot<T: NetworkEvent, S: SecretId>(
 pub(crate) fn dump_gossip_graph<T: NetworkEvent, S: SecretId>(
     f: &mut Formatter,
     gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
-    meta_votes: &BTreeMap<Hash, BTreeMap<S::PublicId, MetaVote>>,
+    meta_votes: &BTreeMap<Hash, BTreeMap<S::PublicId, Vec<MetaVote>>>,
 ) -> fmt::Result {
     let initial_events: Vec<Hash> = gossip_graph
         .iter()
