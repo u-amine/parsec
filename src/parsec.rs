@@ -557,7 +557,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             creator_event_index,
             peer_id,
             round,
-            Step::GenuineFlip,
+            &Step::GenuineFlip,
         ).first()
             .and_then(|meta_vote| meta_vote.aux_value)
     }
@@ -602,7 +602,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         creator_event_index: u64,
         peer_id: &S::PublicId,
         round: usize,
-        step: Step,
+        step: &Step,
     ) -> Vec<MetaVote> {
         if let Some(event_hash) = self
             .peer_manager
@@ -617,7 +617,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                         .iter()
                         .filter(|meta_vote| {
                             meta_vote.round > round
-                                || meta_vote.round == round && meta_vote.step >= step
+                                || meta_vote.round == round && meta_vote.step >= *step
                         })
                         .cloned()
                         .collect()
@@ -649,7 +649,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                         *creator_event_index,
                         &peer_id,
                         0,
-                        Step::ForcedTrue,
+                        &Step::ForcedTrue,
                     )
                 }) {
                 other_votes.push(meta_votes)
