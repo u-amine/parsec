@@ -8,22 +8,17 @@
 
 //! Utilities for tests and examples.
 
-use gossip::{Request, Response};
-use id::{PublicId, SecretId};
-use maidsafe_utilities::serialisation;
-use network_event::NetworkEvent;
-use parsec::Parsec;
+use parsec::{NetworkEvent, Parsec, PublicId, SecretId};
 use rand::{self, Rng, SeedableRng, XorShiftRng};
 use rust_sodium;
 use rust_sodium::crypto::sign::{self, PublicKey, SecretKey};
-use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug};
 use std::panic;
 
 /// Test network.
 pub struct Network {
-    peers: BTreeMap<PeerId, Parsec<Transaction, FullId>>,
+    pub peers: BTreeMap<PeerId, Parsec<Transaction, FullId>>,
 }
 
 impl Network {
@@ -41,36 +36,22 @@ impl Network {
 
         let peers = peers
             .into_iter()
-            .map(|id| (*id.public_id(), Parsec::new(id, &genesis_group).unwrap()))
+            .map(|id| (*id.public_id(), unwrap!(Parsec::new(id, &genesis_group))))
             .collect();
 
         Network { peers }
     }
 
-    pub fn peer(&self, id: &PeerId) -> &Parsec<Transaction, FullId> {
-        &self.peers[id]
-    }
-
-    pub fn peer_ids(&self) -> Vec<PeerId> {
-        self.peers.keys().cloned().collect()
-    }
-
-    pub fn peers(&self) -> &BTreeMap<PeerId, Parsec<Transaction, FullId>> {
-        &self.peers
-    }
-
-    pub fn peers_mut(&mut self) -> &mut BTreeMap<PeerId, Parsec<Transaction, FullId>> {
-        &mut self.peers
-    }
-
-    /// Send sync between two peers.
+    /// Node of `sender_id` sends a parsec request to the node of `receiver_id`, which causes
+    /// `receiver_id` node to reply with a parsec response.
     pub fn send_sync(&mut self, sender_id: &PeerId, receiver_id: &PeerId) {
         self.exchange_messages(sender_id, receiver_id);
     }
 
-    /// Send syncs from random senders to random receivers.
+    /// For each node of `sender_id`, which sends a parsec request to a randomly chosen peer of
+    /// `receiver_id`, which causes `receiver_id` node to reply with a parsec response.
     pub fn send_random_syncs<R: Rng>(&mut self, rng: &mut R) {
-        let peers = self.peer_ids();
+        let peers: Vec<PeerId> = self.peers.keys().cloned().collect();
 
         for sender_id in &peers {
             while let Some(receiver_id) = rng.choose(&peers) {
@@ -83,21 +64,20 @@ impl Network {
     }
 
     fn peer_mut(&mut self, id: &PeerId) -> &mut Parsec<Transaction, FullId> {
-        self.peers.get_mut(id).unwrap()
+        unwrap!(self.peers.get_mut(id))
     }
 
     fn exchange_messages(&mut self, sender_id: &PeerId, receiver_id: &PeerId) {
-        let request = self.peer(sender_id).create_gossip();
+        let request = self.peers[sender_id].create_gossip();
 
-        let response = self
-            .peer_mut(receiver_id)
-            .handle_request(sender_id, request)
-            .unwrap();
+        let response = unwrap!(
+            self.peer_mut(receiver_id)
+                .handle_request(sender_id, request)
+        );
 
-        assert!(
+        unwrap!(
             self.peer_mut(sender_id)
                 .handle_response(receiver_id, response)
-                .is_ok()
         )
     }
 }
@@ -136,7 +116,6 @@ impl PublicId for PeerId {
     }
 }
 
-#[derive(Clone)]
 pub struct FullId {
     pk: PeerId,
     sk: SecretKey,
@@ -170,54 +149,15 @@ impl SecretId for FullId {
     }
 }
 
-#[derive(Clone, Eq, Serialize, Deserialize, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Debug)]
 pub enum Transaction {
     InsertPeer(PeerId),
     RemovePeer(PeerId),
 }
 
-impl PartialEq for Transaction {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (
-                Transaction::InsertPeer(ref self_peer_id),
-                Transaction::InsertPeer(ref other_peer_id),
-            )
-            | (
-                Transaction::RemovePeer(ref self_peer_id),
-                Transaction::RemovePeer(ref other_peer_id),
-            ) => self_peer_id == other_peer_id,
-            _ => false,
-        }
-    }
-}
-
-impl PartialOrd<Self> for Transaction {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Transaction {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match (self, other) {
-            (
-                Transaction::InsertPeer(ref self_peer_id),
-                Transaction::InsertPeer(ref other_peer_id),
-            )
-            | (
-                Transaction::RemovePeer(ref self_peer_id),
-                Transaction::RemovePeer(ref other_peer_id),
-            ) => self_peer_id.cmp(other_peer_id),
-            (Transaction::InsertPeer(_), Transaction::RemovePeer(_)) => Ordering::Less,
-            (Transaction::RemovePeer(_), Transaction::InsertPeer(_)) => Ordering::Greater,
-        }
-    }
-}
-
 impl NetworkEvent for Transaction {}
 
-/// Initialize random number generator with the given seed. Pass `None` fors random seed.
+/// Initialise random number generator with the given seed. Pass `None` for a random seed.
 pub fn init_rng(seed: Option<[u32; 4]>) -> XorShiftRng {
     let seed = seed.unwrap_or_else(|| rand::thread_rng().gen());
     println!("Random seed: {:?}", seed);
@@ -229,7 +169,7 @@ pub fn init_rng(seed: Option<[u32; 4]>) -> XorShiftRng {
     }));
 
     let mut rng = XorShiftRng::from_seed(seed);
-    rust_sodium::init_with_rng(&mut rng).unwrap();
+    unwrap!(rust_sodium::init_with_rng(&mut rng));
 
     rng
 }
@@ -242,11 +182,11 @@ pub mod friendly_names {
     const NAMES: &[&str] = &["Alice", "Bob", "Carol", "Dave"];
 
     pub fn get(peer_id: &PeerId) -> Option<&str> {
-        if let Some(&index) = INDICES.read().unwrap().get(peer_id) {
+        if let Some(&index) = unwrap!(INDICES.read()).get(peer_id) {
             return Some(NAMES[index]);
         }
 
-        let mut indices = INDICES.write().unwrap();
+        let mut indices = unwrap!(INDICES.write());
         if indices.len() >= NAMES.len() {
             return None;
         }
@@ -258,7 +198,7 @@ pub mod friendly_names {
     }
 
     pub fn reset() {
-        INDICES.write().unwrap().clear()
+        unwrap!(INDICES.write()).clear()
     }
 
     lazy_static! {
