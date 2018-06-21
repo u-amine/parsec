@@ -51,61 +51,51 @@ pub(crate) struct MetaVote {
     pub decision: Option<bool>,
 }
 
+fn write_bool(f: &mut Formatter, a_bool: bool) -> fmt::Result {
+    if a_bool {
+        write!(f, "t")
+    } else {
+        write!(f, "f")
+    }
+}
+
+fn write_multiple_bool_values(
+    f: &mut Formatter,
+    field: &str,
+    input: &BTreeSet<bool>,
+) -> fmt::Result {
+    write!(f, "{}:{{", field)?;
+    let values: Vec<&bool> = input.iter().collect();
+    if values.len() == 1 {
+        write_bool(f, *values[0])?;
+    } else if values.len() == 2 {
+        write_bool(f, *values[0])?;
+        write!(f, ", ")?;
+        write_bool(f, *values[1])?;
+    }
+    write!(f, "}} ")
+}
+
+fn write_optional_single_bool_value(
+    f: &mut Formatter,
+    field: &str,
+    value: Option<bool>,
+) -> fmt::Result {
+    write!(f, "{}:{{", field)?;
+    if let Some(vote) = value {
+        write_bool(f, vote)?;
+    }
+    write!(f, "}} ")
+}
+
 impl Debug for MetaVote {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{{ {}/{:?}, ", self.round, self.step)?;
 
-        if self.estimates.is_empty() {
-            write!(f, "est:{{}}")?;
-        } else {
-            write!(f, "est:{{")?;
-            for estimate in &self.estimates {
-                if *estimate {
-                    write!(f, "t")?;
-                } else if self.estimates.len() > 1 {
-                    write!(f, "f,")?;
-                } else {
-                    write!(f, "f")?;
-                }
-            }
-            write!(f, "}}, ")?;
-        }
-
-        if self.bin_values.is_empty() {
-            write!(f, "bin:{{}}, ")?;
-        } else {
-            write!(f, "bin:{{")?;
-            for bin_value in &self.bin_values {
-                if *bin_value {
-                    write!(f, "t")?;
-                } else if self.bin_values.len() > 1 {
-                    write!(f, "f,")?;
-                } else {
-                    write!(f, "f")?;
-                }
-            }
-            write!(f, "}}, ")?;
-        }
-
-        if let Some(aux_vote) = self.aux_value {
-            if aux_vote {
-                write!(f, "aux:{{t}}, ")?;
-            } else {
-                write!(f, "aux:{{f}}, ")?;
-            }
-        } else {
-            write!(f, "aux:{{}}, ")?;
-        }
-
-        if let Some(dec) = self.decision {
-            if dec {
-                write!(f, "dec:{{t}}")?;
-            } else {
-                write!(f, "dec:{{f}}")?;
-            }
-        } else {
-            write!(f, "dec:{{}} ")?;
-        }
+        write_multiple_bool_values(f, "est", &self.estimates)?;
+        write_multiple_bool_values(f, "bin", &self.bin_values)?;
+        write_optional_single_bool_value(f, "aux", self.aux_value)?;
+        write_optional_single_bool_value(f, "dec", self.decision)?;
 
         write!(f, "}}")
     }

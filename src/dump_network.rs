@@ -15,8 +15,8 @@ use std::cmp;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 
-fn first_char<D: Debug>(id: &D) -> char {
-    format!("{:?}", id).chars().next().unwrap_or('E')
+fn first_char<D: Debug>(id: &D) -> Option<char> {
+    format!("{:?}", id).chars().next()
 }
 
 fn write_self_parents<T: NetworkEvent, S: SecretId>(
@@ -36,18 +36,18 @@ fn write_self_parents<T: NetworkEvent, S: SecretId>(
             };
             let event_pos = *positions.get(event.hash()).unwrap_or(&0);
             let self_parent_pos = *positions.get(parent.hash()).unwrap_or(&0);
-            if event_pos <= (self_parent_pos + 1) {
-                writeln!(f, "    \"{:?}\" -> \"{:?}\"", self_parent, event.hash())?
+            let minlen = if event_pos > self_parent_pos {
+                event_pos - self_parent_pos
             } else {
-                let gap = event_pos - self_parent_pos;
-                writeln!(
-                    f,
-                    "    \"{:?}\" -> \"{:?}\" [minlen={}]",
-                    self_parent,
-                    event.hash(),
-                    gap
-                )?
-            }
+                1
+            };
+            writeln!(
+                f,
+                "    \"{:?}\" -> \"{:?}\" [minlen={}]",
+                self_parent,
+                event.hash(),
+                minlen
+            )?
         } else {
             writeln!(f, "    {:?} -> \"{:?}\" [style=invis]", node, event.hash())?
         }
@@ -62,6 +62,7 @@ fn write_subgraph<T: NetworkEvent, S: SecretId>(
     events: &[&Event<T, S::PublicId>],
     positions: &BTreeMap<Hash, u64>,
 ) -> fmt::Result {
+    writeln!(f, "    style=invis")?;
     writeln!(f, "  subgraph cluster_{:?} {{", node)?;
     writeln!(f, "    label={:?}", node)?;
     write_self_parents::<T, S>(f, node, gossip_graph, events, positions)?;
@@ -122,15 +123,15 @@ fn write_evaluates<T: NetworkEvent, S: SecretId>(
                 write!(
                     f,
                     " [label=\"{}_{}",
-                    first_char(event.creator()),
+                    first_char(event.creator()).unwrap_or('E'),
                     event.index.unwrap_or(0)
                 )?;
 
                 for (peer, votes) in event_meta_votes.iter() {
                     if votes.is_empty() {
-                        write!(f, "\n{}: []", first_char(peer))?;
+                        write!(f, "\n{}: []", first_char(peer).unwrap_or('E'))?;
                     } else {
-                        write!(f, "\n{}: [ ", first_char(peer))?;
+                        write!(f, "\n{}: [ ", first_char(peer).unwrap_or('E'))?;
                         for i in 0..votes.len() {
                             if i == votes.len() - 1 {
                                 write!(f, "{:?}]", votes[i])?;
@@ -147,7 +148,7 @@ fn write_evaluates<T: NetworkEvent, S: SecretId>(
                     f,
                     " {:?} [label=\"{}_{}\"]",
                     event.hash(),
-                    first_char(event.creator()),
+                    first_char(event.creator()).unwrap_or('E'),
                     event.index.unwrap_or(0)
                 )?;
             }
@@ -157,39 +158,46 @@ fn write_evaluates<T: NetworkEvent, S: SecretId>(
     writeln!(f)
 }
 
+fn parent_pos(
+    index: Option<u64>,
+    parent_hash: Option<&Hash>,
+    positions: &BTreeMap<Hash, u64>,
+) -> Option<u64> {
+    if let Some(parent_hash) = parent_hash {
+        if let Some(parent_pos) = positions.get(parent_hash) {
+            Some(*parent_pos)
+        } else {
+            None
+        }
+    } else {
+        Some(index.unwrap_or(0))
+    }
+}
+
 fn update_pos<T: NetworkEvent, S: SecretId>(
     positions: &mut BTreeMap<Hash, u64>,
     gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
 ) {
-    loop {
-        let mut updated = false;
+    while positions.len() < gossip_graph.len() {
         for (hash, event) in gossip_graph.iter() {
             if !positions.contains_key(hash) {
-                let self_parent_pos = if let Some(self_parent_hash) = event.self_parent() {
-                    if let Some(self_parent_pos) = positions.get(self_parent_hash) {
-                        *self_parent_pos
-                    } else {
-                        continue;
-                    }
+                let self_parent_pos = if let Some(position) =
+                    parent_pos(event.index, event.self_parent(), &positions)
+                {
+                    position
                 } else {
-                    event.index.unwrap_or(0)
+                    continue;
                 };
-                let other_parent_pos = if let Some(other_parent_hash) = event.other_parent() {
-                    if let Some(other_parent_pos) = positions.get(other_parent_hash) {
-                        *other_parent_pos
-                    } else {
-                        continue;
-                    }
+                let other_parent_pos = if let Some(position) =
+                    parent_pos(event.index, event.other_parent(), &positions)
+                {
+                    position
                 } else {
-                    event.index.unwrap_or(0)
+                    continue;
                 };
                 let _ = positions.insert(*hash, cmp::max(self_parent_pos, other_parent_pos) + 1);
-                updated = true;
                 break;
             }
-        }
-        if !updated {
-            break;
         }
     }
 }
