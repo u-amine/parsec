@@ -94,8 +94,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.create_sync_event(src, true)?;
 
         // Return all the events we think `src` doesn't yet know about, packed into a `Response`.
-        let other_parent_hash = self.peer_manager.last_event_hash(src).ok_or(Error::Logic)?;
-        let other_parent = self.events.get(other_parent_hash).ok_or(Error::Logic)?;
+        let other_parent = {
+            let other_parent_hash = self.peer_manager.last_event_hash(src).ok_or(Error::Logic)?;
+            self.events.get(other_parent_hash).ok_or(Error::Logic)?
+        };
         let mut last_ancestors_hashes = other_parent
             .last_ancestors
             .iter()
