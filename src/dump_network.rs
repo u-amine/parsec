@@ -116,9 +116,8 @@ fn write_evaluates<T: NetworkEvent, S: SecretId>(
 ) -> fmt::Result {
     for (event_hash, event) in gossip_graph.iter() {
         if let Some(event_meta_votes) = meta_votes.get(event_hash) {
+            writeln!(f, " \"{:?}\" [shape=rectangle]", event.hash())?;
             if event_meta_votes.len() == initial_events.len() {
-                writeln!(f, " \"{:?}\" [shape=rectangle]", event.hash())?;
-
                 write!(f, " \"{:?}\" ", event.hash())?;
                 write!(
                     f,
@@ -143,16 +142,16 @@ fn write_evaluates<T: NetworkEvent, S: SecretId>(
                 }
 
                 writeln!(f, "\"]")?;
-            } else {
-                writeln!(
-                    f,
-                    " {:?} [label=\"{}_{}\"]",
-                    event.hash(),
-                    first_char(event.creator()).unwrap_or('E'),
-                    event.index.unwrap_or(0)
-                )?;
+                continue;
             }
         }
+        writeln!(
+            f,
+            " \"{:?}\" [label=\"{}_{}\"]",
+            event.hash(),
+            first_char(event.creator()).unwrap_or('E'),
+            event.index.unwrap_or(0)
+        )?;
     }
 
     writeln!(f)
