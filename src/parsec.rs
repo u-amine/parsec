@@ -96,8 +96,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.create_sync_event(src, true)?;
 
         // Return all the events we think `src` doesn't yet know about, packed into a `Response`.
-        let other_parent_hash = self.peer_manager.last_event_hash(src).ok_or(Error::Logic)?;
-        let other_parent = self.events.get(other_parent_hash).ok_or(Error::Logic)?;
+        let other_parent = {
+            let other_parent_hash = self.peer_manager.last_event_hash(src).ok_or(Error::Logic)?;
+            self.events.get(other_parent_hash).ok_or(Error::Logic)?
+        };
         let mut last_ancestors_hashes = other_parent
             .last_ancestors
             .iter()
@@ -461,13 +463,14 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn update_round_hashes(&mut self, event_hash: &Hash) -> Result<(), Error> {
-        let meta_votes = self.meta_votes.get(event_hash).ok_or(Error::Logic)?;
-        for (peer_id, event_votes) in meta_votes.iter() {
-            for meta_vote in event_votes {
-                if let Some(hashes) = self.round_hashes.get_mut(&peer_id) {
-                    while hashes.len() < meta_vote.round + 1 {
-                        let next_round_hash = hashes[hashes.len() - 1].increment_round()?;
-                        hashes.push(next_round_hash);
+        if let Some(meta_votes) = self.meta_votes.get(event_hash) {
+            for (peer_id, event_votes) in meta_votes.iter() {
+                for meta_vote in event_votes {
+                    if let Some(hashes) = self.round_hashes.get_mut(&peer_id) {
+                        while hashes.len() < meta_vote.round + 1 {
+                            let next_round_hash = hashes[hashes.len() - 1].increment_round()?;
+                            hashes.push(next_round_hash);
+                        }
                     }
                 }
             }

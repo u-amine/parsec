@@ -107,6 +107,7 @@ impl MetaVote {
         initial.estimates = new_set_with_value(initial_estimate);
         Self::next(&[initial], others, &BTreeMap::new(), total_peers)
     }
+
     pub fn next(
         parent: &[MetaVote],
         others: &[Vec<MetaVote>],
