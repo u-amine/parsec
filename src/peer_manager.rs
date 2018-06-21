@@ -63,6 +63,11 @@ impl<S: SecretId> PeerManager<S> {
         self.peers.iter()
     }
 
+    /// Returns `true` if the given peer is known.
+    pub fn has_peer(&self, peer_id: &S::PublicId) -> bool {
+        self.peers.contains_key(peer_id)
+    }
+
     /// Adds a peer into the map.
     pub fn add_peer(&mut self, peer_id: S::PublicId) {
         let _ = self

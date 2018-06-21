@@ -13,7 +13,6 @@ mod peer;
 pub use self::id::{FullId, PeerId};
 pub use self::network::{Network, Transaction};
 pub use self::peer::Peer;
-
 use maidsafe_utilities::SeededRng;
 use rust_sodium;
 
