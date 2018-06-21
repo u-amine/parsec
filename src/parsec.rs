@@ -84,15 +84,17 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             if !self.peer_manager.has_peer(&recipient_id) {
                 return Err(Error::UnknownPeer);
             }
-            self.events_to_gossip_to_peer(&recipient_id)
-                .map(Request::new)
-        } else {
-            Ok(Request::new(
-                self.events_order
-                    .iter()
-                    .filter_map(|hash| self.events.get(hash)),
-            ))
+            if self.peer_manager.last_event_hash(&recipient_id).is_some() {
+                return self
+                    .events_to_gossip_to_peer(&recipient_id)
+                    .map(Request::new);
+            }
         }
+        Ok(Request::new(
+            self.events_order
+                .iter()
+                .filter_map(|hash| self.events.get(hash)),
+        ))
     }
 
     /// Handles a received `Request` from `src` peer.  Returns a `Response` to be sent back to `src`
