@@ -6,15 +6,14 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use utils::{FullId, Peer, PeerId};
-
-use parsec::{NetworkEvent, SecretId};
-use rand::{self, Rand, Rng};
+use parsec::SecretId;
+use rand::{self, Rng};
 use std::collections::BTreeSet;
 use std::env;
 use std::fs::{self, File};
 use std::io::Write;
 use std::thread;
+use utils::{FullId, Peer, PeerId};
 
 pub struct Network {
     pub peers: Vec<Peer>,
@@ -105,25 +104,6 @@ impl Drop for Network {
                     println!("Failed to create {:?}", file_path);
                 }
             }
-        }
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Debug)]
-pub enum Transaction {
-    InsertPeer(PeerId),
-    RemovePeer(PeerId),
-}
-
-impl NetworkEvent for Transaction {}
-
-impl Rand for Transaction {
-    fn rand<R: Rng>(rng: &mut R) -> Self {
-        let id = FullId::new();
-        if rng.gen() {
-            Transaction::InsertPeer(*id.public_id())
-        } else {
-            Transaction::RemovePeer(*id.public_id())
         }
     }
 }

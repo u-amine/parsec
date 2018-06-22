@@ -19,3 +19,4 @@ target/
 *.sublime-*
 .cargo/
 .DS_Store
+.vscode/
