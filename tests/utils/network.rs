@@ -9,8 +9,12 @@
 use utils::{FullId, Peer, PeerId};
 
 use parsec::{NetworkEvent, SecretId};
-use rand::{Rand, Rng};
+use rand::{self, Rand, Rng};
 use std::collections::BTreeSet;
+use std::env;
+use std::fs::{self, File};
+use std::io::Write;
+use std::thread;
 
 pub struct Network {
     pub peers: Vec<Peer>,
@@ -77,6 +81,31 @@ impl Network {
                 .parsec
                 .handle_response(receiver_id, response)
         )
+    }
+}
+
+impl Drop for Network {
+    fn drop(&mut self) {
+        if thread::panicking() {
+            let folder_name = rand::thread_rng()
+                .gen_ascii_chars()
+                .take(6)
+                .collect::<String>();
+            let dir = env::temp_dir().join("parsec_graphs").join(folder_name);
+            if let Err(error) = fs::create_dir_all(&dir) {
+                println!("Failed to create folder for dot files: {:?}", error);
+            } else {
+                println!("Writing dot files in {:?}", dir);
+            }
+            for peer in &self.peers {
+                let file_path = dir.join(format!("{:?}.dot", peer.id));
+                if let Ok(mut file) = File::create(&file_path) {
+                    let _ = write!(file, "{:?}", peer.parsec);
+                } else {
+                    println!("Failed to create {:?}", file_path);
+                }
+            }
+        }
     }
 }
 

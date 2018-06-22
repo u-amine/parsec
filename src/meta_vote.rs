@@ -7,6 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{self, Debug, Formatter};
 use std::iter;
 
 fn new_set_with_value(value: bool) -> BTreeSet<bool> {
@@ -28,6 +29,17 @@ impl Default for Step {
     }
 }
 
+impl Debug for Step {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let step = match self {
+            Step::ForcedTrue => 0,
+            Step::ForcedFalse => 1,
+            Step::GenuineFlip => 2,
+        };
+        write!(f, "{}", step)
+    }
+}
+
 // This holds the state of a (binary) meta vote about which we're trying to achieve consensus.
 #[derive(Clone, Default)]
 pub(crate) struct MetaVote {
@@ -37,6 +49,56 @@ pub(crate) struct MetaVote {
     pub bin_values: BTreeSet<bool>,
     pub aux_value: Option<bool>,
     pub decision: Option<bool>,
+}
+
+fn write_bool(f: &mut Formatter, a_bool: bool) -> fmt::Result {
+    if a_bool {
+        write!(f, "t")
+    } else {
+        write!(f, "f")
+    }
+}
+
+fn write_multiple_bool_values(
+    f: &mut Formatter,
+    field: &str,
+    input: &BTreeSet<bool>,
+) -> fmt::Result {
+    write!(f, "{}:{{", field)?;
+    let values: Vec<&bool> = input.iter().collect();
+    if values.len() == 1 {
+        write_bool(f, *values[0])?;
+    } else if values.len() == 2 {
+        write_bool(f, *values[0])?;
+        write!(f, ", ")?;
+        write_bool(f, *values[1])?;
+    }
+    write!(f, "}} ")
+}
+
+fn write_optional_single_bool_value(
+    f: &mut Formatter,
+    field: &str,
+    value: Option<bool>,
+) -> fmt::Result {
+    write!(f, "{}:{{", field)?;
+    if let Some(vote) = value {
+        write_bool(f, vote)?;
+    }
+    write!(f, "}} ")
+}
+
+impl Debug for MetaVote {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{{ {}/{:?}, ", self.round, self.step)?;
+
+        write_multiple_bool_values(f, "est", &self.estimates)?;
+        write_multiple_bool_values(f, "bin", &self.bin_values)?;
+        write_optional_single_bool_value(f, "aux", self.aux_value)?;
+        write_optional_single_bool_value(f, "dec", self.decision)?;
+
+        write!(f, "}}")
+    }
 }
 
 impl MetaVote {
