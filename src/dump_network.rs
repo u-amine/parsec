@@ -119,17 +119,19 @@ fn write_evaluates<T: NetworkEvent, S: SecretId>(
     initial_events: &[Hash],
 ) -> fmt::Result {
     for (event_hash, event) in gossip_graph.iter() {
+        // Write the label
+        write!(f, " \"{:?}\" ", event.hash())?;
+        write!(
+            f,
+            " [label=\"{}_{}",
+            first_char(event.creator()).unwrap_or('E'),
+            event.index.unwrap_or(0)
+        )?;
+        if let Some(event_payload) = event.vote().map(|vote| vote.payload()) {
+            write!(f, "\n{:?}", event_payload)?;
+        }
         if let Some(event_meta_votes) = meta_votes.get(event_hash) {
-            writeln!(f, " \"{:?}\" [shape=rectangle]", event.hash())?;
             if event_meta_votes.len() == initial_events.len() {
-                write!(f, " \"{:?}\" ", event.hash())?;
-                write!(
-                    f,
-                    " [label=\"{}_{}",
-                    first_char(event.creator()).unwrap_or('E'),
-                    event.index.unwrap_or(0)
-                )?;
-
                 let mut peer_ids: Vec<&S::PublicId> = event_meta_votes.keys().collect();
                 peer_ids.sort_by(|lhs, rhs| first_char(lhs).cmp(&first_char(rhs)));
 
@@ -149,18 +151,20 @@ fn write_evaluates<T: NetworkEvent, S: SecretId>(
                         }
                     }
                 }
-
-                writeln!(f, "\"]")?;
-                continue;
             }
         }
-        writeln!(
-            f,
-            " \"{:?}\" [label=\"{}_{}\"]",
-            event.hash(),
-            first_char(event.creator()).unwrap_or('E'),
-            event.index.unwrap_or(0)
-        )?;
+        writeln!(f, "\"]")?;
+        // Add any styling
+        if event.vote().is_some() {
+            writeln!(
+                f,
+                " \"{:?}\" [shape=rectangle, style=filled, fillcolor=cyan]",
+                event.hash()
+            )?;
+        }
+        if meta_votes.get(event_hash).is_some() {
+            writeln!(f, " \"{:?}\" [shape=rectangle]", event.hash())?;
+        }
     }
 
     writeln!(f)
