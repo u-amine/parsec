@@ -95,12 +95,16 @@ fn write_nodes<S: SecretId>(f: &mut Formatter, nodes: &[S::PublicId]) -> fmt::Re
         writeln!(f, "    {:?} [style=filled, color=white]", node)?;
     }
     writeln!(f, "  }}")?;
+
     // Order the nodes alphabetically
+    let mut peers: Vec<&S::PublicId> = nodes.iter().collect();
+    peers.sort_by(|lhs, rhs| first_char(lhs).cmp(&first_char(rhs)));
+
     write!(f, "  ")?;
     let mut index = 0;
-    for node in nodes {
-        write!(f, "{:?}", node)?;
-        if index < nodes.len() - 1 {
+    for peer in &peers {
+        write!(f, "{:?}", peer)?;
+        if index < peers.len() - 1 {
             write!(f, " -> ")?;
             index += 1;
         }
@@ -126,16 +130,21 @@ fn write_evaluates<T: NetworkEvent, S: SecretId>(
                     event.index.unwrap_or(0)
                 )?;
 
-                for (peer, votes) in event_meta_votes.iter() {
-                    if votes.is_empty() {
-                        write!(f, "\n{}: []", first_char(peer).unwrap_or('E'))?;
-                    } else {
-                        write!(f, "\n{}: [ ", first_char(peer).unwrap_or('E'))?;
-                        for i in 0..votes.len() {
-                            if i == votes.len() - 1 {
-                                write!(f, "{:?}]", votes[i])?;
-                            } else {
-                                writeln!(f, "{:?}", votes[i])?;
+                let mut peer_ids: Vec<&S::PublicId> = event_meta_votes.keys().collect();
+                peer_ids.sort_by(|lhs, rhs| first_char(lhs).cmp(&first_char(rhs)));
+
+                for peer in &peer_ids {
+                    if let Some(votes) = event_meta_votes.get(peer) {
+                        if votes.is_empty() {
+                            write!(f, "\n{}: []", first_char(peer).unwrap_or('E'))?;
+                        } else {
+                            write!(f, "\n{}: [ ", first_char(peer).unwrap_or('E'))?;
+                            for i in 0..votes.len() {
+                                if i == votes.len() - 1 {
+                                    write!(f, "{:?}]", votes[i])?;
+                                } else {
+                                    writeln!(f, "{:?}", votes[i])?;
+                                }
                             }
                         }
                     }
