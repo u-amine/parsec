@@ -64,7 +64,11 @@ impl Network {
     }
 
     fn exchange_messages(&mut self, sender_id: &PeerId, receiver_id: &PeerId) {
-        let request = self.peer(sender_id).parsec.create_gossip();
+        let request = unwrap!(
+            self.peer(sender_id)
+                .parsec
+                .create_gossip(Some(*receiver_id))
+        );
 
         let response = unwrap!(
             self.peer_mut(receiver_id)

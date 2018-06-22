@@ -63,7 +63,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Ok(parsec)
     }
 
-    /// Add a vote for `network_event`.
+    /// Adds a vote for `network_event`.
     pub fn vote_for(&mut self, network_event: T) -> Result<(), Error> {
         let self_parent_hash = self.our_last_event_hash().ok_or(Error::InvalidEvent)?;
         let event = Event::new_from_observation(
@@ -74,13 +74,29 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.add_event(event)
     }
 
-    /// Creates a new message to be gossiped to a random peer.
-    pub fn create_gossip(&self) -> Request<T, S::PublicId> {
-        Request::new(
+    /// Creates a new message to be gossiped to a peer containing all gossip events this node thinks
+    /// that peer needs.  If `peer_id` is `None`, a message containing all known gossip events is
+    /// returned.  If `peer_id` is `Some` and the given peer is unknown to this node, an error is
+    /// returned.
+    pub fn create_gossip(
+        &self,
+        peer_id: Option<S::PublicId>,
+    ) -> Result<Request<T, S::PublicId>, Error> {
+        if let Some(recipient_id) = peer_id {
+            if !self.peer_manager.has_peer(&recipient_id) {
+                return Err(Error::UnknownPeer);
+            }
+            if self.peer_manager.last_event_hash(&recipient_id).is_some() {
+                return self
+                    .events_to_gossip_to_peer(&recipient_id)
+                    .map(Request::new);
+            }
+        }
+        Ok(Request::new(
             self.events_order
                 .iter()
                 .filter_map(|hash| self.events.get(hash)),
-        )
+        ))
     }
 
     /// Handles a received `Request` from `src` peer.  Returns a `Response` to be sent back to `src`
@@ -94,35 +110,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             self.add_event(event)?;
         }
         self.create_sync_event(src, true)?;
-
-        // Return all the events we think `src` doesn't yet know about, packed into a `Response`.
-        let other_parent = {
-            let other_parent_hash = self.peer_manager.last_event_hash(src).ok_or(Error::Logic)?;
-            self.events.get(other_parent_hash).ok_or(Error::Logic)?
-        };
-        let mut last_ancestors_hashes = other_parent
-            .last_ancestors
-            .iter()
-            .filter_map(|(peer_id, &index)| self.peer_manager.event_by_index(peer_id, index))
-            .collect::<BTreeSet<_>>();
-        // As `src` doesn't guaranteed to have last_ancestor_hash for all peers (which will happen
-        // during the early stage when a node has not heard from all others), this may cause the
-        // early events in the event_order be skipped mistakenly. To avoid this, if there are any
-        // peers for which `src` doesn't have a `last_ancestors` entry, add those peers' oldest
-        // events we know about to the list of hashes.
-        for (peer, events) in self.peer_manager.iter() {
-            if !other_parent.last_ancestors.contains_key(peer) {
-                if let Some(hash) = events.get(&0) {
-                    let _ = last_ancestors_hashes.insert(hash);
-                }
-            }
-        }
-        let response_events_iter = self
-            .events_order
-            .iter()
-            .skip_while(|hash| !last_ancestors_hashes.contains(hash))
-            .filter_map(|hash| self.events.get(hash));
-        Ok(Response::new(response_events_iter))
+        self.events_to_gossip_to_peer(src).map(Response::new)
     }
 
     /// Handles a received `Response` from `src` peer.  Returns `Err` if the response was not valid.
@@ -835,6 +823,43 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             Event::new_from_response(self.peer_manager.our_id(), self_parent, other_parent)
         }?;
         self.add_event(sync_event)
+    }
+
+    // Returns an iterator over `self.events` which will yield all the events we think `peer_id`
+    // doesn't yet know about.
+    fn events_to_gossip_to_peer(
+        &self,
+        peer_id: &S::PublicId,
+    ) -> Result<impl Iterator<Item = &Event<T, S::PublicId>>, Error> {
+        let other_parent = {
+            let other_parent_hash = self
+                .peer_manager
+                .last_event_hash(peer_id)
+                .ok_or(Error::Logic)?;
+            self.events.get(other_parent_hash).ok_or(Error::Logic)?
+        };
+        let mut last_ancestors_hashes = other_parent
+            .last_ancestors
+            .iter()
+            .filter_map(|(id, &index)| self.peer_manager.event_by_index(id, index))
+            .collect::<BTreeSet<_>>();
+        // As `peer_id` isn't guaranteed to have `last_ancestor_hash` for all peers (which will
+        // happen during the early stage when a node has not heard from all others), this may cause
+        // the early events in `self.events_order` to be skipped mistakenly. To avoid this, if there
+        // are any peers for which `peer_id` doesn't have a `last_ancestors` entry, add those peers'
+        // oldest events we know about to the list of hashes.
+        for (peer, events) in self.peer_manager.iter() {
+            if !other_parent.last_ancestors.contains_key(peer) {
+                if let Some(hash) = events.get(&0) {
+                    let _ = last_ancestors_hashes.insert(hash);
+                }
+            }
+        }
+        Ok(self
+            .events_order
+            .iter()
+            .skip_while(move |hash| !last_ancestors_hashes.contains(hash))
+            .filter_map(move |hash| self.events.get(hash)))
     }
 }
 

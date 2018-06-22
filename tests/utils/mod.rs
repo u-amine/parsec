@@ -13,7 +13,6 @@ mod peer;
 pub use self::id::{FullId, PeerId};
 pub use self::network::{Network, Transaction};
 pub use self::peer::Peer;
-
 use maidsafe_utilities::SeededRng;
 use rust_sodium;
 
@@ -33,7 +32,11 @@ pub fn init_rng(optional_seed: Option<[u32; 4]>) -> SeededRng {
 pub fn loop_with_max_iterations<F: FnMut() -> bool>(max_iterations: usize, mut closure: F) {
     let mut iterations = 0;
     loop {
-        assert!(iterations < max_iterations);
+        assert!(
+            iterations < max_iterations,
+            "This has run for {} iterations.",
+            iterations
+        );
         if closure() {
             return;
         }
