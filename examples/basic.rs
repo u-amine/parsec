@@ -54,6 +54,9 @@ const MAX_EVENT_COUNT: usize = 1000;
 const PEERS_ARG_NAME: &str = "peers";
 const EVENTS_ARG_NAME: &str = "events";
 const MAX_ITERATIONS_ARG_NAME: &str = "max-iterations";
+const SEED_ARG_NAME: &str = "seed";
+
+type Seed = [u32; 4];
 
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Debug)]
 struct Signature(String);
@@ -149,6 +152,25 @@ struct Params {
     event_count: usize,
     peer_count: usize,
     max_iterations: usize,
+    seed: Option<Seed>,
+}
+
+fn parse_seed(seed_str: &str) -> Result<Seed, ()> {
+    let parts = seed_str
+        .split(',')
+        .map(|s| s.to_string())
+        .collect::<Vec<String>>();
+    if parts.len() != 4 {
+        return Err(());
+    }
+    let mut seed = [0; 4];
+    for (index, part) in parts.iter().enumerate() {
+        seed[index] = part
+            .trim_matches(|c: char| !c.is_digit(10))
+            .parse::<u32>()
+            .map_err(|_| ())?;
+    }
+    Ok(seed)
 }
 
 fn get_params() -> Params {
@@ -160,6 +182,10 @@ fn get_params() -> Params {
         "must be a value between {} and {} inclusive.",
         MIN_PEER_COUNT,
         NAMES.len()
+    );
+    let seed_info = format!(
+        "should be quoted and in the form of four unsigned integers e.g. --{}=\"1, 2, 3, 4\".",
+        SEED_ARG_NAME
     );
     let matches = App::new("Parsec basic example")
         .version(crate_version!())
@@ -204,6 +230,17 @@ fn get_params() -> Params {
                 )
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name(SEED_ARG_NAME)
+                .short("s")
+                .long(SEED_ARG_NAME)
+                .value_name("VALUE")
+                .help(&format!(
+                    "Seed used to initialise the random number generator; {}",
+                    seed_info
+                ))
+                .takes_value(true),
+        )
         .get_matches();
     let mut params = Params::default();
     match value_t!(matches.value_of(EVENTS_ARG_NAME), usize) {
@@ -232,6 +269,15 @@ fn get_params() -> Params {
             process::exit(-3);
         }
     }
+    params.seed = matches
+        .value_of(SEED_ARG_NAME)
+        .map(|seed_str| match parse_seed(seed_str) {
+            Ok(seed) => seed,
+            Err(()) => {
+                println!("'{}' {}", SEED_ARG_NAME, seed_info);
+                process::exit(-3);
+            }
+        });
 
     println!(
         "Running example with {} random network event{} and {} peers...",
@@ -258,7 +304,10 @@ fn main() {
         .map(|id| Peer::new(id.clone(), &genesis_group))
         .collect::<Vec<_>>();
 
-    let mut rng = SeededRng::new();
+    let mut rng = params
+        .seed
+        .map_or_else(SeededRng::new, SeededRng::from_seed);
+    println!("Using {:?}", rng);
     let mut transactions = vec![];
     while transactions.len() < params.event_count {
         transactions.push(Transaction(
