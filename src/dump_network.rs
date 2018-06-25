@@ -162,6 +162,13 @@ fn write_evaluates<T: NetworkEvent, S: SecretId>(
                 event.hash()
             )?;
         }
+        for (event_hash, _payload) in event.valid_blocks_carried.values() {
+            writeln!(
+                f,
+                " \"{:?}\" [shape=rectangle, style=filled, fillcolor=crimson]",
+                event_hash
+            )?;
+        }
         if meta_votes.get(event_hash).is_some() {
             writeln!(f, " \"{:?}\" [shape=rectangle]", event.hash())?;
         }
