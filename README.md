@@ -7,6 +7,18 @@
 | [MaidSafe website](https://maidsafe.net) | [SAFE Dev Forum](https://forum.safedev.org) | [SAFE Network Forum](https://safenetforum.org) |
 |:----------------------------------------:|:-------------------------------------------:|:----------------------------------------------:|
 
+There is a basic example available in the examples folder.  This allows you to simulate a network of peers each running the Parsec protocol to reach consensus on a number of random network events.  There is also the ability to dump each peer's gossip graph in dot format to a file in your system temp dir.  This can be enabled via the feature `dump-graphs`.  So, e.g. to run the example for a network of five peers and ten network events:
+
+```
+cargo run --example=basic --features=dump-graphs -- --peers=5 --events=10
+```
+
+To generate SVG graphs from the resulting dot files:
+
+```
+dot -Tsvg *.dot -O
+```
+
 ## License
 
 Licensed under the General Public License (GPL), version 3 ([LICENSE](LICENSE) http://www.gnu.org/licenses/gpl-3.0.en.html).

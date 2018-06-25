@@ -259,7 +259,7 @@ fn write_gossip_graph_dot<T: NetworkEvent, S: SecretId>(
     writeln!(f, "}}")
 }
 
-/// Output a graphviz of the gossip graph.
+/// Output a dot file of the gossip graph.
 pub(crate) fn dump_gossip_graph<T: NetworkEvent, S: SecretId>(
     f: &mut Formatter,
     gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,

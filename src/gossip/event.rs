@@ -15,6 +15,7 @@ use id::{PublicId, SecretId};
 use maidsafe_utilities::serialisation::serialise;
 use network_event::NetworkEvent;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{self, Debug, Formatter};
 use vote::Vote;
 
 pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
@@ -168,5 +169,30 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             valid_blocks_carried: BTreeSet::default(),
             observations: BTreeSet::default(),
         })
+    }
+}
+
+impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        write!(
+            formatter,
+            "Event{{ {:?}[{}] {:?}, {}, self_parent: {:?}, other_parent: {:?}, last_ancestors: \
+             {:?}, first_descendants: {:?}, valid_blocks_carried: {:?}, observations: {:?} }}",
+            self.content.creator,
+            self.index.unwrap_or(u64::max_value()),
+            self.hash,
+            match &self.content.cause {
+                Cause::Request(_) => "Request".to_string(),
+                Cause::Response(_) => "Response".to_string(),
+                Cause::Observation(vote) => format!("Observation({:?})", vote.payload()),
+                Cause::Initial => "Initial".to_string(),
+            },
+            self.content.self_parent,
+            self.content.other_parent(),
+            self.last_ancestors,
+            self.first_descendants,
+            self.valid_blocks_carried,
+            self.observations,
+        )
     }
 }
