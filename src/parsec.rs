@@ -307,118 +307,111 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn set_valid_blocks_carried(&mut self, event: &mut Event<T, S::PublicId>) -> Result<(), Error> {
-        // If this node already has meta votes running, no need to calculate `valid_blocks_carried`.
-        if self
-            .self_parent(event)
-            .and_then(|parent| self.meta_votes.get(parent.hash()))
-            .is_some()
-        {
-            return Ok(());
+        // If my self_parent already carries a valid block for this peer, use it
+        if let Some(self_parent) = self.self_parent(event) {
+            event
+                .valid_blocks_carried
+                .append(&mut self_parent.valid_blocks_carried.clone())
         }
-        // Union of
-        // * my self_parent's valid_blocks_carried,
-        // * my other_parent's valid_blocks_carried,
-        // * any observation I made that makes a block valid
-        // Note that if any block becomes stable due to this gossip event, we will learn
-        // that fact later and prune valid_blocks_carried accordingly
-        let self_parents_valid_blocks = {
-            if let Some(self_parent) = self.self_parent(event) {
-                self_parent.valid_blocks_carried.clone()
-            } else {
-                BTreeSet::new()
-            }
-        };
-        let other_parents_valid_blocks = {
-            if let Some(other_parent) = self.other_parent(event) {
-                other_parent.valid_blocks_carried.clone()
-            } else {
-                BTreeSet::new()
-            }
-        };
-        let blocks_made_valid_now = {
-            if let Some(vote) = event.vote() {
-                let mut valid_votes: BTreeSet<Hash> = BTreeSet::new();
-                let n_same_votes = self
-                    .events
+        // If my other_parent already carries a valid block for this peer, use it
+        if let Some(other_parent) = self.other_parent(event) {
+            event
+                .valid_blocks_carried
+                .append(&mut other_parent.valid_blocks_carried.clone())
+        }
+        // If none of my parents already carries a valid block for this peer, see if this event
+        // makes a block valid
+        if event.valid_blocks_carried.get(event.creator()).is_none() {
+            let valid_block_carried = {
+                let payloads_made_valid = self
+                    .peer_manager
                     .iter()
-                    .filter(|(_, value)| {
-                        (**value)
-                            .vote()
-                            .map_or(false, |iter_vote| iter_vote.payload() == vote.payload())
+                    .flat_map(|(_peer, events)| {
+                        events.iter().filter_map(|(_index, event_hash)| {
+                            self.events
+                                .get(event_hash)
+                                .map(|event| event.vote().map(|vote| vote.payload()))
+                        })
                     })
-                    .count();
-                if self.peer_manager.is_super_majority(n_same_votes)
-                    && !valid_votes.insert(event.hash().clone())
-                {
-                    return Err(Error::InvalidEvent);
-                }
-                valid_votes
-            } else {
-                BTreeSet::new()
+                    .filter_map(|this_payload| {
+                        if self.peer_manager.is_super_majority(
+                            self.n_ancestors_carrying_payload(event, &this_payload),
+                        ) {
+                            this_payload
+                        } else {
+                            None
+                        }
+                    });
+                payloads_made_valid.max().map(|max_payload_made_valid| {
+                    (
+                        event.creator().clone(),
+                        (*event.hash(), max_payload_made_valid.clone()),
+                    )
+                })
+            };
+            if let Some((peer, event_with_valid_block)) = valid_block_carried {
+                let _ = event
+                    .valid_blocks_carried
+                    .insert(peer, event_with_valid_block);
             }
-        };
-        event.valid_blocks_carried = self_parents_valid_blocks
-            .union(&other_parents_valid_blocks)
-            .cloned()
-            .collect::<BTreeSet<_>>()
-            .union(&blocks_made_valid_now)
-            .cloned()
-            .collect();
+        }
         Ok(())
     }
 
-    fn last_event(&self, peer_id: &S::PublicId) -> Option<&Event<T, S::PublicId>> {
-        let last_hash = self.peer_manager.last_event_hash(peer_id);
-        match last_hash {
-            Some(hash) => Some(&self.events[hash]),
-            None => None,
-        }
-    }
-
-    fn oldest_event_with_valid_block(
+    fn n_ancestors_carrying_payload(
         &self,
-        peer_id: &S::PublicId,
-    ) -> Option<&Event<T, S::PublicId>> {
-        self.last_event(peer_id).and_then(|last_event| {
-            (*last_event)
-                .valid_blocks_carried
-                .iter()
-                .map(|hash| &self.events[hash])
-                .min_by(|lhs_event, rhs_event| {
-                    let lhs_index = lhs_event.index.unwrap_or(u64::max_value());
-                    let rhs_index = rhs_event.index.unwrap_or(u64::max_value());
-                    lhs_index.cmp(&rhs_index)
+        event: &Event<T, S::PublicId>,
+        payload: &Option<&T>,
+    ) -> usize {
+        let my_payload = if event.vote().map(|vote| vote.payload()) == *payload {
+            1
+        } else {
+            0
+        };
+        let my_ancestors_payload = self
+            .peer_manager
+            .iter()
+            .filter(|(peer, events)| {
+                events.iter().any(|(_index, event_hash)| {
+                    let last_ancestor_index = &event.last_ancestors.get(peer);
+                    match self.events.get(event_hash) {
+                        Some(that_event) => {
+                            (*payload == that_event.vote().map(|vote| vote.payload()))
+                                && (last_ancestor_index.map_or(false, |last_index| {
+                                    that_event
+                                        .index
+                                        .map_or(false, |that_index| *last_index >= that_index)
+                                }))
+                        }
+                        None => false,
+                    }
                 })
-        })
+            })
+            .count();
+        my_payload + my_ancestors_payload
     }
 
     fn set_observations(&mut self, event_hash: &Hash) -> Result<(), Error> {
-        // If this node already has meta votes running, no need to calculate `observations`.
-        if self
-            .self_parent(self.events.get(event_hash).ok_or(Error::Logic)?)
-            .and_then(|parent| self.meta_votes.get(parent.hash()))
-            .is_some()
-        {
-            return Ok(());
-        }
-        // Grab latest event from each peer
-        // If they can strongly see an event that carries a valid block, add the peer's public id
-        let observations = self
-            .peer_manager
-            .all_ids()
-            .into_iter()
-            .filter(|peer| match self.oldest_event_with_valid_block(peer) {
-                Some(event) => match self.last_event(peer) {
-                    Some(last_event) => self.does_strongly_see(last_event, event),
-                    None => false,
-                },
-                None => false,
-            })
-            .cloned()
-            .collect();
-        let event = self.events.get_mut(event_hash).ok_or(Error::Logic)?;
-        event.observations = observations;
-        Ok(())
+        let observations = {
+            let event = self.events.get(event_hash).ok_or(Error::Logic)?;
+            event
+                .valid_blocks_carried
+                .iter()
+                .filter_map(|(peer, (old_hash, _payload))| {
+                    let old_event = self.events.get(old_hash)?;
+                    if self.does_strongly_see(event, old_event) {
+                        Some(peer)
+                    } else {
+                        None
+                    }
+                })
+                .cloned()
+                .collect()
+        };
+        self.events
+            .get_mut(event_hash)
+            .map(|ref mut event| event.observations = observations)
+            .ok_or(Error::Logic)
     }
 
     fn set_meta_votes(&mut self, event_hash: &Hash) -> Result<(), Error> {
@@ -594,7 +587,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             })
     }
 
-    // Returns the meta votes for the given peer, created by `creator`, since the given round and step.
+    // Returns the meta votes for the given peer, created by `creator`, since the given round and
+    // step.
     // Starts iterating down the creator's events starting from `creator_event_index`.
     fn meta_votes_since_round_and_step(
         &self,
@@ -665,74 +659,72 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 let our_decided_meta_votes =
                     our_last_meta_votes.iter().filter_map(|(id, event_votes)| {
                         let vote = event_votes.last();
-                        match vote {
-                            Some(v) => if v.decision.is_some() {
+                        vote.and_then(|v| {
+                            if v.decision.is_some() {
                                 Some((id, v))
-                            } else {
-                                None
-                            },
-                            None => None,
-                        }
-                    });
-                if our_decided_meta_votes.clone().count() < self.peer_manager.all_ids().len() {
-                    None
-                } else {
-                    let mut elected_gossip_events = our_decided_meta_votes
-                        .filter_map(|(id, vote)| {
-                            if vote.decision == Some(true) {
-                                self.oldest_event_with_valid_block(id)
                             } else {
                                 None
                             }
                         })
-                        .collect::<Vec<_>>();
-                    // We sort the events by their vote to avoid ties when picking the event
+                    });
+                if our_decided_meta_votes.clone().count() < self.peer_manager.all_ids().len() {
+                    None
+                } else {
+                    let mut elected_valid_blocks = our_decided_meta_votes
+                        .filter_map(|(id, vote)| {
+                            if vote.decision == Some(true) {
+                                self.our_last_event_hash()
+                                    .and_then(|hash| self.events.get(&hash))
+                                    .and_then(|last_event| last_event.valid_blocks_carried.get(&id))
+                            } else {
+                                None
+                            }
+                        })
+                        .cloned()
+                        .collect::<Vec<(Hash, T)>>();
+                    // We sort the events by their payloads to avoid ties when picking the event
                     // with the most represented payload.
-                    // Because `max_by` guarentees that "If several elements are equally
+                    // Because `max` guarantees that "If several elements are equally
                     // maximum, the last element is returned.", this should be enough to break
                     // any tie.
-                    elected_gossip_events.sort_by(|lhs, rhs| lhs.vote().cmp(&rhs.vote()));
-
-                    let votes = elected_gossip_events
+                    elected_valid_blocks.sort_by(|(_, lhs_payload), (_, rhs_payload)| {
+                        lhs_payload.cmp(&rhs_payload)
+                    });
+                    let payloads = elected_valid_blocks
                         .iter()
-                        .map(|event| event.vote())
+                        .map(|(_hash, payload)| payload)
                         .collect::<Vec<_>>();
-                    let copied_votes = votes.clone();
-                    let winning_vote = copied_votes
+                    let copied_payloads = payloads.clone();
+                    copied_payloads
                         .iter()
-                        .max_by(|lhs_event, rhs_event| {
-                            let lhs_count = votes
+                        .max_by(|lhs_payload, rhs_payload| {
+                            let lhs_count = payloads
                                 .iter()
-                                .filter(|vote| {
-                                    vote.map(|x| x.payload()) == lhs_event.map(|x| x.payload())
-                                })
+                                .filter(|payload| lhs_payload == payload)
                                 .count();
-                            let rhs_count = votes
+                            let rhs_count = payloads
                                 .iter()
-                                .filter(|vote| {
-                                    vote.map(|x| x.payload()) == rhs_event.map(|x| x.payload())
-                                })
+                                .filter(|payload| rhs_payload == payload)
                                 .count();
                             lhs_count.cmp(&rhs_count)
                         })
-                        .unwrap_or(&None);
-                    let votes = elected_gossip_events
-                        .iter()
-                        .flat_map(|event| event.valid_blocks_carried.clone())
-                        .map(|hash| &self.events[&hash])
-                        .filter_map(|event| {
-                            event.vote().and_then(|iter_vote| {
-                                winning_vote.and_then(|win_vote| {
-                                    if iter_vote.payload() == win_vote.payload() {
-                                        Some((event.creator().clone(), iter_vote.clone()))
-                                    } else {
-                                        None
-                                    }
+                        .cloned()
+                        .and_then(|winning_payload| {
+                            let votes = self
+                                .events
+                                .iter()
+                                .filter_map(|(_hash, event)| {
+                                    event.vote().and_then(|vote| {
+                                        if vote.payload() == winning_payload {
+                                            Some((event.creator().clone(), vote.clone()))
+                                        } else {
+                                            None
+                                        }
+                                    })
                                 })
-                            })
+                                .collect();
+                            Block::new(winning_payload.clone(), &votes).ok()
                         })
-                        .collect::<BTreeMap<_, _>>();
-                    winning_vote.and_then(|vote| Block::new(vote.payload().clone(), &votes).ok())
                 }
             })
     }
@@ -741,30 +733,16 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // Clear all leftover data from previous consensus
         self.round_hashes = BTreeMap::new();
         self.meta_votes = BTreeMap::new();
-        let stable_blocks_carried: BTreeSet<Hash> = self
-            .events
-            .iter()
-            .filter_map(|(hash, event)| {
-                if event.vote().map(|vote| vote.payload()) == Some(payload) {
-                    Some(*hash)
-                } else {
-                    None
-                }
-            })
-            .collect();
         self.events.iter_mut().for_each(|(_hash, event)| {
             event.observations = BTreeSet::new();
-            let stable_blocks_carried = event
+            let new_valid_blocks = event
                 .valid_blocks_carried
-                .iter()
-                .filter(|hash| stable_blocks_carried.contains(&hash))
-                .cloned()
-                .collect::<BTreeSet<Hash>>();
-            event.valid_blocks_carried = event
-                .valid_blocks_carried
-                .difference(&stable_blocks_carried)
-                .cloned()
+                .clone()
+                .into_iter()
+                .filter(|(_peer, (_hash, this_payload))| payload != this_payload)
                 .collect();
+
+            event.valid_blocks_carried = new_valid_blocks;
         });
     }
 
@@ -780,18 +758,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     .map(|round_hash| (peer_id.clone(), vec![round_hash]))
             })
             .collect();
-        // Start from the oldest event with a valid block considering all creators' events.
-        let all_oldest_events_with_valid_block = self
-            .peer_manager
-            .all_ids()
-            .iter()
-            .filter_map(|peer_id| self.oldest_event_with_valid_block(peer_id).map(Event::hash))
-            .cloned()
-            .collect::<BTreeSet<_>>();
         let events_hashes = self
             .events_order
             .iter()
-            .skip_while(|hash| !all_oldest_events_with_valid_block.contains(hash))
+            // Start from the oldest event with a valid block considering all creators' events.
+            .skip_while(|hash| {
+                self.events.get(&hash).map_or(true, |event| event.valid_blocks_carried.is_empty())
+            })
             .cloned()
             .collect::<Vec<_>>();
         for event_hash in &events_hashes {
@@ -800,10 +773,14 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Ok(())
     }
 
-    // Returns whether event X can strongly see the event Y.
-    fn does_strongly_see(&self, x: &Event<T, S::PublicId>, y: &Event<T, S::PublicId>) -> bool {
-        let count = y
-            .first_descendants
+    // Returns the number of peers through which there is a directed path in the gossip graph
+    // between event X and event Y.
+    fn n_peers_with_directed_paths(
+        &self,
+        x: &Event<T, S::PublicId>,
+        y: &Event<T, S::PublicId>,
+    ) -> usize {
+        y.first_descendants
             .iter()
             .filter(|(peer_id, descendant)| {
                 x.last_ancestors
@@ -811,9 +788,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     .map(|last_ancestor| last_ancestor >= *descendant)
                     .unwrap_or(false)
             })
-            .count();
+            .count()
+    }
 
-        self.peer_manager.is_super_majority(count)
+    // Returns whether event X can strongly see the event Y.
+    fn does_strongly_see(&self, x: &Event<T, S::PublicId>, y: &Event<T, S::PublicId>) -> bool {
+        self.peer_manager
+            .is_super_majority(self.n_peers_with_directed_paths(x, y))
     }
 
     // Constructs a sync event to prove receipt of a `Request` or `Response` (depending on the value
