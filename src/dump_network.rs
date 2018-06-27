@@ -131,7 +131,7 @@ fn write_evaluates<T: NetworkEvent, S: SecretId>(
             write!(f, "\n{:?}", event_payload)?;
         }
         if let Some(event_meta_votes) = meta_votes.get(event_hash) {
-            if event_meta_votes.len() == initial_events.len() {
+            if event_meta_votes.len() >= initial_events.len() {
                 let mut peer_ids: Vec<&S::PublicId> = event_meta_votes.keys().collect();
                 peer_ids.sort_by(|lhs, rhs| first_char(lhs).cmp(&first_char(rhs)));
 
