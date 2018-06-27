@@ -45,8 +45,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let responsiveness_threshold = (genesis_group.len() as f64).log2().ceil() as usize;
 
         let mut peer_manager = PeerManager::new(our_id);
-        for peer_id in genesis_group.iter() {
+        let mut round_hashes = BTreeMap::new();
+        let initial_hash = Hash::from([].as_ref());
+        for peer_id in genesis_group.iter().cloned() {
             peer_manager.add_peer(peer_id.clone());
+            let round_hash = RoundHash::new(&peer_id, initial_hash)?;
+            let _ = round_hashes.insert(peer_id, vec![round_hash]);
         }
 
         let mut parsec = Parsec {
@@ -55,7 +59,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             events_order: vec![],
             consensused_blocks: VecDeque::new(),
             meta_votes: BTreeMap::new(),
-            round_hashes: BTreeMap::new(),
+            round_hashes,
             responsiveness_threshold,
         };
         let initial_event = Event::new_initial(parsec.peer_manager.our_id())?;
