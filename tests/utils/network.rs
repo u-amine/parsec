@@ -52,6 +52,17 @@ impl Network {
             .all(|peer| peer.blocks_payloads() == payloads)
     }
 
+    /// Dumps the gossip graphs for each peer to a file
+    #[cfg(feature = "dump-graphs")]
+    pub fn dump_graphs(&self) {
+        let peers = self
+            .peers
+            .iter()
+            .map(|peer| (&peer.id, &peer.parsec))
+            .collect::<Vec<_>>();
+        parsec::dump_graphs(&peers);
+    }
+
     fn peer(&mut self, id: &PeerId) -> &Peer {
         unwrap!(self.peers.iter().find(|peer| peer.id == *id))
     }
@@ -84,11 +95,6 @@ impl Network {
 #[cfg(feature = "dump-graphs")]
 impl Drop for Network {
     fn drop(&mut self) {
-        let peers = self
-            .peers
-            .iter()
-            .map(|peer| (&peer.id, &peer.parsec))
-            .collect::<Vec<_>>();
-        parsec::dump_graphs(&peers);
+        self.dump_graphs();
     }
 }

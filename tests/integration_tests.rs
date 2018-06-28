@@ -57,15 +57,19 @@ fn minimal_network() {
         unwrap!(peer.parsec.vote_for(env.transactions[0].clone()));
     }
 
-    let mut consensued_peers = BTreeSet::new();
+    let mut consensused_peers = BTreeSet::new();
     utils::loop_with_max_iterations(100, || {
         env.network.send_random_syncs(&mut env.rng);
         for peer in &mut env.network.peers {
             if peer.parsec.poll().is_some() {
-                let _ = consensued_peers.insert(peer.id);
+                let _ = consensused_peers.insert(peer.id);
             }
         }
-        consensued_peers.len() == num_peers
+
+        #[cfg(feature = "dump-graphs")]
+        env.network.dump_graphs();
+
+        consensused_peers.len() == num_peers
     });
 
     for peer in &env.network.peers {
