@@ -46,7 +46,6 @@ use self::utils::{Environment, PeerCount, TransactionCount};
 use rand::Rng;
 use std::collections::BTreeSet;
 
-#[ignore]
 #[test]
 fn minimal_network() {
     // 4 is the minimal network size for which the super majority is less than it.
