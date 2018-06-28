@@ -11,8 +11,6 @@ use parsec;
 use parsec::SecretId;
 use rand::Rng;
 use std::collections::BTreeSet;
-#[cfg(feature = "dump-graphs")]
-use std::thread;
 use utils::{FullId, Peer, PeerId};
 
 pub struct Network {
@@ -86,13 +84,11 @@ impl Network {
 #[cfg(feature = "dump-graphs")]
 impl Drop for Network {
     fn drop(&mut self) {
-        if thread::panicking() {
-            let peers = self
-                .peers
-                .iter()
-                .map(|peer| (&peer.id, &peer.parsec))
-                .collect::<Vec<_>>();
-            parsec::dump_graphs(&peers);
-        }
+        let peers = self
+            .peers
+            .iter()
+            .map(|peer| (&peer.id, &peer.parsec))
+            .collect::<Vec<_>>();
+        parsec::dump_graphs(&peers);
     }
 }
