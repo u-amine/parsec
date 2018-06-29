@@ -66,7 +66,6 @@ fn minimal_network() {
             }
         }
 
-        #[cfg(feature = "dump-graphs")]
         env.network.dump_graphs();
 
         consensused_peers.len() == num_peers

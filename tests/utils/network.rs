@@ -62,6 +62,10 @@ impl Network {
             .collect::<Vec<_>>();
         parsec::dump_graphs(&peers);
     }
+    #[cfg(not(feature = "dump-graphs"))]
+    pub fn dump_graphs(&self) {
+        ()
+    }
 
     fn peer(&mut self, id: &PeerId) -> &Peer {
         unwrap!(self.peers.iter().find(|peer| peer.id == *id))
@@ -92,7 +96,6 @@ impl Network {
     }
 }
 
-#[cfg(feature = "dump-graphs")]
 impl Drop for Network {
     fn drop(&mut self) {
         self.dump_graphs();
