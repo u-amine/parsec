@@ -535,7 +535,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
 
         // If we've already waited long enough, get the aux value of the highest ranking leader.
-        if self.stop_waiting(peer_id, round, event) {
+        if self.stop_waiting(round) {
             for (_, creator) in &peer_id_hashes[1..] {
                 if let Some(creator_event_index) = event.last_ancestors.get(creator) {
                     if let Some(aux_value) =
@@ -570,15 +570,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     // Skips back through our events until we've passed `responsiveness_threshold` response events
-    // and sees if we were waiting for this coin toss result then too.  If so, returns `true`.
-    fn stop_waiting(
-        &self,
-        peer_id: &S::PublicId,
-        round: usize,
-        event: &Event<T, S::PublicId>,
-    ) -> bool {
+    // and sees if we had our own `aux_value` set at this round and step.  If so, returns `true`.
+    fn stop_waiting(&self, round: usize) -> bool {
+        let mut event_hash = self
+            .peer_manager
+            .last_event_hash(self.peer_manager.our_id().public_id());
         let mut response_count = 0;
-        let mut event_hash = event.self_parent();
         loop {
             if let Some(evnt) = event_hash.and_then(|hash| self.events.get(hash)) {
                 if evnt.is_response() {
@@ -598,12 +595,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         };
         self.meta_votes
             .get(&hash)
-            .and_then(|meta_votes| meta_votes.get(peer_id))
+            .and_then(|meta_votes| meta_votes.get(self.peer_manager.our_id().public_id()))
             .map_or(false, |event_votes| {
-                // If we're waiting for a coin toss result, `estimates` is empty, and for that meta
-                // vote, the round has already been incremented by 1.
-                event_votes.last().map_or(false, |meta_vote| {
-                    meta_vote.estimates.is_empty() && meta_vote.round == round + 1
+                event_votes.iter().any(|meta_vote| {
+                    meta_vote.round == round
+                        && meta_vote.step == Step::GenuineFlip
+                        && meta_vote.aux_value.is_some()
                 })
             })
     }
