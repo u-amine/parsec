@@ -564,19 +564,26 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         event: &Event<T, S::PublicId>,
     ) -> bool {
         let mut response_count = 0;
-        let mut event_hash = *event.hash();
-        while response_count < self.responsiveness_threshold {
-            if let Some(evnt) = self.self_parent(event) {
+        let mut event_hash = event.self_parent();
+        loop {
+            if let Some(evnt) = event_hash.and_then(|hash| self.events.get(hash)) {
                 if evnt.is_response() {
                     response_count += 1;
-                    event_hash = *evnt.hash();
+                    if response_count == self.responsiveness_threshold {
+                        break;
+                    }
                 }
+                event_hash = evnt.self_parent();
             } else {
                 return false;
             }
         }
+        let hash = match event_hash {
+            Some(hash) => hash,
+            None => return false, // This should be unreachable.
+        };
         self.meta_votes
-            .get(&event_hash)
+            .get(&hash)
             .and_then(|meta_votes| meta_votes.get(peer_id))
             .map_or(false, |event_votes| {
                 // If we're waiting for a coin toss result, `estimates` is empty, and for that meta
