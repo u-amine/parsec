@@ -31,6 +31,8 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     events_order: Vec<Hash>,
     // Consensused network events that have not been returned via `poll()` yet.
     consensused_blocks: VecDeque<Block<T, S::PublicId>>,
+    // Hash of all payloads that were consensused ever
+    consensus_history: Vec<Hash>,
     // The meta votes of the events.
     meta_votes: BTreeMap<Hash, BTreeMap<S::PublicId, Vec<MetaVote>>>,
     // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
@@ -58,6 +60,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             events: BTreeMap::new(),
             events_order: vec![],
             consensused_blocks: VecDeque::new(),
+            consensus_history: vec![],
             meta_votes: BTreeMap::new(),
             round_hashes,
             responsiveness_threshold,
@@ -225,6 +228,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         if let Some(block) = self.next_stable_block() {
             self.clear_consensus_data(block.payload());
             let block_hash = Hash::from(serialise(&block)?.as_slice());
+            let payload_hash = Hash::from(serialise(block.payload())?.as_slice());
+            self.consensus_history.push(payload_hash);
             self.consensused_blocks.push_back(block);
             self.restart_consensus(&block_hash)?;
         }
@@ -363,6 +368,15 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         event: &Event<T, S::PublicId>,
         payload: &Option<&T>,
     ) -> usize {
+        let payload_already_reached_consensus = self.consensus_history.iter().any(|payload_hash| {
+            Some(*payload_hash) == payload.and_then(|payload| {
+                let serialised = serialise(&payload).ok();
+                serialised.map(|bytes| Hash::from(bytes.as_slice()))
+            })
+        });
+        if payload_already_reached_consensus {
+            return 0;
+        }
         let my_payload = if event.vote().map(|vote| vote.payload()) == *payload {
             1
         } else {
