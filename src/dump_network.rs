@@ -162,11 +162,15 @@ fn write_evaluates<T: NetworkEvent, S: SecretId>(
                 event.hash()
             )?;
         }
-        for (event_hash, _payload) in event.valid_blocks_carried.values() {
+        for (event_hash, payload) in event.valid_blocks_carried.values() {
+            let that_event = &gossip_graph[event_hash];
             writeln!(
                 f,
-                " \"{:?}\" [shape=rectangle, style=filled, fillcolor=crimson]",
-                event_hash
+                " \"{:?}\" [shape=rectangle, style=filled, fillcolor=crimson, label=\"{}_{}\n{:?}\"]",
+                event_hash,
+                first_char(that_event.creator()).unwrap_or('Z'),
+                that_event.index.unwrap_or(0),
+                payload
             )?;
         }
         if meta_votes.get(event_hash).is_some() {
