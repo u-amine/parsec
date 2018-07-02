@@ -644,7 +644,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     // Returns the set of meta votes held by all peers other than the creator of `event` which are
-    // votes by `peer_id` since the given `round` and `step`.
+    // votes by `peer_id`.
     fn collect_other_meta_votes(
         &self,
         peer_id: &S::PublicId,

@@ -114,13 +114,17 @@ impl MetaVote {
         coin_tosses: &BTreeMap<usize, bool>,
         total_peers: usize,
     ) -> Vec<Self> {
-        let mut next = parent
-            .iter()
-            .map(|meta_vote| {
-                let counts = MetaVoteCounts::new(meta_vote, others, total_peers);
-                Self::update_meta_vote(meta_vote, counts, &coin_tosses)
-            })
-            .collect::<Vec<_>>();
+        let mut next = Vec::new();
+        for vote in parent {
+            let counts = MetaVoteCounts::new(vote, others, total_peers);
+            let updated = Self::update_meta_vote(vote, counts, &coin_tosses);
+            let decided = updated.decision.is_some();
+            next.push(updated);
+            if decided {
+                break;
+            }
+        }
+
         while let Some(next_meta_vote) =
             Self::next_meta_vote(next.last(), others, &coin_tosses, total_peers)
         {
