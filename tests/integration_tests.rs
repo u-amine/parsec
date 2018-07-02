@@ -76,7 +76,6 @@ fn minimal_network() {
     }
 }
 
-#[ignore]
 #[test]
 fn multiple_votes_before_gossip() {
     let num_transactions = 10;
@@ -105,7 +104,6 @@ fn multiple_votes_before_gossip() {
     assert!(env.network.blocks_all_in_sequence());
 }
 
-#[ignore]
 #[test]
 fn duplicate_votes_before_gossip() {
     let mut env = Environment::new(&PeerCount(4), &TransactionCount(1), None);
@@ -130,7 +128,6 @@ fn duplicate_votes_before_gossip() {
     assert!(env.network.peers.iter().all(|peer| peer.blocks.len() == 1));
 }
 
-#[ignore]
 #[test]
 fn faulty_third_never_gossip() {
     let num_peers = 10;
@@ -155,7 +152,7 @@ fn faulty_third_never_gossip() {
     }
 
     // Gossip to let all remaining peers reach consensus on all the blocks.
-    utils::loop_with_max_iterations(100, || {
+    utils::loop_with_max_iterations(200, || {
         env.network.send_random_syncs(&mut env.rng);
         for peer in &mut env.network.peers {
             peer.poll();
@@ -169,7 +166,6 @@ fn faulty_third_never_gossip() {
     assert!(env.network.blocks_all_in_sequence());
 }
 
-#[ignore]
 #[test]
 fn faulty_third_terminate_concurrently() {
     let num_peers = 10;
@@ -190,7 +186,7 @@ fn faulty_third_terminate_concurrently() {
     }
 
     // While gossiping, at a single random point remove all faulty peers in one go.
-    utils::loop_with_max_iterations(100, || {
+    utils::loop_with_max_iterations(200, || {
         env.network.send_random_syncs(&mut env.rng);
         for peer in &mut env.network.peers {
             peer.poll();
@@ -217,7 +213,6 @@ fn faulty_third_terminate_concurrently() {
     assert!(env.network.blocks_all_in_sequence());
 }
 
-#[ignore]
 #[test]
 fn faulty_third_terminate_at_random_points() {
     let num_peers = 10;
@@ -239,7 +234,7 @@ fn faulty_third_terminate_at_random_points() {
 
     // While gossiping, at random points remove a single faulty peer, up to a maximum of
     // `num_faulty` peers removed in total.
-    utils::loop_with_max_iterations(100, || {
+    utils::loop_with_max_iterations(200, || {
         env.network.send_random_syncs(&mut env.rng);
         for peer in &mut env.network.peers {
             peer.poll();
