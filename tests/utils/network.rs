@@ -8,10 +8,10 @@
 
 #[cfg(feature = "dump-graphs")]
 use parsec;
-use parsec::SecretId;
+use parsec::mock::{self, PeerId};
 use rand::Rng;
 use std::collections::BTreeSet;
-use utils::{FullId, Peer, PeerId};
+use utils::Peer;
 
 pub struct Network {
     pub peers: Vec<Peer>,
@@ -20,19 +20,23 @@ pub struct Network {
 impl Network {
     /// Create test network with the given initial number of peers (the genesis group).
     pub fn new(count: usize) -> Self {
-        let all_ids: Vec<_> = (0..count).map(|_| FullId::new()).collect();
-        let genesis_group: BTreeSet<_> = all_ids.iter().map(FullId::public_id).cloned().collect();
-        let peers = all_ids
-            .into_iter()
-            .map(|id| Peer::new(id, &genesis_group))
-            .collect::<Vec<_>>();
+        let all_ids = mock::create_ids(count);
+        let genesis_group = all_ids.iter().cloned().collect::<BTreeSet<_>>();
+        let peers = genesis_group
+            .iter()
+            .map(|id| Peer::new(id.clone(), &genesis_group))
+            .collect();
         Network { peers }
     }
 
     /// For each node of `sender_id`, which sends a parsec request to a randomly chosen peer of
     /// `receiver_id`, which causes `receiver_id` node to reply with a parsec response.
     pub fn send_random_syncs<R: Rng>(&mut self, rng: &mut R) {
-        let peer_ids: Vec<PeerId> = self.peers.iter().map(|peer| peer.id).collect();
+        let peer_ids = self
+            .peers
+            .iter()
+            .map(|peer| peer.id.clone())
+            .collect::<Vec<_>>();
         for sender_id in &peer_ids {
             let receiver_id = unwrap!(
                 peer_ids
@@ -79,7 +83,7 @@ impl Network {
         let request = unwrap!(
             self.peer(sender_id)
                 .parsec
-                .create_gossip(Some(*receiver_id))
+                .create_gossip(Some(receiver_id.clone()))
         );
 
         let response = unwrap!(

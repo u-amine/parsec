@@ -7,16 +7,12 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 mod environment;
-mod id;
 mod network;
 mod peer;
-mod transaction;
 
 pub use self::environment::{Environment, PeerCount, TransactionCount};
-pub use self::id::{FullId, PeerId};
 pub use self::network::Network;
 pub use self::peer::Peer;
-pub use self::transaction::Transaction;
 
 /// Runs `closure` in a loop until it returns `true` (in which case this function returns), or until
 /// it has looped `max_iterations` times (in which case it panics).
