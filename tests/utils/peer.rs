@@ -6,23 +6,23 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use parsec::{Block, Parsec, SecretId};
+use parsec::mock::{PeerId, Transaction};
+use parsec::{Block, Parsec};
 use std::collections::BTreeSet;
 use std::fmt::{self, Debug, Formatter};
-use utils::{FullId, PeerId, Transaction};
 
 pub struct Peer {
     pub id: PeerId,
-    pub parsec: Parsec<Transaction, FullId>,
+    pub parsec: Parsec<Transaction, PeerId>,
     // The blocks returned by `parsec.poll()`, held in the order in which they were returned.
     pub blocks: Vec<Block<Transaction, PeerId>>,
 }
 
 impl Peer {
-    pub fn new(full_id: FullId, genesis_group: &BTreeSet<PeerId>) -> Self {
+    pub fn new(id: PeerId, genesis_group: &BTreeSet<PeerId>) -> Self {
         Self {
-            id: *full_id.public_id(),
-            parsec: unwrap!(Parsec::new(full_id, genesis_group)),
+            id: id.clone(),
+            parsec: unwrap!(Parsec::new(id, genesis_group)),
             blocks: vec![],
         }
     }

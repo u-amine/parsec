@@ -32,22 +32,17 @@ extern crate maidsafe_utilities;
 extern crate parsec;
 extern crate rand;
 #[macro_use]
-extern crate serde_derive;
-#[macro_use]
 extern crate unwrap;
 
 use clap::{App, Arg};
 use maidsafe_utilities::SeededRng;
-use parsec::{Block, NetworkEvent, Parsec, PublicId, SecretId};
+use parsec::mock::{self, PeerId, Transaction};
+use parsec::{Block, Parsec};
 use rand::Rng;
 use std::collections::BTreeSet;
 use std::fmt::{self, Debug, Formatter};
 use std::process;
 
-const NAMES: &[&str] = &[
-    "Alice", "Bob", "Carol", "Dave", "Eric", "Fred", "Gina", "Hank", "Iris", "Judy", "Kent",
-    "Lucy", "Mike", "Nina", "Oran", "Paul", "Quin", "Rose", "Stan", "Tina",
-];
 const MIN_PEER_COUNT: usize = 2;
 const MIN_EVENT_COUNT: usize = 1;
 const MAX_EVENT_COUNT: usize = 1000;
@@ -57,48 +52,6 @@ const MAX_ITERATIONS_ARG_NAME: &str = "max-iterations";
 const SEED_ARG_NAME: &str = "seed";
 
 type Seed = [u32; 4];
-
-#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Debug)]
-struct Signature(String);
-
-#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-struct PeerId {
-    id: String,
-}
-
-impl PeerId {
-    pub fn new(id: &str) -> Self {
-        Self { id: id.to_string() }
-    }
-}
-
-impl Debug for PeerId {
-    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
-        write!(formatter, "{}", self.id)
-    }
-}
-
-impl PublicId for PeerId {
-    type Signature = Signature;
-    fn verify_signature(&self, _signature: &Self::Signature, _data: &[u8]) -> bool {
-        true
-    }
-}
-
-impl SecretId for PeerId {
-    type PublicId = PeerId;
-    fn public_id(&self) -> &Self::PublicId {
-        &self
-    }
-    fn sign_detached(&self, _data: &[u8]) -> Signature {
-        Signature(format!("of {:?}", self))
-    }
-}
-
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Debug)]
-struct Transaction(String);
-
-impl NetworkEvent for Transaction {}
 
 struct Peer {
     id: PeerId,
@@ -181,7 +134,7 @@ fn get_params() -> Params {
     let peers_info = format!(
         "must be a value between {} and {} inclusive.",
         MIN_PEER_COUNT,
-        NAMES.len()
+        mock::names_len()
     );
     let seed_info = format!(
         "should be quoted and in the form of four unsigned integers e.g. --{}=\"1, 2, 3, 4\".",
@@ -253,7 +206,9 @@ fn get_params() -> Params {
         }
     }
     match value_t!(matches.value_of(PEERS_ARG_NAME), usize) {
-        Ok(count) if count >= MIN_PEER_COUNT && count <= NAMES.len() => params.peer_count = count,
+        Ok(count) if count >= MIN_PEER_COUNT && count <= mock::names_len() => {
+            params.peer_count = count
+        }
         _ => {
             println!("'{}' {}", PEERS_ARG_NAME, peers_info);
             process::exit(-2);
@@ -292,12 +247,7 @@ fn main() {
     let params = get_params();
 
     // Set up the requested number of peers and random network events.
-    let all_ids = NAMES
-        .iter()
-        .take(params.peer_count)
-        .cloned()
-        .map(PeerId::new)
-        .collect::<Vec<_>>();
+    let all_ids = mock::create_ids(params.peer_count);
     let genesis_group = all_ids.iter().cloned().collect::<BTreeSet<_>>();
     let mut peers = genesis_group
         .iter()
@@ -308,12 +258,9 @@ fn main() {
         .seed
         .map_or_else(SeededRng::new, SeededRng::from_seed);
     println!("Using {:?}", rng);
-    let mut transactions = vec![];
-    while transactions.len() < params.event_count {
-        transactions.push(Transaction(
-            rng.gen_ascii_chars().take(5).collect::<String>(),
-        ));
-    }
+    let mut transactions = (0..params.event_count)
+        .map(|_| rng.gen())
+        .collect::<Vec<Transaction>>();
 
     for iteration in 0..params.max_iterations {
         println!("\nIteration {:03}\n=============", iteration);

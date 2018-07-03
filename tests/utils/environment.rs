@@ -7,9 +7,9 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use maidsafe_utilities::SeededRng;
+use parsec::mock::Transaction;
 use rand::Rng;
-use rust_sodium;
-use utils::{Network, Transaction};
+use utils::Network;
 
 pub struct PeerCount(pub usize);
 pub struct TransactionCount(pub usize);
@@ -35,17 +35,6 @@ impl Environment {
         } else {
             SeededRng::new()
         };
-        unwrap!(rust_sodium::init_with_rng(&mut rng));
-
-        // Reset `rng` to allow reproducible test runs.
-        //
-        // `rust_sodium::init_with_rng()` is effectively a call_once function, i.e. if
-        // `Environment::new()` is called from multiple threads as normally happens when running the
-        // full test suite, only one test's thread will actually use (and modify the state) of
-        // `rng`.  If a test in a different thread fails and we try and rerun just that test using
-        // the failing seed, the seed would be useless if we hadn't reset `rng` here, since on that
-        // run the rng _will_ be modified by `rust_sodium::init_with_rng()`.
-        rng = SeededRng::new();
 
         let transactions = (0..transaction_count.0)
             .map(|_| rng.gen())

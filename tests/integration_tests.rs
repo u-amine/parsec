@@ -29,14 +29,9 @@
     variant_size_differences
 )]
 
-#[macro_use]
-extern crate lazy_static;
 extern crate maidsafe_utilities;
 extern crate parsec;
 extern crate rand;
-extern crate rust_sodium;
-#[macro_use]
-extern crate serde_derive;
 #[macro_use]
 extern crate unwrap;
 
@@ -62,7 +57,7 @@ fn minimal_network() {
         env.network.send_random_syncs(&mut env.rng);
         for peer in &mut env.network.peers {
             if peer.parsec.poll().is_some() {
-                let _ = consensused_peers.insert(peer.id);
+                let _ = consensused_peers.insert(peer.id.clone());
             }
         }
 

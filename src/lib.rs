@@ -37,7 +37,6 @@
 extern crate maidsafe_utilities;
 #[macro_use]
 extern crate quick_error;
-#[cfg(feature = "dump-graphs")]
 extern crate rand;
 extern crate serde;
 #[macro_use]
@@ -56,6 +55,14 @@ mod parsec;
 mod peer_manager;
 mod round_hash;
 mod vote;
+
+#[doc(hidden)]
+/// **NOT FOR PRODUCTION USE**: Mock types which trivially implement the required Parsec traits.
+///
+/// This can be used to swap proper cryptographic functionality for inexpensive (in some cases
+/// no-op) replacements.  This is useful to allow tests to run quickly, but should not be used
+/// outside of testing code.
+pub mod mock;
 
 pub use block::Block;
 pub use error::Error;
