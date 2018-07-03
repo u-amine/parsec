@@ -98,6 +98,27 @@ fn multiple_votes_before_gossip() {
 }
 
 #[test]
+fn multiple_votes_during_gossip() {
+    let num_transactions = 10;
+    let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), None);
+
+    // Every peer gossips while occasionally casting a vote for a randomly-chosen transaction.
+    utils::loop_with_max_iterations(100, || {
+        env.network
+            .interleave_syncs_and_votes(&mut env.rng, &mut env.transactions);
+        for peer in &mut env.network.peers {
+            peer.poll();
+        }
+        env.network
+            .peers
+            .iter()
+            .all(|peer| peer.blocks.len() >= num_transactions)
+    });
+
+    assert!(env.network.blocks_all_in_sequence());
+}
+
+#[test]
 fn duplicate_votes_before_gossip() {
     let mut env = Environment::new(&PeerCount(4), &TransactionCount(1), None);
 
