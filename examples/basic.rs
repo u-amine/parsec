@@ -315,12 +315,4 @@ fn main() {
             );
         }
     }
-
-    #[cfg(feature = "dump-graphs")]
-    parsec::dump_graphs(
-        &peers
-            .iter()
-            .map(|peer| (&peer.id, &peer.parsec))
-            .collect::<Vec<_>>(),
-    );
 }

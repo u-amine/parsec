@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use block::Block;
-use dump_network::dump_gossip_graph;
+use dump_graph;
 use error::Error;
 use gossip::{Event, Request, Response};
 use hash::Hash;
@@ -18,7 +18,6 @@ use network_event::NetworkEvent;
 use peer_manager::PeerManager;
 use round_hash::RoundHash;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::fmt::{self, Debug, Formatter};
 
 /// The main object which manages creating and receiving gossip about network events from peers, and
 /// which provides a sequence of consensused `Block`s by applying the PARSEC algorithm.
@@ -67,6 +66,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         };
         let initial_event = Event::new_initial(parsec.peer_manager.our_id())?;
         parsec.add_initial_event(initial_event)?;
+        dump_graph::init();
         Ok(parsec)
     }
 
@@ -226,6 +226,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.set_meta_votes(event_hash)?;
         self.update_round_hashes(event_hash)?;
         if let Some(block) = self.next_stable_block() {
+            dump_graph::to_file(self.our_pub_id(), &self.events, &self.meta_votes);
             self.clear_consensus_data(block.payload());
             let block_hash = Hash::from(serialise(&block)?.as_slice());
             let payload_hash = Hash::from(serialise(block.payload())?.as_slice());
@@ -572,9 +573,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     // Skips back through our events until we've passed `responsiveness_threshold` response events
     // and sees if we had our own `aux_value` set at this round and step.  If so, returns `true`.
     fn stop_waiting(&self, round: usize) -> bool {
-        let mut event_hash = self
-            .peer_manager
-            .last_event_hash(self.peer_manager.our_id().public_id());
+        let mut event_hash = self.peer_manager.last_event_hash(self.our_pub_id());
         let mut response_count = 0;
         loop {
             if let Some(evnt) = event_hash.and_then(|hash| self.events.get(hash)) {
@@ -595,7 +594,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         };
         self.meta_votes
             .get(&hash)
-            .and_then(|meta_votes| meta_votes.get(self.peer_manager.our_id().public_id()))
+            .and_then(|meta_votes| meta_votes.get(self.our_pub_id()))
             .map_or(false, |event_votes| {
                 event_votes.iter().any(|meta_vote| {
                     meta_vote.round == round
@@ -825,7 +824,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn create_sync_event(&mut self, src: &S::PublicId, is_request: bool) -> Result<(), Error> {
         let self_parent = *self
             .peer_manager
-            .last_event_hash(self.peer_manager.our_id().public_id())
+            .last_event_hash(self.our_pub_id())
             .ok_or(Error::Logic)?;
         let other_parent = *self.peer_manager.last_event_hash(src).ok_or(Error::Logic)?;
         let sync_event = if is_request {
@@ -874,8 +873,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 }
 
-impl<T: NetworkEvent, S: SecretId> Debug for Parsec<T, S> {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        dump_gossip_graph::<T, S>(f, &self.events, &self.meta_votes)
+impl<T: NetworkEvent, S: SecretId> Drop for Parsec<T, S> {
+    fn drop(&mut self) {
+        if ::std::thread::panicking() {
+            dump_graph::to_file(self.our_pub_id(), &self.events, &self.meta_votes);
+        }
     }
 }

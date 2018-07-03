@@ -61,8 +61,6 @@ fn minimal_network() {
             }
         }
 
-        env.network.dump_graphs();
-
         consensused_peers.len() == num_peers
     });
 
