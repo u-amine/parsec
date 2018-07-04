@@ -34,6 +34,9 @@
     variant_size_differences
 )]
 
+#[cfg(feature = "dump-graphs")]
+#[macro_use]
+extern crate lazy_static;
 extern crate maidsafe_utilities;
 #[macro_use]
 extern crate quick_error;
@@ -44,7 +47,7 @@ extern crate serde_derive;
 extern crate tiny_keccak;
 
 mod block;
-mod dump_network;
+mod dump_graph;
 mod error;
 mod gossip;
 mod hash;
@@ -71,34 +74,3 @@ pub use id::{Proof, PublicId, SecretId};
 pub use network_event::NetworkEvent;
 pub use parsec::Parsec;
 pub use vote::Vote;
-
-/// This function will dump the graphs from all provided peers in dot format to a random folder in
-/// the system's temp dir.  The location of this folder will be printed to stdout.  The function
-/// will never panic, and hence is suitable for use in creating these files after a thread has
-/// already panicked, e.g. in the case of a test failure.
-#[cfg(feature = "dump-graphs")]
-pub fn dump_graphs<T: NetworkEvent, S: SecretId>(peers: &[(&S::PublicId, &Parsec<T, S>)]) {
-    use rand::Rng;
-    use std::env;
-    use std::fs::{self, File};
-    use std::io::Write;
-
-    let folder_name = rand::thread_rng()
-        .gen_ascii_chars()
-        .take(6)
-        .collect::<String>();
-    let dir = env::temp_dir().join("parsec_graphs").join(folder_name);
-    if let Err(error) = fs::create_dir_all(&dir) {
-        println!("Failed to create folder for dot files: {:?}", error);
-    } else {
-        println!("Writing dot files in {:?}", dir);
-    }
-    for (peer_id, parsec) in peers {
-        let file_path = dir.join(format!("{:?}.dot", peer_id));
-        if let Ok(mut file) = File::create(&file_path) {
-            let _ = write!(file, "{:?}", parsec);
-        } else {
-            println!("Failed to create {:?}", file_path);
-        }
-    }
-}
