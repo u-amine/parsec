@@ -596,11 +596,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .get(&hash)
             .and_then(|meta_votes| meta_votes.get(self.our_pub_id()))
             .map_or(false, |event_votes| {
-                event_votes.iter().any(|meta_vote| {
-                    meta_vote.round == round
-                        && meta_vote.step == Step::GenuineFlip
-                        && meta_vote.aux_value.is_some()
-                })
+                event_votes
+                    .iter()
+                    .any(|meta_vote| meta_vote.round == round && meta_vote.aux_value.is_some())
             })
     }
 
