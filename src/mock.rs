@@ -9,7 +9,7 @@
 use id::{PublicId, SecretId};
 use network_event::NetworkEvent;
 use rand::{Rand, Rng};
-use std::fmt::{self, Debug, Formatter};
+use std::fmt::{self, Debug, Display, Formatter};
 
 const NAMES: &[&str] = &[
     "Alice", "Bob", "Carol", "Dave", "Eric", "Fred", "Gina", "Hank", "Iris", "Judy", "Kent",
@@ -69,9 +69,15 @@ impl Transaction {
 
 impl NetworkEvent for Transaction {}
 
-impl Debug for Transaction {
+impl Display for Transaction {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         write!(formatter, "Transaction({})", self.0)
+    }
+}
+
+impl Debug for Transaction {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        write!(formatter, "{}", self.0)
     }
 }
 

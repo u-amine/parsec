@@ -40,7 +40,6 @@ use parsec::mock::{self, PeerId, Transaction};
 use parsec::{Block, Parsec};
 use rand::Rng;
 use std::collections::BTreeSet;
-use std::fmt::{self, Debug, Formatter};
 use std::process;
 
 const MIN_PEER_COUNT: usize = 2;
@@ -48,7 +47,7 @@ const MIN_EVENT_COUNT: usize = 1;
 const MAX_EVENT_COUNT: usize = 1000;
 const PEERS_ARG_NAME: &str = "peers";
 const EVENTS_ARG_NAME: &str = "events";
-const MAX_ITERATIONS_ARG_NAME: &str = "max-iterations";
+const MAX_ROUNDS_ARG_NAME: &str = "max-rounds";
 const SEED_ARG_NAME: &str = "seed";
 
 type Seed = [u32; 4];
@@ -88,15 +87,9 @@ impl Peer {
             self.blocks.push(block)
         }
     }
-}
 
-impl Debug for Peer {
-    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
-        write!(
-            formatter,
-            "{:?}: Votes: {:?}, Blocks: {:?}",
-            self.id, self.transactions, self.blocks
-        )
+    fn display_id(&self) -> String {
+        format!("{:?}: ", self.id)
     }
 }
 
@@ -104,7 +97,7 @@ impl Debug for Peer {
 struct Params {
     event_count: usize,
     peer_count: usize,
-    max_iterations: usize,
+    max_rounds: usize,
     seed: Option<Seed>,
 }
 
@@ -171,15 +164,15 @@ fn get_params() -> Params {
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(MAX_ITERATIONS_ARG_NAME)
-                .short("i")
-                .long(MAX_ITERATIONS_ARG_NAME)
+            Arg::with_name(MAX_ROUNDS_ARG_NAME)
+                .short("r")
+                .long(MAX_ROUNDS_ARG_NAME)
                 .default_value("1000")
                 .value_name("COUNT")
                 .help(
-                    "Max. number of iterations of gossiping between peers in the network.  If \
-                     consensus on all events is achieved by all peers in fewer iterations than \
-                     this, the example will exit.",
+                    "Max. number of rounds of gossip between peers in the network.  If consensus \
+                     on all events is achieved by all peers in fewer rounds than this, the example \
+                     will exit.",
                 )
                 .takes_value(true),
         )
@@ -214,12 +207,12 @@ fn get_params() -> Params {
             process::exit(-2);
         }
     }
-    match value_t!(matches.value_of(MAX_ITERATIONS_ARG_NAME), usize) {
-        Ok(count) => params.max_iterations = count,
+    match value_t!(matches.value_of(MAX_ROUNDS_ARG_NAME), usize) {
+        Ok(count) => params.max_rounds = count,
         _ => {
             println!(
                 "Failed to parse '{}' as a positive integer.",
-                MAX_ITERATIONS_ARG_NAME
+                MAX_ROUNDS_ARG_NAME
             );
             process::exit(-3);
         }
@@ -262,8 +255,8 @@ fn main() {
         .map(|_| rng.gen())
         .collect::<Vec<Transaction>>();
 
-    for iteration in 0..params.max_iterations {
-        println!("\nIteration {:03}\n=============", iteration);
+    for round in 0..params.max_rounds {
+        println!("\nGossip Round {:03}\n================", round);
 
         rng.shuffle(&mut peers);
         // Each peer will send a request and handle the corresponding response.  For each peer,
@@ -299,19 +292,36 @@ fn main() {
         }
 
         peers.sort_by_key(|peer| peer.id.clone());
+        println!("Votes:");
+        let max_width = unwrap!(peers.iter().map(|peer| peer.display_id().len()).max());
         for peer in &peers {
-            println!("{:?}", peer);
+            println!(
+                "  {:2$}{:?}",
+                peer.display_id(),
+                peer.transactions,
+                max_width
+            );
         }
+        println!("Stable Blocks:");
+        for peer in &peers {
+            println!(
+                "  {:2$}{:?}",
+                peer.display_id(),
+                peer.blocks.iter().map(Block::payload).collect::<Vec<_>>(),
+                max_width
+            );
+        }
+        println!();
 
         if peers
             .iter()
             .all(|peer| peer.blocks.len() == params.event_count)
         {
             break;
-        } else if iteration == params.max_iterations - 1 {
+        } else if round == params.max_rounds - 1 {
             println!(
-                "\n!!! Failed to reach consensus within {} iterations... giving up !!!",
-                params.max_iterations
+                "\n!!! Failed to reach consensus within {} rounds of gossip... giving up !!!",
+                params.max_rounds
             );
         }
     }
