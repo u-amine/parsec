@@ -88,6 +88,10 @@ impl Peer {
         }
     }
 
+    fn blocks_payloads(&self) -> Vec<&Transaction> {
+        self.blocks.iter().map(Block::payload).collect::<Vec<_>>()
+    }
+
     fn display_id(&self) -> String {
         format!("{:?}: ", self.id)
     }
@@ -307,11 +311,24 @@ fn main() {
             println!(
                 "  {:2$}{:?}",
                 peer.display_id(),
-                peer.blocks.iter().map(Block::payload).collect::<Vec<_>>(),
+                peer.blocks_payloads(),
                 max_width
             );
         }
         println!();
+
+        peers.sort_by_key(|peer| usize::max_value() - peer.blocks.len());
+        let mut payloads = peers[0].blocks_payloads();
+        for peer in peers.iter().skip(1) {
+            payloads.truncate(peer.blocks.len());
+            if peer.blocks_payloads() != payloads {
+                println!(
+                    "\n!!! {:?} and {:?} have failed to agree on stable block order !!!",
+                    peers[0].id, peer.id
+                );
+                return;
+            }
+        }
 
         if peers
             .iter()
