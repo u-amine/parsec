@@ -166,7 +166,7 @@ fn faulty_third_never_gossip() {
     }
 
     // Gossip to let all remaining peers reach consensus on all the blocks.
-    utils::loop_with_max_iterations(200, || {
+    utils::loop_with_max_iterations(100, || {
         env.network.send_random_syncs(&mut env.rng);
         for peer in &mut env.network.peers {
             peer.poll();
@@ -200,7 +200,7 @@ fn faulty_third_terminate_concurrently() {
     }
 
     // While gossiping, at a single random point remove all faulty peers in one go.
-    utils::loop_with_max_iterations(200, || {
+    utils::loop_with_max_iterations(100, || {
         env.network.send_random_syncs(&mut env.rng);
         for peer in &mut env.network.peers {
             peer.poll();
@@ -248,7 +248,7 @@ fn faulty_third_terminate_at_random_points() {
 
     // While gossiping, at random points remove a single faulty peer, up to a maximum of
     // `num_faulty` peers removed in total.
-    utils::loop_with_max_iterations(200, || {
+    utils::loop_with_max_iterations(100, || {
         env.network.send_random_syncs(&mut env.rng);
         for peer in &mut env.network.peers {
             peer.poll();
