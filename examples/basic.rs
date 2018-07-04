@@ -199,7 +199,7 @@ fn get_params() -> Params {
         }
         _ => {
             println!("'{}' {}", EVENTS_ARG_NAME, events_info);
-            process::exit(-1);
+            process::exit(3);
         }
     }
     match value_t!(matches.value_of(PEERS_ARG_NAME), usize) {
@@ -208,7 +208,7 @@ fn get_params() -> Params {
         }
         _ => {
             println!("'{}' {}", PEERS_ARG_NAME, peers_info);
-            process::exit(-2);
+            process::exit(4);
         }
     }
     match value_t!(matches.value_of(MAX_ROUNDS_ARG_NAME), usize) {
@@ -218,7 +218,7 @@ fn get_params() -> Params {
                 "Failed to parse '{}' as a positive integer.",
                 MAX_ROUNDS_ARG_NAME
             );
-            process::exit(-3);
+            process::exit(5);
         }
     }
     params.seed = matches
@@ -227,7 +227,7 @@ fn get_params() -> Params {
             Ok(seed) => seed,
             Err(()) => {
                 println!("'{}' {}", SEED_ARG_NAME, seed_info);
-                process::exit(-3);
+                process::exit(6);
             }
         });
 
@@ -326,7 +326,7 @@ fn main() {
                     "\n!!! {:?} and {:?} have failed to agree on stable block order !!!",
                     peers[0].id, peer.id
                 );
-                return;
+                process::exit(7);
             }
         }
 
@@ -340,6 +340,7 @@ fn main() {
                 "\n!!! Failed to reach consensus within {} rounds of gossip... giving up !!!",
                 params.max_rounds
             );
+            process::exit(8);
         }
     }
 }
