@@ -98,6 +98,27 @@ fn multiple_votes_before_gossip() {
 }
 
 #[test]
+fn multiple_votes_during_gossip() {
+    let num_transactions = 10;
+    let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), None);
+
+    // Every peer gossips while occasionally casting a vote for a randomly-chosen transaction.
+    utils::loop_with_max_iterations(100, || {
+        env.network
+            .interleave_syncs_and_votes(&mut env.rng, &mut env.transactions);
+        for peer in &mut env.network.peers {
+            peer.poll();
+        }
+        env.network
+            .peers
+            .iter()
+            .all(|peer| peer.blocks.len() >= num_transactions)
+    });
+
+    assert!(env.network.blocks_all_in_sequence());
+}
+
+#[test]
 fn duplicate_votes_before_gossip() {
     let mut env = Environment::new(&PeerCount(4), &TransactionCount(1), None);
 
@@ -145,7 +166,7 @@ fn faulty_third_never_gossip() {
     }
 
     // Gossip to let all remaining peers reach consensus on all the blocks.
-    utils::loop_with_max_iterations(200, || {
+    utils::loop_with_max_iterations(100, || {
         env.network.send_random_syncs(&mut env.rng);
         for peer in &mut env.network.peers {
             peer.poll();
@@ -179,7 +200,7 @@ fn faulty_third_terminate_concurrently() {
     }
 
     // While gossiping, at a single random point remove all faulty peers in one go.
-    utils::loop_with_max_iterations(200, || {
+    utils::loop_with_max_iterations(100, || {
         env.network.send_random_syncs(&mut env.rng);
         for peer in &mut env.network.peers {
             peer.poll();
@@ -227,7 +248,7 @@ fn faulty_third_terminate_at_random_points() {
 
     // While gossiping, at random points remove a single faulty peer, up to a maximum of
     // `num_faulty` peers removed in total.
-    utils::loop_with_max_iterations(200, || {
+    utils::loop_with_max_iterations(100, || {
         env.network.send_random_syncs(&mut env.rng);
         for peer in &mut env.network.peers {
             peer.poll();

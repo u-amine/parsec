@@ -27,6 +27,15 @@ impl Peer {
         }
     }
 
+    pub fn vote_for_first_not_already_voted_for(&mut self, transactions: &[Transaction]) {
+        for transaction in transactions {
+            if !self.parsec.have_voted_for(transaction) {
+                unwrap!(self.parsec.vote_for(transaction.clone()));
+                break;
+            }
+        }
+    }
+
     pub fn poll(&mut self) {
         while let Some(block) = self.parsec.poll() {
             self.blocks.push(block)
@@ -34,12 +43,8 @@ impl Peer {
     }
 
     // Returns the payloads of `self.blocks` in the order in which they were returned by `poll()`.
-    pub fn blocks_payloads(&self) -> Vec<Transaction> {
-        self.blocks
-            .iter()
-            .map(Block::payload)
-            .cloned()
-            .collect::<Vec<_>>()
+    pub fn blocks_payloads(&self) -> Vec<&Transaction> {
+        self.blocks.iter().map(Block::payload).collect()
     }
 }
 

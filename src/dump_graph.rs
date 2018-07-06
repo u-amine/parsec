@@ -230,17 +230,27 @@ mod detail {
         initial_events: &[Hash],
     ) -> io::Result<()> {
         for (event_hash, event) in gossip_graph.iter() {
-            // Write the label
-            write!(writer, " \"{:?}\" ", event.hash())?;
+            write!(writer, " \"{:?}\" [", event.hash())?;
+            if meta_votes.contains_key(event_hash) {
+                write!(writer, " shape=rectangle, ")?;
+            }
             write!(
                 writer,
-                " [label=\"{}_{}",
+                "fillcolor=white, label=\"{}_{}",
                 first_char(event.creator()).unwrap_or('E'),
                 event.index.unwrap_or(0)
             )?;
+
             if let Some(event_payload) = event.vote().map(|vote| vote.payload()) {
                 write!(writer, "\n{:?}", event_payload)?;
             }
+
+            // Write the `valid_blocks_carried` if have
+            if !event.valid_blocks_carried.is_empty() {
+                write!(writer, "\n{:?}", event.valid_blocks_carried)?;
+            }
+
+            // Write the `meta_votes` if have
             if let Some(event_meta_votes) = meta_votes.get(event_hash) {
                 if event_meta_votes.len() >= initial_events.len() {
                     let mut peer_ids: Vec<&P> = event_meta_votes.keys().collect();
@@ -266,26 +276,18 @@ mod detail {
             }
             writeln!(writer, "\"]")?;
             // Add any styling
-            if event.vote().is_some() {
+            if !event.valid_blocks_carried.is_empty() {
+                writeln!(
+                    writer,
+                    " \"{:?}\" [shape=rectangle, style=filled, fillcolor=crimson]",
+                    event.hash()
+                )?;
+            } else if event.vote().is_some() {
                 writeln!(
                     writer,
                     " \"{:?}\" [shape=rectangle, style=filled, fillcolor=cyan]",
                     event.hash()
                 )?;
-            }
-            for (event_hash, payload) in event.valid_blocks_carried.values() {
-                let that_event = &gossip_graph[event_hash];
-                writeln!(
-                writer,
-                " \"{:?}\" [shape=rectangle, style=filled, fillcolor=crimson, label=\"{}_{}\n{:?}\"]",
-                event_hash,
-                first_char(that_event.creator()).unwrap_or('Z'),
-                that_event.index.unwrap_or(0),
-                payload
-            )?;
-            }
-            if meta_votes.get(event_hash).is_some() {
-                writeln!(writer, " \"{:?}\" [shape=rectangle]", event.hash())?;
             }
         }
 
