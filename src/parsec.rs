@@ -749,26 +749,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             if let Some(event) = self.events.get(event_hash) {
                 let id = event.creator();
                 if let Some(hashes) = self.events_with_valid_blocks.get_mut(id) {
-                    let index = hashes
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(index, hash)| {
-                            if hash == event_hash {
-                                Some(index)
-                            } else {
-                                None
-                            }
-                        })
-                        .take(1)
-                        .last();
-                    if let Some(payload_index) = index {
-                        if payload_index > 0 {
-                            for ii in (0..payload_index - 1).rev() {
-                                hashes.swap(ii, ii + 1);
-                            }
-                        }
-                    }
-                    let _ = hashes.pop_front();
+                    hashes.retain(|hash| hash != event_hash);
                 }
             }
         }
