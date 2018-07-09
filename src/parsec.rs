@@ -761,10 +761,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                         })
                         .take(1)
                         .last();
+
                     if let Some(payload_index) = index {
                         if payload_index > 0 {
-                            for ii in (0..payload_index - 1).rev() {
-                                hashes.swap(ii, ii + 1);
+                            for ii in (0..payload_index).rev() {
+                                if ii < hashes.len() - 1 {
+                                    hashes.swap(ii, ii + 1);
+                                }
                             }
                         }
                     }
