@@ -103,7 +103,7 @@ fn multiple_votes_during_gossip() {
     let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), None);
 
     // Every peer gossips while occasionally casting a vote for a randomly-chosen transaction.
-    utils::loop_with_max_iterations(100, || {
+    utils::loop_with_max_iterations(200, || {
         env.network
             .interleave_syncs_and_votes(&mut env.rng, &mut env.transactions);
         for peer in &mut env.network.peers {
