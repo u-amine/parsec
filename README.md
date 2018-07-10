@@ -19,6 +19,45 @@ To generate SVG graphs from the resulting dot files:
 dot -Tsvg *.dot -O
 ```
 
+## Implementation status:
+
+### Features already implemented
+
+- [x] Initial implementation of PARSEC
+    - Demonstrates working consensus in a static network of peers
+- [x] Integration tests
+    - Simple tests show consensus being reached in a network of small size, with all nodes simulated in a single thread
+    - Data is randomly generated to allow for soak testing
+    - Soak testing has been performed for tens of thousands of run without errors
+- [x] Generation of graphs
+    - With the feature: `dump-graphs`, a dot representation of all network communications is output
+    - The graphs are snapshots at the time each consensus decision is taken (one graph per node per consensus decision)
+    - The graphs are annotated with details of the PARSEC protocol that explain how consensus was ultimately reached
+    - An image (for instance .svg) can be obtained from the dot representation using dot
+- [x] Reproducibility
+    - In case of test failure, a seed is output. That seed can be used to reproduce the failing scenario, which helps investigate the potential issue
+- [x] Simple example
+    - A simple example was created to allow testing various scenarios
+    - The number of peers, number of votes etc. can be configured by command line arguments
+- [x] Initial documentation
+    - Early documentation of the API is available [here](https://docs.rs/parsec/0.5.0/parsec/index.html)
+
+### Upcoming features
+
+- [ ] Foolproof handling of malice
+    - Handle forks (one node sends more than one event with the same `self_parent`)
+    - Double voting (one node votes more than once for the same network event)
+    - Detection of malicious behaviour, resulting in consensus on excluding the offending peer
+- [ ] Performance
+    - Benchmark and optimise the code
+    - Perform measurements of Transactions Per Second in simulated network
+        - Use setup that can be compared with competing consensus protocols
+- [ ] Extensive tests
+    - Implement extensive tests that simulate adversarial scenarios to prove robustness outside of the "happy path"
+- [ ] Extensive documentation
+    - Documentation will be made comprehensive
+- [ ] Dynamic network membership
+
 ## License
 
 Licensed under the General Public License (GPL), version 3 ([LICENSE](LICENSE) http://www.gnu.org/licenses/gpl-3.0.en.html).
