@@ -3,17 +3,25 @@ To clone the repo, `git` must be installed.
 To compile the code and run the tests, `cargo` is required.
 To generate graphs from generated dot files, `graphviz` is necessary.
 
-To install [graphviz](https://graphviz.gitlab.io/download/) on ubuntu,
+To install [graphviz](https://graphviz.gitlab.io/download/) on Ubuntu,
 ```
 sudo apt-get install graphviz
 ```
+On other Linux platforms, look for graphviz in your favourite package manager.
+
+On MacOS, homebrew has a graphviz package:
+```
+brew install graphviz
+```
+
+On windows, you can find an installer [here](https://graphviz.gitlab.io/_pages/Download/Download_windows.html)
 
 # Run the tests
 
 From a terminal, from a directory in which you're comfortable cloning a repository, clone the PARSEC repository
 
 ```
-git clone git@github.com:maidsafe/parsec.git
+git https://github.com/maidsafe/parsec.git
 ```
 
 From the parsec repository, run the tests. Be sure to use the feature: `dump-graphs` so the tests output the graphs. Also pass in the `--nocapture` flag to the test executable so it can print the location of the graphs.
