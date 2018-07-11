@@ -14,7 +14,7 @@ On MacOS, homebrew has a graphviz package:
 brew install graphviz
 ```
 
-On windows, you can find an installer [here](https://graphviz.gitlab.io/_pages/Download/Download_windows.html)
+On Windows, you can find an installer [here](https://graphviz.gitlab.io/_pages/Download/Download_windows.html)
 
 # Run the tests
 
@@ -75,9 +75,9 @@ Now, let's open all these images with your favourite web browser:
 firefox *.svg
 ```
 
-These graphs demonstrate how each node reaches a conclusion, based on each node casting a single vote (highlighted in cyan blue). The gossip events that make that vote valid are higlighted in crimson red. The gosip events that contain special values for estimates, bin values, auxiliary values and decisions are labelled with the information needed to understand the decision process.
+These graphs demonstrate how each node reaches a conclusion, based on each node casting a single vote (highlighted in cyan blue). The gossip events that make that vote valid are highlighted in crimson red. The gossip events that contain special values for estimates, bin values, auxiliary values and decisions are labelled with the information needed to understand the decision process.
 
-Now, `test_minimal_network` is a silly example as reaching consensus on a single event is trivial. You may use the same method to explore the outcome of all other tests. `test_multiple_votes_during_gossip` is the most realistic scenario: it involves reaching consensus on the order 10 of events between 4 nodes, where the votes are cast in a random order, at random intervals by each nodes.
+Now, `test_minimal_network` is a silly example as reaching consensus on a single event is trivial. You may use the same method to explore the outcome of all other tests. `test_multiple_votes_during_gossip` is the most realistic scenario: it involves reaching consensus on the order 10 of events between 4 nodes, where the votes are cast in a random order, at random intervals by each node.
 
 # Play around
 
@@ -89,6 +89,6 @@ cargo run --release --example basic --features=dump-graphs -- --help
 
 For instance, for an example with 10 peers agreeing on the order of 5 events, run
 ```
-cargo run --release --example basic --features=dump-graphs -- -p 10 -e 5
+cargo run --release --example basic --features=dump-graphs -- -p10 -e5
 ```
 
