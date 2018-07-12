@@ -15,11 +15,7 @@ There is a basic example available in the examples folder.  This allows you to s
 cargo run --example=basic --features=dump-graphs -- --peers=5 --events=10
 ```
 
-To generate SVG graphs from the resulting dot files:
-
-```
-dot -Tsvg *.dot -O
-```
+If you have `dot` from [graphviz](https://graphviz.gitlab.io/download) available in your path, then SVG graphs will also have been generated from each of these dot files.  If not, you can copy the contents of a generated dot file into an online converter (e.g. http://viz-js.com) to view the gossip graph.
 
 ## Detailed tutorial
 

@@ -23,10 +23,11 @@ pub(crate) fn init() {
 }
 
 /// This function will dump the graphs from the specified peer in dot format to a random folder in
-/// the system's temp dir.  The location of this folder will be printed to stdout.  The function
-/// will never panic, and hence is suitable for use in creating these files after a thread has
-/// already panicked, e.g. in the case of a test failure.  No-op for case where `dump-graphs`
-/// feature not enabled.
+/// the system's temp dir.  It will also try to create an SVG from each such dot file, but will not
+/// fail or report failure if the SVG files can't be created.  The location of this folder will be
+/// printed to stdout.  The function will never panic, and hence is suitable for use in creating
+/// these files after a thread has already panicked, e.g. in the case of a test failure.  No-op for
+/// case where `dump-graphs` feature not enabled.
 pub(crate) fn to_file<T: NetworkEvent, P: PublicId>(
     _owner_id: &P,
     _gossip_graph: &BTreeMap<Hash, Event<T, P>>,
@@ -52,6 +53,7 @@ mod detail {
     use std::fs::{self, File};
     use std::io::{self, Write};
     use std::path::PathBuf;
+    use std::process::Command;
     use std::thread;
 
     lazy_static! {
@@ -75,7 +77,7 @@ mod detail {
         if let Err(error) = fs::create_dir_all(&dir) {
             println!("Failed to create folder for dot files: {:?}", error);
         } else {
-            println!("Writing dot files in {:?}", dir);
+            println!("Writing dot files in {}", dir.display());
         }
         dir
     };);
@@ -118,6 +120,13 @@ mod detail {
             }
         } else {
             println!("Failed to create {:?}", file_path);
+        }
+        // Try to generate an SVG file from the dot file, but we don't care about failure here.
+        if let Ok(mut child) = Command::new("dot")
+            .args(&["-Tsvg", file_path.to_string_lossy().as_ref(), "-O"])
+            .spawn()
+        {
+            let _ = child.wait();
         }
     }
 
