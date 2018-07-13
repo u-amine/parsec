@@ -143,7 +143,10 @@ fn get_params() -> Params {
             "This example creates a mock network of peers, each running the Parsec protocol to \
              reach consensus on a number of random network events.  To dump each node's gossip \
              graph in dot format to a file in your system temp dir, build the example with \
-             `--features=dump-graphs`.",
+             `--features=dump-graphs`.  If you have `dot` (from graphviz) available in your path, \
+             each dot file will have a corresponding SVG file created for it.  Otherwise you can \
+             copy the contents of a generated dot file into an online converter (e.g. \
+             http://viz-js.com) to view the gossip graph.",
         )
         .set_term_width(100)
         .arg(
