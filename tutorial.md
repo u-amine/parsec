@@ -1,6 +1,6 @@
 # Prerequisites
 To clone the repo, `git` must be installed.
-To compile the code and run the tests, `cargo` is required.
+To compile the code and run the tests, `rust` and `cargo` are required.
 To optionally generate graphs from generated dot files, `graphviz` is necessary. If you prefer, you can use an online converter (e.g. http://viz-js.com) to view the gossip graphs rather than installing graphviz.
 
 To install [graphviz](https://graphviz.gitlab.io/download/) on Ubuntu,
