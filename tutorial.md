@@ -21,7 +21,7 @@ On Windows, you can find an installer [here](https://graphviz.gitlab.io/_pages/D
 From a terminal, from a directory in which you're comfortable cloning a repository, clone the PARSEC repository
 
 ```
-git https://github.com/maidsafe/parsec.git
+git clone https://github.com/maidsafe/parsec.git
 ```
 
 From the parsec repository, run the tests. Be sure to use the feature: `dump-graphs` so the tests output the graphs. Also pass in the `--nocapture` flag to the test executable so it can print the location of the graphs.
