@@ -94,3 +94,14 @@ For instance, for an example with 10 peers agreeing on the order of 5 events, ru
 ```
 cargo run --release --example basic --features=dump-graphs -- -p10 -e5
 ```
+
+# Share your thoughts/questions
+
+If anything seems unclear, feel free to contact us on the [SAFE Network forum](https://safenetforum.org/) or to [email us](mailto:outreach@maidsafe.net).
+
+If you have a question concerning a specific test or example that you ran, please look for the RNG seed in the output and include it in your question. It will help us recreate the exact same scenario you ran so we can comment on specifics.
+
+The RNG seed can be found in the output in a line like this one:
+```
+Using RNG seed: Some([656416849, 1310826355, 242653573, 2171336679])
+```
