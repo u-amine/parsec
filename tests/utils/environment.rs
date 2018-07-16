@@ -35,6 +35,7 @@ impl Environment {
         } else {
             SeededRng::new()
         };
+        println!("Using {:?}", rng);
 
         let transactions = (0..transaction_count.0)
             .map(|_| rng.gen())

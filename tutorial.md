@@ -1,6 +1,6 @@
 # Prerequisites
 To clone the repo, `git` must be installed.
-To compile the code and run the tests, `cargo` is required.
+To compile the code and run the tests, `rust` and `cargo` are required.
 To optionally generate graphs from generated dot files, `graphviz` is necessary. If you prefer, you can use an online converter (e.g. http://viz-js.com) to view the gossip graphs rather than installing graphviz.
 
 To install [graphviz](https://graphviz.gitlab.io/download/) on Ubuntu,
@@ -21,7 +21,7 @@ On Windows, you can find an installer [here](https://graphviz.gitlab.io/_pages/D
 From a terminal, from a directory in which you're comfortable cloning a repository, clone the PARSEC repository
 
 ```
-git https://github.com/maidsafe/parsec.git
+git clone https://github.com/maidsafe/parsec.git
 ```
 
 From the parsec repository, run the tests. Be sure to use the feature: `dump-graphs` so the tests output the graphs. Also pass in the `--nocapture` flag to the test executable so it can print the location of the graphs.
@@ -93,4 +93,15 @@ cargo run --release --example basic --features=dump-graphs -- --help
 For instance, for an example with 10 peers agreeing on the order of 5 events, run
 ```
 cargo run --release --example basic --features=dump-graphs -- -p10 -e5
+```
+
+# Share your thoughts/questions
+
+If anything seems unclear, feel free to contact us on the [SAFE Network forum](https://safenetforum.org/) or to [email us](mailto:outreach@maidsafe.net).
+
+If you have a question concerning a specific test or example that you ran, please look for the RNG seed in the output and include it in your question. It will help us recreate the exact same scenario you ran so we can comment on specifics.
+
+The RNG seed can be found in the output in a line like this one:
+```
+Using RNG seed: Some([656416849, 1310826355, 242653573, 2171336679])
 ```
