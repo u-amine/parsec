@@ -37,7 +37,7 @@ extern crate unwrap;
 
 mod utils;
 
-use self::utils::{Environment, PeerCount, TransactionCount};
+use self::utils::{Environment, PeerCount, Schedule, TransactionCount};
 use rand::Rng;
 use std::collections::BTreeSet;
 
@@ -265,5 +265,15 @@ fn faulty_third_terminate_at_random_points() {
             .all(|peer| peer.blocks.len() >= num_transactions)
     });
 
+    assert!(env.network.blocks_all_in_sequence());
+}
+
+#[test]
+fn test_random_schedule() {
+    let num_transactions = 10;
+    let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), None);
+    let schedule = Schedule::new(&mut env, &Default::default());
+    println!("{:?}", schedule);
+    env.network.execute_schedule(schedule);
     assert!(env.network.blocks_all_in_sequence());
 }

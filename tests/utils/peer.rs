@@ -27,10 +27,18 @@ impl Peer {
         }
     }
 
+    pub fn vote_for(&mut self, transaction: &Transaction) -> bool {
+        if !self.parsec.have_voted_for(transaction) {
+            unwrap!(self.parsec.vote_for(transaction.clone()));
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn vote_for_first_not_already_voted_for(&mut self, transactions: &[Transaction]) {
         for transaction in transactions {
-            if !self.parsec.have_voted_for(transaction) {
-                unwrap!(self.parsec.vote_for(transaction.clone()));
+            if self.vote_for(transaction) {
                 break;
             }
         }

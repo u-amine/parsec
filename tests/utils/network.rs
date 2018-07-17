@@ -7,12 +7,19 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use parsec::mock::{self, PeerId, Transaction};
+use parsec::{Request, Response};
 use rand::Rng;
-use std::collections::BTreeSet;
-use utils::Peer;
+use std::collections::{BTreeSet, HashMap};
+use utils::{ScheduleEvent, Peer, Schedule};
+
+enum Message {
+    Request(Request<Transaction, PeerId>),
+    Response(Response<Transaction, PeerId>),
+}
 
 pub struct Network {
     pub peers: Vec<Peer>,
+    msg_queue: HashMap<PeerId, Vec<(PeerId, Message)>>,
 }
 
 impl Network {
@@ -24,7 +31,10 @@ impl Network {
             .iter()
             .map(|id| Peer::new(id.clone(), &genesis_group))
             .collect();
-        Network { peers }
+        Network {
+            peers,
+            msg_queue: HashMap::new(),
+        }
     }
 
     /// For each node of `sender_id`, which sends a parsec request to a randomly chosen peer of
@@ -121,5 +131,46 @@ impl Network {
                 .parsec
                 .handle_response(receiver_id, response)
         )
+    }
+
+    pub fn execute_schedule(&mut self, schedule: Schedule) {
+        for event in schedule.0 {
+            match event {
+                ScheduleEvent::SendGossip(peer1, peer2) => {
+                    let request =
+                        unwrap!(self.peer(&peer1).parsec.create_gossip(Some(peer2.clone())));
+                    self.msg_queue
+                        .entry(peer2)
+                        .or_insert_with(Vec::new)
+                        .push((peer1, Message::Request(request)));
+                }
+                ScheduleEvent::ReceiveAndRespond(peer) => {
+                    if let Some(msgs) = self.msg_queue.remove(&peer) {
+                        for (sender, msg) in msgs {
+                            match msg {
+                                Message::Request(req) => {
+                                    let response = unwrap!(
+                                        self.peer_mut(&peer).parsec.handle_request(&sender, req)
+                                    );
+                                    self.peer_mut(&peer).poll();
+                                    self.msg_queue
+                                        .entry(sender)
+                                        .or_insert_with(Vec::new)
+                                        .push((peer.clone(), Message::Response(response)));
+                                }
+                                Message::Response(resp) => {
+                                    unwrap!(
+                                        self.peer_mut(&peer).parsec.handle_response(&sender, resp)
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                ScheduleEvent::VoteFor(peer, transaction) => {
+                    let _ = self.peer_mut(&peer).vote_for(&transaction);
+                }
+            }
+        }
     }
 }
