@@ -133,43 +133,52 @@ impl Network {
         )
     }
 
+    fn handle_messages(&mut self, peer: &PeerId, _step: usize) {
+        if let Some(msgs) = self.msg_queue.remove(peer) {
+            for (sender, msg) in msgs {
+                match msg {
+                    Message::Request(req) => {
+                        let response =
+                            unwrap!(self.peer_mut(peer).parsec.handle_request(&sender, req));
+                        self.msg_queue
+                            .entry(sender)
+                            .or_insert_with(Vec::new)
+                            .push((peer.clone(), Message::Response(response)));
+                    }
+                    Message::Response(resp) => {
+                        unwrap!(self.peer_mut(peer).parsec.handle_response(&sender, resp));
+                    }
+                }
+            }
+        }
+    }
+
     pub fn execute_schedule(&mut self, schedule: Schedule) {
         for event in schedule.0 {
             match event {
-                ScheduleEvent::SendGossip(peer1, peer2) => {
-                    let request =
-                        unwrap!(self.peer(&peer1).parsec.create_gossip(Some(peer2.clone())));
-                    self.msg_queue
-                        .entry(peer2)
-                        .or_insert_with(Vec::new)
-                        .push((peer1, Message::Request(request)));
-                }
-                ScheduleEvent::ReceiveAndRespond(peer) => {
-                    if let Some(msgs) = self.msg_queue.remove(&peer) {
-                        for (sender, msg) in msgs {
-                            match msg {
-                                Message::Request(req) => {
-                                    let response = unwrap!(
-                                        self.peer_mut(&peer).parsec.handle_request(&sender, req)
-                                    );
-                                    self.peer_mut(&peer).poll();
-                                    self.msg_queue
-                                        .entry(sender)
-                                        .or_insert_with(Vec::new)
-                                        .push((peer.clone(), Message::Response(response)));
-                                }
-                                Message::Response(resp) => {
-                                    unwrap!(
-                                        self.peer_mut(&peer).parsec.handle_response(&sender, resp)
-                                    );
-                                }
-                            }
-                        }
+                ScheduleEvent::LocalStep {
+                    global_step,
+                    peer,
+                    recipient,
+                } => {
+                    self.handle_messages(&peer, global_step);
+                    self.peer_mut(&peer).poll();
+                    if let Some(recipient) = recipient {
+                        let request = unwrap!(
+                            self.peer(&peer)
+                                .parsec
+                                .create_gossip(Some(recipient.clone()))
+                        );
+                        self.msg_queue
+                            .entry(recipient)
+                            .or_insert_with(Vec::new)
+                            .push((peer, Message::Request(request)));
                     }
                 }
                 ScheduleEvent::VoteFor(peer, transaction) => {
                     let _ = self.peer_mut(&peer).vote_for(&transaction);
                 }
+                ScheduleEvent::Fail(_peer) => {}
             }
         }
     }
