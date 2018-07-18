@@ -10,16 +10,22 @@ use parsec::mock::{self, PeerId, Transaction};
 use parsec::{Request, Response};
 use rand::Rng;
 use std::collections::{BTreeSet, HashMap};
-use utils::{ScheduleEvent, Peer, Schedule};
+use utils::{Peer, Schedule, ScheduleEvent};
 
 enum Message {
-    Request(Request<Transaction, PeerId>),
+    Request(Request<Transaction, PeerId>, usize),
     Response(Response<Transaction, PeerId>),
+}
+
+struct QueueEntry {
+    pub sender: PeerId,
+    pub message: Message,
+    pub deliver_after: usize,
 }
 
 pub struct Network {
     pub peers: Vec<Peer>,
-    msg_queue: HashMap<PeerId, Vec<(PeerId, Message)>>,
+    msg_queue: HashMap<PeerId, Vec<QueueEntry>>,
 }
 
 impl Network {
@@ -133,20 +139,35 @@ impl Network {
         )
     }
 
-    fn handle_messages(&mut self, peer: &PeerId, _step: usize) {
+    fn handle_messages(&mut self, peer: &PeerId, step: usize) {
         if let Some(msgs) = self.msg_queue.remove(peer) {
-            for (sender, msg) in msgs {
-                match msg {
-                    Message::Request(req) => {
-                        let response =
-                            unwrap!(self.peer_mut(peer).parsec.handle_request(&sender, req));
+            let (to_handle, rest) = msgs
+                .into_iter()
+                .partition(|entry| entry.deliver_after <= step);
+            let _ = self.msg_queue.insert(peer.clone(), rest);
+            for entry in to_handle {
+                match entry.message {
+                    Message::Request(req, resp_delay) => {
+                        let response = unwrap!(
+                            self.peer_mut(peer)
+                                .parsec
+                                .handle_request(&entry.sender, req)
+                        );
                         self.msg_queue
-                            .entry(sender)
+                            .entry(entry.sender)
                             .or_insert_with(Vec::new)
-                            .push((peer.clone(), Message::Response(response)));
+                            .push(QueueEntry {
+                                sender: peer.clone(),
+                                message: Message::Response(response),
+                                deliver_after: step + resp_delay,
+                            });
                     }
                     Message::Response(resp) => {
-                        unwrap!(self.peer_mut(peer).parsec.handle_response(&sender, resp));
+                        unwrap!(
+                            self.peer_mut(peer)
+                                .parsec
+                                .handle_response(&entry.sender, resp)
+                        );
                     }
                 }
             }
@@ -159,20 +180,24 @@ impl Network {
                 ScheduleEvent::LocalStep {
                     global_step,
                     peer,
-                    recipient,
+                    make_request,
                 } => {
                     self.handle_messages(&peer, global_step);
                     self.peer_mut(&peer).poll();
-                    if let Some(recipient) = recipient {
+                    if let Some(make_request) = make_request {
                         let request = unwrap!(
                             self.peer(&peer)
                                 .parsec
-                                .create_gossip(Some(recipient.clone()))
+                                .create_gossip(Some(make_request.recipient.clone()))
                         );
                         self.msg_queue
-                            .entry(recipient)
+                            .entry(make_request.recipient)
                             .or_insert_with(Vec::new)
-                            .push((peer, Message::Request(request)));
+                            .push(QueueEntry {
+                                sender: peer,
+                                message: Message::Request(request, make_request.resp_delay),
+                                deliver_after: global_step + make_request.req_delay,
+                            });
                     }
                 }
                 ScheduleEvent::VoteFor(peer, transaction) => {

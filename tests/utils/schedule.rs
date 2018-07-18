@@ -13,14 +13,35 @@ use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Clone, Debug)]
+pub struct Request {
+    pub recipient: PeerId,
+    pub req_delay: usize,
+    pub resp_delay: usize,
+}
+
+#[derive(Clone, Debug)]
 pub enum ScheduleEvent {
     LocalStep {
         global_step: usize,
         peer: PeerId,
-        recipient: Option<PeerId>,
+        make_request: Option<Request>,
     },
     Fail(PeerId),
     VoteFor(PeerId, Transaction),
+}
+
+fn poisson<R: Rng>(rng: &mut R, lambda: f64) -> usize {
+    let mut result = 0;
+    let mut p = 1.0;
+    let l = (-lambda).exp();
+    loop {
+        p *= rng.gen::<f64>();
+        if p <= l {
+            break;
+        }
+        result += 1;
+    }
+    result
 }
 
 impl ScheduleEvent {
@@ -34,19 +55,25 @@ impl ScheduleEvent {
         let mut result = vec![];
         for peer in peers {
             if rng.gen::<f64>() < options.prob_local_step {
-                let recipient = if rng.gen::<f64>() < options.prob_send_gossip {
+                let make_request = if rng.gen::<f64>() < options.prob_send_gossip {
                     let mut recipient = peer;
                     while recipient == peer {
                         recipient = unwrap!(rng.choose(peers));
                     }
-                    Some(recipient.clone())
+                    let req_delay = poisson(rng, 4.0);
+                    let resp_delay = poisson(rng, 4.0);
+                    Some(Request {
+                        recipient: recipient.clone(),
+                        req_delay,
+                        resp_delay,
+                    })
                 } else {
                     None
                 };
                 result.push(ScheduleEvent::LocalStep {
                     global_step: step,
                     peer: peer.clone(),
-                    recipient,
+                    make_request,
                 });
             }
         }
