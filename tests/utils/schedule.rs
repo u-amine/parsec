@@ -12,24 +12,40 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::fmt;
 
+/// This struct holds the data necessary to make a simulated request when a node executes a local
+/// step.
 #[derive(Clone, Debug)]
 pub struct Request {
+    /// The recipient of the request - it will then respond back to the sender
     pub recipient: PeerId,
+    /// The delay, in steps, between sending and reception of the request
     pub req_delay: usize,
+    /// The delay, in steps, between sending and reception of the response
     pub resp_delay: usize,
 }
 
+/// Represents an event the network is supposed to simulate.
+/// The simulation proceeds in steps. During every global step, every node has some probability
+/// of being scheduled to perform a local step, consisting of receiving messages that reached it
+/// by this time, generating appropriate responses and optionally sending a gossip request.
 #[derive(Clone, Debug)]
 pub enum ScheduleEvent {
+    /// This event variant represents a node being scheduled to execute a local step. It contains a
+    /// global step number, the ID of the node being scheduled, and optionally data of the request
+    /// the node will send.
     LocalStep {
         global_step: usize,
         peer: PeerId,
         make_request: Option<Request>,
     },
+    /// This event causes the node with the given ID to stop responding. All further events
+    /// concerning that node will be ignored.
     Fail(PeerId),
+    /// This event makes a node vote on the given transaction.
     VoteFor(PeerId, Transaction),
 }
 
+// A function generating a Poisson-distributed random number.
 fn poisson<R: Rng>(rng: &mut R, lambda: f64) -> usize {
     let mut result = 0;
     let mut p = 1.0;
@@ -97,6 +113,7 @@ impl ScheduleEvent {
     }
 }
 
+/// Stores pending transactions per node, so that nodes only vote for each transaction once.
 pub struct PendingTransactions(HashMap<PeerId, Vec<Transaction>>);
 
 impl PendingTransactions {
@@ -114,10 +131,12 @@ impl PendingTransactions {
         PendingTransactions(inner)
     }
 
+    /// Gets the next transaction for a given node, and removes it from the cache
     pub fn next_for_peer(&mut self, peer: &PeerId) -> Option<Transaction> {
         self.0.get_mut(peer).and_then(|trans| trans.pop())
     }
 
+    /// Returns the list of names of peers that still have pending transactions
     pub fn nonempty_peers(&self) -> Vec<PeerId> {
         self.0
             .iter()
@@ -126,17 +145,24 @@ impl PendingTransactions {
             .collect()
     }
 
+    /// Returns true if no more peers have pending transactions
     pub fn is_empty(&self) -> bool {
         self.0.values().all(|v| v.is_empty())
     }
 }
 
+/// A struct aggregating the options controlling schedule generation
 #[derive(Clone, Copy, Debug)]
 pub struct ScheduleOptions {
+    /// Probability per global step that a node will be scheduled to execute a local step
     pub prob_local_step: f64,
+    /// Probability that a node, once scheduled, will send a gossip request
     pub prob_send_gossip: f64,
+    /// Probability per global step that a node will make a vote
     pub prob_recv_trans: f64,
+    /// Probabilitity per step that a random node will fail
     pub prob_failure: f64,
+    /// The Poisson distribution parameter controlling the delay lengths
     pub delay_lambda: f64,
 }
 
@@ -152,6 +178,7 @@ impl Default for ScheduleOptions {
     }
 }
 
+/// Stores the list of network events to be simulated.
 pub struct Schedule(pub Vec<ScheduleEvent>);
 
 impl fmt::Debug for Schedule {
@@ -166,7 +193,9 @@ impl fmt::Debug for Schedule {
 }
 
 impl Schedule {
+    /// Creates a new pseudo-random schedule based on the given options
     pub fn new(env: &mut Environment, options: &ScheduleOptions) -> Schedule {
+        println!("Generating a schedule with options: {:?}", options);
         let peers: Vec<_> = env.network.peers.iter().map(|p| p.id.clone()).collect();
         let mut pending = PendingTransactions::new(&mut env.rng, &peers, &env.transactions);
         let mut result = vec![];

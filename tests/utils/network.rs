@@ -139,6 +139,7 @@ impl Network {
         )
     }
 
+    /// Handles incoming requests and responses
     fn handle_messages(&mut self, peer: &PeerId, step: usize) {
         if let Some(msgs) = self.msg_queue.remove(peer) {
             let (to_handle, rest) = msgs
@@ -174,6 +175,7 @@ impl Network {
         }
     }
 
+    /// Simulates the network according to the given schedule
     pub fn execute_schedule(&mut self, schedule: Schedule) {
         for event in schedule.0 {
             match event {
