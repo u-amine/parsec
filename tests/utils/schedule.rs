@@ -24,6 +24,17 @@ pub struct Request {
     pub resp_delay: usize,
 }
 
+/// Describes whether the node should make a request during its local step
+#[derive(Clone, Debug)]
+pub enum RequestTiming {
+    /// Don't make a request
+    Later,
+    /// Make a request
+    DuringThisStep(Request),
+    /// Make a request if new data is available
+    DuringThisStepIfNewData(Request),
+}
+
 /// Represents an event the network is supposed to simulate.
 /// The simulation proceeds in steps. During every global step, every node has some probability
 /// of being scheduled to perform a local step, consisting of receiving messages that reached it
@@ -36,7 +47,7 @@ pub enum ScheduleEvent {
     LocalStep {
         global_step: usize,
         peer: PeerId,
-        make_request: Option<Request>,
+        request_timing: RequestTiming,
     },
     /// This event causes the node with the given ID to stop responding. All further events
     /// concerning that node will be ignored.
@@ -61,6 +72,25 @@ fn poisson<R: Rng>(rng: &mut R, lambda: f64) -> usize {
 }
 
 impl ScheduleEvent {
+    fn gen_request<R: Rng>(
+        rng: &mut R,
+        peer: &PeerId,
+        peers: &[PeerId],
+        options: &ScheduleOptions,
+    ) -> Request {
+        let mut recipient = peer;
+        while recipient == peer {
+            recipient = unwrap!(rng.choose(peers));
+        }
+        let req_delay = options.gen_delay(rng);
+        let resp_delay = options.gen_delay(rng);
+        Request {
+            recipient: recipient.clone(),
+            req_delay,
+            resp_delay,
+        }
+    }
+
     /// Generates a random network event.
     pub fn gen_random<R: Rng>(
         rng: &mut R,
@@ -73,25 +103,20 @@ impl ScheduleEvent {
         let mut result = vec![];
         for peer in peers {
             if rng.gen::<f64>() < options.prob_local_step {
-                let make_request = if rng.gen::<f64>() < options.prob_send_gossip {
-                    let mut recipient = peer;
-                    while recipient == peer {
-                        recipient = unwrap!(rng.choose(peers));
-                    }
-                    let req_delay = poisson(rng, 4.0);
-                    let resp_delay = poisson(rng, 4.0);
-                    Some(Request {
-                        recipient: recipient.clone(),
-                        req_delay,
-                        resp_delay,
-                    })
-                } else {
-                    None
+                let request_timing = match options.gossip_strategy {
+                    GossipStrategy::Probabilistic(prob) => if rng.gen::<f64>() < prob {
+                        RequestTiming::DuringThisStep(Self::gen_request(rng, peer, peers, options))
+                    } else {
+                        RequestTiming::Later
+                    },
+                    GossipStrategy::AfterReceive => RequestTiming::DuringThisStepIfNewData(
+                        Self::gen_request(rng, peer, peers, options),
+                    ),
                 };
                 result.push(ScheduleEvent::LocalStep {
                     global_step: step,
                     peer: peer.clone(),
-                    make_request,
+                    request_timing,
                 });
             }
         }
@@ -176,13 +201,20 @@ impl PendingTransactions {
     }
 }
 
+/// The condition on which a node gossips when it's scheduled
+#[derive(Clone, Copy, Debug)]
+pub enum GossipStrategy {
+    /// Gossiping with a constant probability per local step
+    Probabilistic(f64),
+    /// Always gossip after receiving new data
+    AfterReceive,
+}
+
 /// A struct aggregating the options controlling schedule generation
 #[derive(Clone, Debug)]
 pub struct ScheduleOptions {
     /// Probability per global step that a node will be scheduled to execute a local step
     pub prob_local_step: f64,
-    /// Probability that a node, once scheduled, will send a gossip request
-    pub prob_send_gossip: f64,
     /// Probability per global step that a node will make a vote
     pub prob_recv_trans: f64,
     /// Probabilitity per step that a random node will fail
@@ -191,17 +223,31 @@ pub struct ScheduleOptions {
     pub deterministic_failures: HashMap<usize, usize>,
     /// The Poisson distribution parameter controlling the delay lengths
     pub delay_lambda: f64,
+    /// When a node gossips
+    pub gossip_strategy: GossipStrategy,
+}
+
+impl ScheduleOptions {
+    pub fn gen_delay<R: Rng>(&self, rng: &mut R) -> usize {
+        poisson(rng, self.delay_lambda)
+    }
 }
 
 impl Default for ScheduleOptions {
     fn default() -> ScheduleOptions {
         ScheduleOptions {
+            // local step on average every 6-7 steps - not too often
             prob_local_step: 0.15,
-            prob_send_gossip: 0.8,
+            // vote every 20 steps on average; so that there are local steps scheduled in between
             prob_recv_trans: 0.05,
+            // no randomised failures
             prob_failure: 0.0,
+            // no deterministic failures
             deterministic_failures: HashMap::new(),
+            // randomised delays, 4 steps on average
             delay_lambda: 4.0,
+            // gossip when we receive new data
+            gossip_strategy: GossipStrategy::AfterReceive,
         }
     }
 }

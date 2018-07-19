@@ -9,8 +9,8 @@
 use parsec::mock::{self, PeerId, Transaction};
 use parsec::{Request, Response};
 use rand::Rng;
-use std::collections::{BTreeSet, HashMap};
-use utils::{Peer, Schedule, ScheduleEvent};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use utils::{self, Peer, RequestTiming, Schedule, ScheduleEvent};
 
 enum Message {
     Request(Request<Transaction, PeerId>, usize),
@@ -164,12 +164,13 @@ impl Network {
     }
 
     /// Handles incoming requests and responses
-    fn handle_messages(&mut self, peer: &PeerId, step: usize) {
+    fn handle_messages(&mut self, peer: &PeerId, step: usize) -> bool {
         if let Some(msgs) = self.msg_queue.remove(peer) {
             let (to_handle, rest) = msgs
                 .into_iter()
                 .partition(|entry| entry.deliver_after <= step);
             let _ = self.msg_queue.insert(peer.clone(), rest);
+            let result = !to_handle.is_empty();
             for entry in to_handle {
                 match entry.message {
                     Message::Request(req, resp_delay) => {
@@ -194,21 +195,25 @@ impl Network {
                     }
                 }
             }
+            result
+        } else {
+            false
         }
     }
 
     /// Simulates the network according to the given schedule
     pub fn execute_schedule(&mut self, schedule: Schedule) {
+        let mut started_up = HashSet::new();
         for event in schedule.0 {
             match event {
                 ScheduleEvent::LocalStep {
                     global_step,
                     peer,
-                    make_request,
+                    request_timing,
                 } => {
-                    self.handle_messages(&peer, global_step);
+                    let has_new_data = self.handle_messages(&peer, global_step);
                     self.peer_mut(&peer).poll();
-                    if let Some(req) = make_request {
+                    let mut handle_req = |req: utils::Request| {
                         let request = unwrap!(
                             self.peer(&peer)
                                 .parsec
@@ -221,6 +226,18 @@ impl Network {
                             global_step + req.req_delay,
                         );
                     };
+                    match request_timing {
+                        RequestTiming::DuringThisStep(req) => {
+                            handle_req(req);
+                        }
+                        RequestTiming::DuringThisStepIfNewData(req) => {
+                            if has_new_data || !started_up.contains(&peer) {
+                                let _ = started_up.insert(peer.clone());
+                                handle_req(req);
+                            }
+                        }
+                        RequestTiming::Later => (),
+                    }
                 }
                 ScheduleEvent::VoteFor(peer, transaction) => {
                     let _ = self.peer_mut(&peer).vote_for(&transaction);

@@ -37,7 +37,9 @@ extern crate unwrap;
 
 mod utils;
 
-use self::utils::{Environment, PeerCount, Schedule, ScheduleOptions, TransactionCount};
+use self::utils::{
+    Environment, GossipStrategy, PeerCount, Schedule, ScheduleOptions, TransactionCount,
+};
 use rand::Rng;
 use std::collections::BTreeSet;
 
@@ -278,6 +280,24 @@ fn random_schedule() {
     let num_transactions = 10;
     let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), None);
     let schedule = Schedule::new(&mut env, &Default::default());
+    println!("{:?}", schedule);
+    env.network.execute_schedule(schedule);
+
+    let result = env.network.blocks_all_in_sequence();
+    assert!(result.is_ok(), "{:?}", result);
+}
+
+#[test]
+fn random_schedule_probabilistic_gossip() {
+    let num_transactions = 10;
+    let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), None);
+    let schedule = Schedule::new(
+        &mut env,
+        &ScheduleOptions {
+            gossip_strategy: GossipStrategy::Probabilistic(0.8),
+            ..Default::default()
+        },
+    );
     println!("{:?}", schedule);
     env.network.execute_schedule(schedule);
 
