@@ -230,6 +230,13 @@ pub enum GossipStrategy {
     AfterReceive,
 }
 
+/// Available options for the distribution of message delays
+#[derive(Clone, Copy, Debug)]
+pub enum DelayDistribution {
+    Poisson(f64),
+    Constant(usize),
+}
+
 /// A struct aggregating the options controlling schedule generation
 #[derive(Clone, Debug)]
 pub struct ScheduleOptions {
@@ -243,8 +250,8 @@ pub struct ScheduleOptions {
     pub prob_vote_duplication: f64,
     /// A map: step number → num of nodes to fail
     pub deterministic_failures: HashMap<usize, usize>,
-    /// The Poisson distribution parameter controlling the delay lengths
-    pub delay_lambda: f64,
+    /// The distribution of message delays
+    pub delay_distr: DelayDistribution,
     /// The strategy that defines when a node gossips
     pub gossip_strategy: GossipStrategy,
     /// When true, nodes will first insert all votes into the graph, then start gossiping
@@ -253,7 +260,10 @@ pub struct ScheduleOptions {
 
 impl ScheduleOptions {
     pub fn gen_delay<R: Rng>(&self, rng: &mut R) -> usize {
-        poisson(rng, self.delay_lambda)
+        match self.delay_distr {
+            DelayDistribution::Poisson(lambda) => poisson(rng, lambda),
+            DelayDistribution::Constant(x) => x,
+        }
     }
 }
 
@@ -271,7 +281,7 @@ impl Default for ScheduleOptions {
             // no deterministic failures
             deterministic_failures: HashMap::new(),
             // randomised delays, 4 steps on average
-            delay_lambda: 4.0,
+            delay_distr: DelayDistribution::Poisson(4.0),
             // gossip when we receive new data
             gossip_strategy: GossipStrategy::AfterReceive,
             // vote while gossiping
