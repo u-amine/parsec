@@ -11,6 +11,7 @@ use parsec::mock::{PeerId, Transaction};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::mem;
 
 /// This struct holds the data necessary to make a simulated request when a node executes a local
 /// step.
@@ -199,6 +200,14 @@ impl PendingTransactions {
             let _ = self.0.remove(&peer);
         }
     }
+
+    /// Returns an iterator of all (peer, transaction) pairs, clearing the transaction cache in the
+    /// process.
+    pub fn all_transactions(&mut self) -> impl Iterator<Item = (PeerId, Transaction)> {
+        let data = mem::replace(&mut self.0, HashMap::new());
+        data.into_iter()
+            .flat_map(|(peer, x)| x.into_iter().map(move |trans| (peer.clone(), trans)))
+    }
 }
 
 /// The condition on which a node gossips when it's scheduled
@@ -225,6 +234,8 @@ pub struct ScheduleOptions {
     pub delay_lambda: f64,
     /// When a node gossips
     pub gossip_strategy: GossipStrategy,
+    /// When true, nodes will first insert all votes into the graph, then start gossiping
+    pub votes_before_gossip: bool,
 }
 
 impl ScheduleOptions {
@@ -248,6 +259,7 @@ impl Default for ScheduleOptions {
             delay_lambda: 4.0,
             // gossip when we receive new data
             gossip_strategy: GossipStrategy::AfterReceive,
+            votes_before_gossip: false,
         }
     }
 }
@@ -334,6 +346,13 @@ impl Schedule {
         let mut pending = PendingTransactions::new(&mut env.rng, &peers, &env.transactions);
         let mut result = vec![];
         let mut step = 0;
+
+        // if votes before gossip enabled, insert all votes
+        if options.votes_before_gossip {
+            for (peer, transaction) in pending.all_transactions() {
+                result.push(ScheduleEvent::VoteFor(peer, transaction));
+            }
+        }
 
         while !pending.is_empty() {
             Self::perform_step(
