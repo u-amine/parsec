@@ -125,8 +125,14 @@ impl ScheduleEvent {
         if let Some(pending) = pending {
             for peer in pending.nonempty_peers() {
                 if rng.gen::<f64>() < options.prob_recv_trans {
-                    if let Some(transaction) = pending.next_for_peer(&peer) {
-                        result.push(ScheduleEvent::VoteFor(peer, transaction));
+                    if rng.gen::<f64>() < options.prob_vote_duplication {
+                        if let Some(transaction) = pending.peek_next_for_peer(&peer) {
+                            result.push(ScheduleEvent::VoteFor(peer, transaction));
+                        }
+                    } else {
+                        if let Some(transaction) = pending.next_for_peer(&peer) {
+                            result.push(ScheduleEvent::VoteFor(peer, transaction));
+                        }
                     }
                 }
             }
@@ -180,6 +186,11 @@ impl PendingTransactions {
         self.0.get_mut(peer).and_then(|trans| trans.pop())
     }
 
+    /// Gets the next transaction for a given node without removing it
+    pub fn peek_next_for_peer(&mut self, peer: &PeerId) -> Option<Transaction> {
+        self.0.get_mut(peer).and_then(|trans| trans.last().cloned())
+    }
+
     /// Returns the list of names of peers that still have pending transactions
     pub fn nonempty_peers(&self) -> Vec<PeerId> {
         self.0
@@ -228,11 +239,13 @@ pub struct ScheduleOptions {
     pub prob_recv_trans: f64,
     /// Probabilitity per step that a random node will fail
     pub prob_failure: f64,
+    /// Probability that a vote will get repeated
+    pub prob_vote_duplication: f64,
     /// A map: step number → num of nodes to fail
     pub deterministic_failures: HashMap<usize, usize>,
     /// The Poisson distribution parameter controlling the delay lengths
     pub delay_lambda: f64,
-    /// When a node gossips
+    /// The strategy that defines when a node gossips
     pub gossip_strategy: GossipStrategy,
     /// When true, nodes will first insert all votes into the graph, then start gossiping
     pub votes_before_gossip: bool,
@@ -253,12 +266,15 @@ impl Default for ScheduleOptions {
             prob_recv_trans: 0.05,
             // no randomised failures
             prob_failure: 0.0,
+            // no vote duplication
+            prob_vote_duplication: 0.0,
             // no deterministic failures
             deterministic_failures: HashMap::new(),
             // randomised delays, 4 steps on average
             delay_lambda: 4.0,
             // gossip when we receive new data
             gossip_strategy: GossipStrategy::AfterReceive,
+            // vote while gossiping
             votes_before_gossip: false,
         }
     }
@@ -285,7 +301,7 @@ impl Schedule {
         peers: &mut Vec<PeerId>,
         // note: mut required below for reborrowing in ScheduleEvent::gen_random
         mut pending: Option<&mut PendingTransactions>,
-        result: &mut Vec<ScheduleEvent>,
+        schedule: &mut Vec<ScheduleEvent>,
         num_peers: usize,
         options: &ScheduleOptions,
     ) {
@@ -334,8 +350,8 @@ impl Schedule {
             pending.remove_peers(failed_peers);
         }
         // finally, add all events to results
-        result.extend(fails);
-        result.extend(other);
+        schedule.extend(fails);
+        schedule.extend(other);
     }
 
     /// Creates a new pseudo-random schedule based on the given options
@@ -344,15 +360,17 @@ impl Schedule {
         let mut peers: Vec<_> = env.network.peers.iter().map(|p| p.id.clone()).collect();
         let num_peers = env.network.peers.len();
         let mut pending = PendingTransactions::new(&mut env.rng, &peers, &env.transactions);
-        let mut result = vec![];
         let mut step = 0;
 
         // if votes before gossip enabled, insert all votes
-        if options.votes_before_gossip {
-            for (peer, transaction) in pending.all_transactions() {
-                result.push(ScheduleEvent::VoteFor(peer, transaction));
-            }
-        }
+        let mut schedule = if options.votes_before_gossip {
+            pending
+                .all_transactions()
+                .map(|(p, tx)| ScheduleEvent::VoteFor(p, tx))
+                .collect()
+        } else {
+            vec![]
+        };
 
         while !pending.is_empty() {
             Self::perform_step(
@@ -360,7 +378,7 @@ impl Schedule {
                 step,
                 &mut peers,
                 Some(&mut pending),
-                &mut result,
+                &mut schedule,
                 num_peers,
                 options,
             );
@@ -374,12 +392,12 @@ impl Schedule {
                 step,
                 &mut peers,
                 None,
-                &mut result,
+                &mut schedule,
                 num_peers,
                 options,
             );
             step += 1;
         }
-        Schedule(result)
+        Schedule(schedule)
     }
 }
