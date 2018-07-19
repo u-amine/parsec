@@ -8,7 +8,6 @@
 
 use parsec::mock::{self, PeerId, Transaction};
 use parsec::{Request, Response};
-use rand::Rng;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use utils::{self, Peer, RequestTiming, Schedule, ScheduleEvent};
 
@@ -43,56 +42,6 @@ impl Network {
         }
     }
 
-    /// For each node of `sender_id`, which sends a parsec request to a randomly chosen peer of
-    /// `receiver_id`, which causes `receiver_id` node to reply with a parsec response.
-    pub fn send_random_syncs<R: Rng>(&mut self, rng: &mut R) {
-        let peer_ids = self
-            .peers
-            .iter()
-            .map(|peer| peer.id.clone())
-            .collect::<Vec<_>>();
-        for sender_id in &peer_ids {
-            let receiver_id = unwrap!(
-                peer_ids
-                    .iter()
-                    .filter(|&id| id != sender_id)
-                    .nth(rng.gen_range(0, peer_ids.len() - 1))
-            );
-            self.exchange_messages(sender_id, receiver_id, None);
-        }
-    }
-
-    pub fn interleave_syncs_and_votes<R: Rng>(
-        &mut self,
-        rng: &mut R,
-        transactions: &mut [Transaction],
-    ) {
-        let peer_ids = self
-            .peers
-            .iter()
-            .map(|peer| peer.id.clone())
-            .collect::<Vec<_>>();
-        for sender_id in &peer_ids {
-            let receiver_id = unwrap!(
-                peer_ids
-                    .iter()
-                    .filter(|&id| id != sender_id)
-                    .nth(rng.gen_range(0, peer_ids.len() - 1))
-            );
-            rng.shuffle(transactions);
-            if rng.gen_weighted_bool(10) {
-                self.peer_mut(sender_id)
-                    .vote_for_first_not_already_voted_for(&transactions);
-            }
-            let opt_transactions = if rng.gen_weighted_bool(10) {
-                Some(&*transactions)
-            } else {
-                None
-            };
-            self.exchange_messages(sender_id, receiver_id, opt_transactions);
-        }
-    }
-
     /// Returns true if all peers hold the same sequence of stable blocks.
     pub fn blocks_all_in_sequence(
         &self,
@@ -120,36 +69,6 @@ impl Network {
 
     fn peer_mut(&mut self, id: &PeerId) -> &mut Peer {
         unwrap!(self.peers.iter_mut().find(|peer| peer.id == *id))
-    }
-
-    fn exchange_messages(
-        &mut self,
-        sender_id: &PeerId,
-        receiver_id: &PeerId,
-        transactions: Option<&[Transaction]>,
-    ) {
-        let request = unwrap!(
-            self.peer(sender_id)
-                .parsec
-                .create_gossip(Some(receiver_id.clone()))
-        );
-
-        let response = unwrap!(
-            self.peer_mut(receiver_id)
-                .parsec
-                .handle_request(sender_id, request)
-        );
-
-        if let Some(transactns) = transactions {
-            self.peer_mut(sender_id)
-                .vote_for_first_not_already_voted_for(transactns);
-        }
-
-        unwrap!(
-            self.peer_mut(sender_id)
-                .parsec
-                .handle_response(receiver_id, response)
-        )
     }
 
     fn send_message(&mut self, src: PeerId, dst: PeerId, message: Message, deliver_after: usize) {

@@ -15,20 +15,3 @@ pub use self::environment::{Environment, PeerCount, TransactionCount};
 pub use self::network::Network;
 pub use self::peer::Peer;
 pub use self::schedule::*;
-
-/// Runs `closure` in a loop until it returns `true` (in which case this function returns), or until
-/// it has looped `max_iterations` times (in which case it panics).
-pub fn loop_with_max_iterations<F: FnMut() -> bool>(max_iterations: usize, mut closure: F) {
-    let mut iterations = 0;
-    loop {
-        assert!(
-            iterations < max_iterations,
-            "This has run for {} iterations.",
-            iterations
-        );
-        if closure() {
-            return;
-        }
-        iterations += 1;
-    }
-}

@@ -36,14 +36,6 @@ impl Peer {
         }
     }
 
-    pub fn vote_for_first_not_already_voted_for(&mut self, transactions: &[Transaction]) {
-        for transaction in transactions {
-            if self.vote_for(transaction) {
-                break;
-            }
-        }
-    }
-
     pub fn poll(&mut self) {
         while let Some(block) = self.parsec.poll() {
             self.blocks.push(block)

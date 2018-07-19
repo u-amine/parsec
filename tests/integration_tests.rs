@@ -42,7 +42,7 @@ use self::utils::{
     TransactionCount,
 };
 use rand::Rng;
-use std::collections::BTreeSet;
+use std::collections::HashMap;
 
 #[test]
 fn minimal_network() {
@@ -50,26 +50,18 @@ fn minimal_network() {
     let num_peers = 4;
     let mut env = Environment::new(&PeerCount(num_peers), &TransactionCount(1), None);
 
-    for peer in &mut env.network.peers {
-        assert!(!peer.parsec.have_voted_for(&env.transactions[0]));
-        unwrap!(peer.parsec.vote_for(env.transactions[0].clone()));
-    }
+    let schedule = Schedule::new(
+        &mut env,
+        &ScheduleOptions {
+            votes_before_gossip: true,
+            ..Default::default()
+        },
+    );
+    println!("{:?}", schedule);
+    env.network.execute_schedule(schedule);
 
-    let mut consensused_peers = BTreeSet::new();
-    utils::loop_with_max_iterations(100, || {
-        env.network.send_random_syncs(&mut env.rng);
-        for peer in &mut env.network.peers {
-            if peer.parsec.poll().is_some() {
-                let _ = consensused_peers.insert(peer.id.clone());
-            }
-        }
-
-        consensused_peers.len() == num_peers
-    });
-
-    for peer in &env.network.peers {
-        assert!(peer.parsec.have_voted_for(&env.transactions[0]));
-    }
+    let result = env.network.blocks_all_in_sequence();
+    assert!(result.is_ok(), "{:?}", result);
 }
 
 #[test]
@@ -77,25 +69,15 @@ fn multiple_votes_before_gossip() {
     let num_transactions = 10;
     let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), None);
 
-    // Have each peer vote for all transactions in random order.
-    for peer in &mut env.network.peers {
-        env.rng.shuffle(&mut env.transactions);
-        for transaction in &env.transactions {
-            unwrap!(peer.parsec.vote_for(transaction.clone()));
-        }
-    }
-
-    // Gossip to let all peers reach consensus on all the blocks.
-    utils::loop_with_max_iterations(100, || {
-        env.network.send_random_syncs(&mut env.rng);
-        for peer in &mut env.network.peers {
-            peer.poll();
-        }
-        env.network
-            .peers
-            .iter()
-            .all(|peer| peer.blocks.len() >= num_transactions)
-    });
+    let schedule = Schedule::new(
+        &mut env,
+        &ScheduleOptions {
+            votes_before_gossip: true,
+            ..Default::default()
+        },
+    );
+    println!("{:?}", schedule);
+    env.network.execute_schedule(schedule);
 
     let result = env.network.blocks_all_in_sequence();
     assert!(result.is_ok(), "{:?}", result);
@@ -106,18 +88,9 @@ fn multiple_votes_during_gossip() {
     let num_transactions = 10;
     let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), None);
 
-    // Every peer gossips while occasionally casting a vote for a randomly-chosen transaction.
-    utils::loop_with_max_iterations(200, || {
-        env.network
-            .interleave_syncs_and_votes(&mut env.rng, &mut env.transactions);
-        for peer in &mut env.network.peers {
-            peer.poll();
-        }
-        env.network
-            .peers
-            .iter()
-            .all(|peer| peer.blocks.len() >= num_transactions)
-    });
+    let schedule = Schedule::new(&mut env, &Default::default());
+    println!("{:?}", schedule);
+    env.network.execute_schedule(schedule);
 
     let result = env.network.blocks_all_in_sequence();
     assert!(result.is_ok(), "{:?}", result);
@@ -127,24 +100,19 @@ fn multiple_votes_during_gossip() {
 fn duplicate_votes_before_gossip() {
     let mut env = Environment::new(&PeerCount(4), &TransactionCount(1), None);
 
-    // Have each peer vote for the single transaction multiple times.
-    for peer in &mut env.network.peers {
-        unwrap!(peer.parsec.vote_for(env.transactions[0].clone()));
-        for _ in 0..9 {
-            assert!(peer.parsec.vote_for(env.transactions[0].clone()).is_err())
-        }
-    }
+    let schedule = Schedule::new(
+        &mut env,
+        &ScheduleOptions {
+            votes_before_gossip: true,
+            prob_vote_duplication: 0.5,
+            ..Default::default()
+        },
+    );
+    println!("{:?}", schedule);
+    env.network.execute_schedule(schedule);
 
-    // Gossip to let all peers reach consensus on all the blocks.
-    utils::loop_with_max_iterations(100, || {
-        env.network.send_random_syncs(&mut env.rng);
-        for peer in &mut env.network.peers {
-            peer.poll();
-        }
-        env.network.peers.iter().all(|peer| !peer.blocks.is_empty())
-    });
-
-    assert!(env.network.peers.iter().all(|peer| peer.blocks.len() == 1));
+    let result = env.network.blocks_all_in_sequence();
+    assert!(result.is_ok(), "{:?}", result);
 }
 
 #[test]
@@ -158,29 +126,17 @@ fn faulty_third_never_gossip() {
         None,
     );
 
-    // Remove faulty peers from `network`.
-    env.rng.shuffle(&mut env.network.peers);
-    env.network.peers.truncate(num_peers - num_faulty);
-
-    // Have each remaining peer vote for all transactions in random order.
-    for peer in &mut env.network.peers {
-        env.rng.shuffle(&mut env.transactions);
-        for transaction in &env.transactions {
-            unwrap!(peer.parsec.vote_for(transaction.clone()));
-        }
-    }
-
-    // Gossip to let all remaining peers reach consensus on all the blocks.
-    utils::loop_with_max_iterations(100, || {
-        env.network.send_random_syncs(&mut env.rng);
-        for peer in &mut env.network.peers {
-            peer.poll();
-        }
-        env.network
-            .peers
-            .iter()
-            .all(|peer| peer.blocks.len() >= num_transactions)
-    });
+    let mut failures = HashMap::new();
+    let _ = failures.insert(0, num_faulty);
+    let schedule = Schedule::new(
+        &mut env,
+        &ScheduleOptions {
+            deterministic_failures: failures,
+            ..Default::default()
+        },
+    );
+    println!("{:?}", schedule);
+    env.network.execute_schedule(schedule);
 
     let result = env.network.blocks_all_in_sequence();
     assert!(result.is_ok(), "{:?}", result);
@@ -197,90 +153,39 @@ fn faulty_third_terminate_concurrently() {
         None,
     );
 
-    // Have each peer vote for all transactions in random order.
-    for peer in &mut env.network.peers {
-        env.rng.shuffle(&mut env.transactions);
-        for transaction in &env.transactions {
-            unwrap!(peer.parsec.vote_for(transaction.clone()));
-        }
-    }
-
-    // While gossiping, at a single random point remove all faulty peers in one go.
-    utils::loop_with_max_iterations(100, || {
-        env.network.send_random_syncs(&mut env.rng);
-        for peer in &mut env.network.peers {
-            peer.poll();
-        }
-
-        if env.network.peers.len() > num_peers - num_faulty
-            && (env.rng.gen_weighted_bool(10)
-                || env
-                    .network
-                    .peers
-                    .iter()
-                    .any(|peer| peer.blocks.len() >= num_transactions / 2))
-        {
-            env.rng.shuffle(&mut env.network.peers);
-            env.network.peers.truncate(num_peers - num_faulty);
-        }
-
-        env.network
-            .peers
-            .iter()
-            .all(|peer| peer.blocks.len() >= num_transactions)
-    });
+    let mut failures = HashMap::new();
+    let _ = failures.insert(env.rng.gen_range(10, 50), num_faulty);
+    let schedule = Schedule::new(
+        &mut env,
+        &ScheduleOptions {
+            deterministic_failures: failures,
+            ..Default::default()
+        },
+    );
+    println!("{:?}", schedule);
+    env.network.execute_schedule(schedule);
 
     let result = env.network.blocks_all_in_sequence();
     assert!(result.is_ok(), "{:?}", result);
 }
 
 #[test]
-fn faulty_third_terminate_at_random_points() {
+fn faulty_nodes_terminate_at_random_points() {
     let num_peers = 10;
     let num_transactions = 10;
-    let num_faulty = (num_peers - 1) / 3;
+    let prob_failure = 0.05;
     let mut env = Environment::new(
         &PeerCount(num_peers),
         &TransactionCount(num_transactions),
         None,
     );
-
-    // Have each peer vote for all transactions in random order.
-    for peer in &mut env.network.peers {
-        env.rng.shuffle(&mut env.transactions);
-        for transaction in &env.transactions {
-            unwrap!(peer.parsec.vote_for(transaction.clone()));
-        }
-    }
-
-    // While gossiping, at random points remove a single faulty peer, up to a maximum of
-    // `num_faulty` peers removed in total.
-    utils::loop_with_max_iterations(100, || {
-        env.network.send_random_syncs(&mut env.rng);
-        for peer in &mut env.network.peers {
-            peer.poll();
-        }
-
-        if env.network.peers.len() > num_peers - num_faulty && env.rng.gen_weighted_bool(3) {
-            env.rng.shuffle(&mut env.network.peers);
-            let _ = env.network.peers.pop();
-        }
-
-        env.network
-            .peers
-            .iter()
-            .all(|peer| peer.blocks.len() >= num_transactions)
-    });
-
-    let result = env.network.blocks_all_in_sequence();
-    assert!(result.is_ok(), "{:?}", result);
-}
-
-#[test]
-fn random_schedule() {
-    let num_transactions = 10;
-    let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), None);
-    let schedule = Schedule::new(&mut env, &Default::default());
+    let schedule = Schedule::new(
+        &mut env,
+        &ScheduleOptions {
+            prob_failure,
+            ..Default::default()
+        },
+    );
     println!("{:?}", schedule);
     env.network.execute_schedule(schedule);
 
@@ -314,24 +219,6 @@ fn random_schedule_probabilistic_gossip() {
         &mut env,
         &ScheduleOptions {
             gossip_strategy: GossipStrategy::Probabilistic(0.8),
-            ..Default::default()
-        },
-    );
-    println!("{:?}", schedule);
-    env.network.execute_schedule(schedule);
-
-    let result = env.network.blocks_all_in_sequence();
-    assert!(result.is_ok(), "{:?}", result);
-}
-
-#[test]
-fn random_schedule_with_failures() {
-    let num_transactions = 10;
-    let mut env = Environment::new(&PeerCount(10), &TransactionCount(num_transactions), None);
-    let schedule = Schedule::new(
-        &mut env,
-        &ScheduleOptions {
-            prob_failure: 0.05,
             ..Default::default()
         },
     );
