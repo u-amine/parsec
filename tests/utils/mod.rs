@@ -14,7 +14,7 @@ mod schedule;
 pub use self::environment::{Environment, PeerCount, TransactionCount};
 pub use self::network::Network;
 pub use self::peer::Peer;
-pub use self::schedule::{ScheduleEvent, Schedule};
+pub use self::schedule::{ScheduleEvent, Schedule, ScheduleOptions};
 
 /// Runs `closure` in a loop until it returns `true` (in which case this function returns), or until
 /// it has looped `max_iterations` times (in which case it panics).

@@ -37,7 +37,7 @@ extern crate unwrap;
 
 mod utils;
 
-use self::utils::{Environment, PeerCount, Schedule, TransactionCount};
+use self::utils::{Environment, PeerCount, Schedule, ScheduleOptions, TransactionCount};
 use rand::Rng;
 use std::collections::BTreeSet;
 
@@ -278,6 +278,24 @@ fn random_schedule() {
     let num_transactions = 10;
     let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), None);
     let schedule = Schedule::new(&mut env, &Default::default());
+    println!("{:?}", schedule);
+    env.network.execute_schedule(schedule);
+
+    let result = env.network.blocks_all_in_sequence();
+    assert!(result.is_ok(), "{:?}", result);
+}
+
+#[test]
+fn random_schedule_with_failures() {
+    let num_transactions = 10;
+    let mut env = Environment::new(&PeerCount(10), &TransactionCount(num_transactions), None);
+    let schedule = Schedule::new(
+        &mut env,
+        &ScheduleOptions {
+            prob_failure: 0.05,
+            ..Default::default()
+        },
+    );
     println!("{:?}", schedule);
     env.network.execute_schedule(schedule);
 

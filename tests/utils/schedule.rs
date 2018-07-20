@@ -9,7 +9,7 @@
 use super::Environment;
 use parsec::mock::{PeerId, Transaction};
 use rand::Rng;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 /// This struct holds the data necessary to make a simulated request when a node executes a local
@@ -61,11 +61,13 @@ fn poisson<R: Rng>(rng: &mut R, lambda: f64) -> usize {
 }
 
 impl ScheduleEvent {
+    /// Generates a random network event.
     pub fn gen_random<R: Rng>(
         rng: &mut R,
         step: usize,
         peers: &[PeerId],
-        pending: Option<&mut PendingTransactions>,
+        // note: first &mut required below to enable reborrowing
+        pending: &mut Option<&mut PendingTransactions>,
         options: &ScheduleOptions,
     ) -> Vec<ScheduleEvent> {
         let mut result = vec![];
@@ -111,6 +113,22 @@ impl ScheduleEvent {
 
         result
     }
+
+    pub fn fail(&self) -> Option<&PeerId> {
+        if let ScheduleEvent::Fail(ref peer) = self {
+            Some(peer)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_peer(&self) -> &PeerId {
+        match *self {
+            ScheduleEvent::LocalStep { ref peer, .. } => peer,
+            ScheduleEvent::Fail(ref peer) => peer,
+            ScheduleEvent::VoteFor(ref peer, _) => peer,
+        }
+    }
 }
 
 /// Stores pending transactions per node, so that nodes only vote for each transaction once.
@@ -149,10 +167,17 @@ impl PendingTransactions {
     pub fn is_empty(&self) -> bool {
         self.0.values().all(|v| v.is_empty())
     }
+
+    /// Removes peers that failed
+    pub fn remove_peers<I: IntoIterator<Item = PeerId>>(&mut self, peers: I) {
+        for peer in peers {
+            let _ = self.0.remove(&peer);
+        }
+    }
 }
 
 /// A struct aggregating the options controlling schedule generation
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct ScheduleOptions {
     /// Probability per global step that a node will be scheduled to execute a local step
     pub prob_local_step: f64,
@@ -162,6 +187,8 @@ pub struct ScheduleOptions {
     pub prob_recv_trans: f64,
     /// Probabilitity per step that a random node will fail
     pub prob_failure: f64,
+    /// A map: step number → num of nodes to fail
+    pub deterministic_failures: HashMap<usize, usize>,
     /// The Poisson distribution parameter controlling the delay lengths
     pub delay_lambda: f64,
 }
@@ -173,6 +200,7 @@ impl Default for ScheduleOptions {
             prob_send_gossip: 0.8,
             prob_recv_trans: 0.05,
             prob_failure: 0.0,
+            deterministic_failures: HashMap::new(),
             delay_lambda: 4.0,
         }
     }
@@ -193,24 +221,98 @@ impl fmt::Debug for Schedule {
 }
 
 impl Schedule {
+    fn perform_step<R: Rng>(
+        rng: &mut R,
+        step: usize,
+        peers: &mut Vec<PeerId>,
+        // note: mut required below for reborrowing in ScheduleEvent::gen_random
+        mut pending: Option<&mut PendingTransactions>,
+        result: &mut Vec<ScheduleEvent>,
+        num_peers: usize,
+        options: &ScheduleOptions,
+    ) {
+        // first, generate deterministic failures that are supposed to happen
+        let num_deterministic_fails = options
+            .deterministic_failures
+            .get(&step)
+            .cloned()
+            .unwrap_or(0);
+        // take random peers to fail
+        let mut peers_to_fail = peers.clone();
+        rng.shuffle(&mut peers_to_fail);
+        let mut events: Vec<_> = peers_to_fail
+            .into_iter()
+            .take(num_deterministic_fails)
+            .map(|p| ScheduleEvent::Fail(p))
+            .collect();
+        // extend that with random events
+        events.extend(ScheduleEvent::gen_random(
+            rng,
+            step,
+            peers,
+            &mut pending,
+            options,
+        ));
+        // now, we can have more than max number of failures among events
+        // we need to limit that
+        // first, we will calculate the max number of failures we can add
+        // note: num_peers is the original number of peers, and `peers` only contains
+        // active peers, which means they may differ if some peers already failed
+        let less_than_a_third_malicious_nodes = (num_peers - 1) / 3;
+        let min_honest_nodes = num_peers - less_than_a_third_malicious_nodes;
+        let max_number_of_failures = peers.len() - min_honest_nodes;
+        // we take out all the failures
+        let (fails, mut other): (Vec<_>, _) = events.into_iter().partition(|e| e.fail().is_some());
+        // limit them to the max number
+        let fails: Vec<_> = fails.into_iter().take(max_number_of_failures).collect();
+        // since we have fails separated, take this opportunity to remove failed peers from
+        // the peers vector
+        let failed_peers: HashSet<_> = fails.iter().filter_map(|e| e.fail().cloned()).collect();
+        // other events can still refer to failed peers, as they were drawn using the full peer
+        // list
+        other.retain(|ev| !failed_peers.contains(ev.get_peer()));
+        peers.retain(|p| !failed_peers.contains(p));
+        if let Some(pending) = pending {
+            pending.remove_peers(failed_peers);
+        }
+        // finally, add all events to results
+        result.extend(fails);
+        result.extend(other);
+    }
+
     /// Creates a new pseudo-random schedule based on the given options
     pub fn new(env: &mut Environment, options: &ScheduleOptions) -> Schedule {
         println!("Generating a schedule with options: {:?}", options);
-        let peers: Vec<_> = env.network.peers.iter().map(|p| p.id.clone()).collect();
+        let mut peers: Vec<_> = env.network.peers.iter().map(|p| p.id.clone()).collect();
+        let num_peers = env.network.peers.len();
         let mut pending = PendingTransactions::new(&mut env.rng, &peers, &env.transactions);
         let mut result = vec![];
         let mut step = 0;
+
         while !pending.is_empty() {
-            let event =
-                ScheduleEvent::gen_random(&mut env.rng, step, &peers, Some(&mut pending), options);
-            result.extend(event);
+            Self::perform_step(
+                &mut env.rng,
+                step,
+                &mut peers,
+                Some(&mut pending),
+                &mut result,
+                num_peers,
+                options,
+            );
             step += 1;
         }
-        let n = env.network.peers.len() as f32;
+        let n = peers.len() as f32;
         let additional_events = (30.0 * n * n.ln()) as usize;
         for _ in 0..additional_events {
-            let event = ScheduleEvent::gen_random(&mut env.rng, step, &peers, None, options);
-            result.extend(event);
+            Self::perform_step(
+                &mut env.rng,
+                step,
+                &mut peers,
+                None,
+                &mut result,
+                num_peers,
+                options,
+            );
             step += 1;
         }
         Schedule(result)

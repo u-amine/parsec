@@ -152,6 +152,17 @@ impl Network {
         )
     }
 
+    fn send_message(&mut self, src: PeerId, dst: PeerId, message: Message, deliver_after: usize) {
+        self.msg_queue
+            .entry(dst.clone())
+            .or_insert_with(Vec::new)
+            .push(QueueEntry {
+                sender: src,
+                message,
+                deliver_after,
+            });
+    }
+
     /// Handles incoming requests and responses
     fn handle_messages(&mut self, peer: &PeerId, step: usize) {
         if let Some(msgs) = self.msg_queue.remove(peer) {
@@ -167,14 +178,12 @@ impl Network {
                                 .parsec
                                 .handle_request(&entry.sender, req)
                         );
-                        self.msg_queue
-                            .entry(entry.sender)
-                            .or_insert_with(Vec::new)
-                            .push(QueueEntry {
-                                sender: peer.clone(),
-                                message: Message::Response(response),
-                                deliver_after: step + resp_delay,
-                            });
+                        self.send_message(
+                            peer.clone(),
+                            entry.sender,
+                            Message::Response(response),
+                            step + resp_delay,
+                        );
                     }
                     Message::Response(resp) => {
                         unwrap!(
@@ -199,26 +208,26 @@ impl Network {
                 } => {
                     self.handle_messages(&peer, global_step);
                     self.peer_mut(&peer).poll();
-                    if let Some(make_request) = make_request {
+                    if let Some(req) = make_request {
                         let request = unwrap!(
                             self.peer(&peer)
                                 .parsec
-                                .create_gossip(Some(make_request.recipient.clone()))
+                                .create_gossip(Some(req.recipient.clone()))
                         );
-                        self.msg_queue
-                            .entry(make_request.recipient)
-                            .or_insert_with(Vec::new)
-                            .push(QueueEntry {
-                                sender: peer,
-                                message: Message::Request(request, make_request.resp_delay),
-                                deliver_after: global_step + make_request.req_delay,
-                            });
-                    }
+                        self.send_message(
+                            peer.clone(),
+                            req.recipient,
+                            Message::Request(request, req.resp_delay),
+                            global_step + req.req_delay,
+                        );
+                    };
                 }
                 ScheduleEvent::VoteFor(peer, transaction) => {
                     let _ = self.peer_mut(&peer).vote_for(&transaction);
                 }
-                ScheduleEvent::Fail(_peer) => {}
+                ScheduleEvent::Fail(peer) => {
+                    self.peers.retain(|p| p.id != peer);
+                }
             }
         }
     }
