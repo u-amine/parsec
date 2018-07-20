@@ -44,11 +44,14 @@ use self::utils::{
 use rand::Rng;
 use std::collections::HashMap;
 
+// Alter the seed here to reproduce failures
+static SEED: Option<[u32; 4]> = None;
+
 #[test]
 fn minimal_network() {
     // 4 is the minimal network size for which the super majority is less than it.
     let num_peers = 4;
-    let mut env = Environment::new(&PeerCount(num_peers), &TransactionCount(1), None);
+    let mut env = Environment::new(&PeerCount(num_peers), &TransactionCount(1), SEED);
 
     let schedule = Schedule::new(
         &mut env,
@@ -66,7 +69,7 @@ fn minimal_network() {
 #[test]
 fn multiple_votes_before_gossip() {
     let num_transactions = 10;
-    let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), None);
+    let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), SEED);
 
     let schedule = Schedule::new(
         &mut env,
@@ -84,7 +87,7 @@ fn multiple_votes_before_gossip() {
 #[test]
 fn multiple_votes_during_gossip() {
     let num_transactions = 10;
-    let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), None);
+    let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), SEED);
 
     let schedule = Schedule::new(&mut env, &Default::default());
     env.network.execute_schedule(schedule);
@@ -95,7 +98,7 @@ fn multiple_votes_during_gossip() {
 
 #[test]
 fn duplicate_votes_before_gossip() {
-    let mut env = Environment::new(&PeerCount(4), &TransactionCount(1), None);
+    let mut env = Environment::new(&PeerCount(4), &TransactionCount(1), SEED);
 
     let schedule = Schedule::new(
         &mut env,
@@ -189,7 +192,7 @@ fn faulty_nodes_terminate_at_random_points() {
 #[test]
 fn random_schedule_no_delays() {
     let num_transactions = 10;
-    let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), None);
+    let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), SEED);
     let schedule = Schedule::new(
         &mut env,
         &ScheduleOptions {
@@ -206,7 +209,7 @@ fn random_schedule_no_delays() {
 #[test]
 fn random_schedule_probabilistic_gossip() {
     let num_transactions = 10;
-    let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), None);
+    let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), SEED);
     let schedule = Schedule::new(
         &mut env,
         &ScheduleOptions {
