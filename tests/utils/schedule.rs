@@ -8,9 +8,15 @@
 
 use super::Environment;
 use parsec::mock::{PeerId, Transaction};
+#[cfg(feature = "dump-graphs")]
+use parsec::DIR;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+#[cfg(feature = "dump-graphs")]
+use std::fs::File;
+#[cfg(feature = "dump-graphs")]
+use std::io::Write;
 use std::mem;
 
 /// This struct holds the data necessary to make a simulated request when a node executes a local
@@ -295,16 +301,31 @@ pub struct Schedule(pub Vec<ScheduleEvent>);
 
 impl fmt::Debug for Schedule {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "----------------------------\n")?;
-        write!(f, " Schedule:\n")?;
+        writeln!(f, "----------------------------")?;
+        writeln!(f, " Schedule:")?;
         for event in &self.0 {
-            write!(f, "- {:?}\n", event)?;
+            writeln!(f, "- {:?}", event)?;
         }
-        write!(f, "----------------------------\n")
+        writeln!(f, "----------------------------")
     }
 }
 
 impl Schedule {
+    #[cfg(feature = "dump-graphs")]
+    fn save(&self, options: &ScheduleOptions) {
+        let path = DIR.with(|dir| dir.join("schedule.txt"));
+        if let Ok(mut file) = File::create(&path) {
+            unwrap!(writeln!(
+                file,
+                "Generating a schedule with options: {:?}",
+                options
+            ));
+            unwrap!(write!(file, "{:?}", self));
+        } else {
+            println!("Failed to create {:?}", path);
+        }
+    }
+
     fn perform_step<R: Rng>(
         rng: &mut R,
         step: usize,
@@ -366,7 +387,6 @@ impl Schedule {
 
     /// Creates a new pseudo-random schedule based on the given options
     pub fn new(env: &mut Environment, options: &ScheduleOptions) -> Schedule {
-        println!("Generating a schedule with options: {:?}", options);
         let mut peers: Vec<_> = env.network.peers.iter().map(|p| p.id.clone()).collect();
         let num_peers = env.network.peers.len();
         let mut pending = PendingTransactions::new(&mut env.rng, &peers, &env.transactions);
@@ -408,6 +428,9 @@ impl Schedule {
             );
             step += 1;
         }
-        Schedule(schedule)
+        let result = Schedule(schedule);
+        #[cfg(feature = "dump-graphs")]
+        result.save(options);
+        result
     }
 }

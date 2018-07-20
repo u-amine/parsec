@@ -38,6 +38,9 @@ pub(crate) fn to_file<T: NetworkEvent, P: PublicId>(
 }
 
 #[cfg(feature = "dump-graphs")]
+pub use self::detail::DIR;
+
+#[cfg(feature = "dump-graphs")]
 mod detail {
     use gossip::Event;
     use hash::Hash;
@@ -67,7 +70,8 @@ mod detail {
         };
     }
 
-    thread_local!(static DIR: PathBuf = {
+    thread_local!(/// The directory to which test data is dumped
+    pub static DIR: PathBuf = {
         let dir = match thread::current().name() {
             Some(thread_name) if thread_name != "main" => {
                 ROOT_DIR.join(format!("test_{}", thread_name))

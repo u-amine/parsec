@@ -57,7 +57,6 @@ fn minimal_network() {
             ..Default::default()
         },
     );
-    println!("{:?}", schedule);
     env.network.execute_schedule(schedule);
 
     let result = env.network.blocks_all_in_sequence();
@@ -76,7 +75,6 @@ fn multiple_votes_before_gossip() {
             ..Default::default()
         },
     );
-    println!("{:?}", schedule);
     env.network.execute_schedule(schedule);
 
     let result = env.network.blocks_all_in_sequence();
@@ -89,7 +87,6 @@ fn multiple_votes_during_gossip() {
     let mut env = Environment::new(&PeerCount(4), &TransactionCount(num_transactions), None);
 
     let schedule = Schedule::new(&mut env, &Default::default());
-    println!("{:?}", schedule);
     env.network.execute_schedule(schedule);
 
     let result = env.network.blocks_all_in_sequence();
@@ -108,7 +105,6 @@ fn duplicate_votes_before_gossip() {
             ..Default::default()
         },
     );
-    println!("{:?}", schedule);
     env.network.execute_schedule(schedule);
 
     let result = env.network.blocks_all_in_sequence();
@@ -135,7 +131,6 @@ fn faulty_third_never_gossip() {
             ..Default::default()
         },
     );
-    println!("{:?}", schedule);
     env.network.execute_schedule(schedule);
 
     let result = env.network.blocks_all_in_sequence();
@@ -162,7 +157,6 @@ fn faulty_third_terminate_concurrently() {
             ..Default::default()
         },
     );
-    println!("{:?}", schedule);
     env.network.execute_schedule(schedule);
 
     let result = env.network.blocks_all_in_sequence();
@@ -186,7 +180,6 @@ fn faulty_nodes_terminate_at_random_points() {
             ..Default::default()
         },
     );
-    println!("{:?}", schedule);
     env.network.execute_schedule(schedule);
 
     let result = env.network.blocks_all_in_sequence();
@@ -204,7 +197,6 @@ fn random_schedule_no_delays() {
             ..Default::default()
         },
     );
-    println!("{:?}", schedule);
     env.network.execute_schedule(schedule);
 
     let result = env.network.blocks_all_in_sequence();
@@ -222,7 +214,6 @@ fn random_schedule_probabilistic_gossip() {
             ..Default::default()
         },
     );
-    println!("{:?}", schedule);
     env.network.execute_schedule(schedule);
 
     let result = env.network.blocks_all_in_sequence();
