@@ -94,11 +94,24 @@ impl Network {
     }
 
     /// Returns true if all peers hold the same sequence of stable blocks.
-    pub fn blocks_all_in_sequence(&self) -> bool {
+    pub fn blocks_all_in_sequence(
+        &self,
+    ) -> Result<(), (&PeerId, Vec<&Transaction>, &PeerId, Vec<&Transaction>)> {
         let payloads = self.peers[0].blocks_payloads();
-        self.peers
+        if let Some(peer) = self
+            .peers
             .iter()
-            .all(|peer| peer.blocks_payloads() == payloads)
+            .find(|peer| peer.blocks_payloads() != payloads)
+        {
+            Err((
+                &self.peers[0].id,
+                payloads,
+                &peer.id,
+                peer.blocks_payloads(),
+            ))
+        } else {
+            Ok(())
+        }
     }
 
     fn peer(&mut self, id: &PeerId) -> &Peer {
