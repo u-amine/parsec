@@ -414,9 +414,15 @@ impl Schedule {
             );
             step += 1;
         }
-        let n = peers.len() as f32;
-        let additional_events = (30.0 * n * n.ln()) as usize;
-        for _ in 0..additional_events {
+        let n = peers.len() as f64;
+        // Gossip should theoretically complete in O(log N) steps
+        // But the number of local steps taken by each node depends on the probability
+        // of a local step - each node will take on avg [num steps]*[prob] local steps
+        // Thus, we divide log N by the probability.
+        // The constant (adjustment_coeff) is for making the number big enough.
+        let adjustment_coeff = 30.0;
+        let additional_steps = (adjustment_coeff * n.ln() / options.prob_local_step) as usize;
+        for _ in 0..additional_steps {
             Self::perform_step(
                 &mut env.rng,
                 step,
