@@ -98,6 +98,51 @@ impl ScheduleEvent {
         }
     }
 
+    fn gen_local_step<R: Rng>(
+        rng: &mut R,
+        step: usize,
+        peer: &PeerId,
+        peers: &[PeerId],
+        options: &ScheduleOptions,
+    ) -> ScheduleEvent {
+        let request_timing = match options.gossip_strategy {
+            GossipStrategy::Probabilistic(prob) => if rng.gen::<f64>() < prob {
+                RequestTiming::DuringThisStep(Self::gen_request(rng, peer, peers, options))
+            } else {
+                RequestTiming::Later
+            },
+            GossipStrategy::AfterReceive => {
+                RequestTiming::DuringThisStepIfNewData(Self::gen_request(rng, peer, peers, options))
+            }
+        };
+        ScheduleEvent::LocalStep {
+            global_step: step,
+            peer: peer.clone(),
+            request_timing,
+        }
+    }
+
+    fn gen_votes<R: Rng>(
+        rng: &mut R,
+        pending: &mut PendingTransactions,
+        options: &ScheduleOptions,
+    ) -> Vec<ScheduleEvent> {
+        let mut result = vec![];
+        for peer in pending.nonempty_peers() {
+            if rng.gen::<f64>() < options.prob_recv_trans {
+                let transaction = if rng.gen::<f64>() < options.prob_vote_duplication {
+                    pending.peek_next_for_peer(&peer)
+                } else {
+                    pending.next_for_peer(&peer)
+                };
+                if let Some(transaction) = transaction {
+                    result.push(ScheduleEvent::VoteFor(peer, transaction));
+                }
+            }
+        }
+        result
+    }
+
     /// Generates a random network event.
     pub fn gen_random<R: Rng>(
         rng: &mut R,
@@ -110,38 +155,12 @@ impl ScheduleEvent {
         let mut result = vec![];
         for peer in peers {
             if rng.gen::<f64>() < options.prob_local_step {
-                let request_timing = match options.gossip_strategy {
-                    GossipStrategy::Probabilistic(prob) => if rng.gen::<f64>() < prob {
-                        RequestTiming::DuringThisStep(Self::gen_request(rng, peer, peers, options))
-                    } else {
-                        RequestTiming::Later
-                    },
-                    GossipStrategy::AfterReceive => RequestTiming::DuringThisStepIfNewData(
-                        Self::gen_request(rng, peer, peers, options),
-                    ),
-                };
-                result.push(ScheduleEvent::LocalStep {
-                    global_step: step,
-                    peer: peer.clone(),
-                    request_timing,
-                });
+                result.push(Self::gen_local_step(rng, step, peer, peers, options));
             }
         }
 
         if let Some(pending) = pending {
-            for peer in pending.nonempty_peers() {
-                if rng.gen::<f64>() < options.prob_recv_trans {
-                    if rng.gen::<f64>() < options.prob_vote_duplication {
-                        if let Some(transaction) = pending.peek_next_for_peer(&peer) {
-                            result.push(ScheduleEvent::VoteFor(peer, transaction));
-                        }
-                    } else {
-                        if let Some(transaction) = pending.next_for_peer(&peer) {
-                            result.push(ScheduleEvent::VoteFor(peer, transaction));
-                        }
-                    }
-                }
-            }
+            result.extend(Self::gen_votes(rng, pending, options));
         }
 
         if rng.gen::<f64>() < options.prob_failure {
