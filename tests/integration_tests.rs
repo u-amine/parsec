@@ -59,18 +59,23 @@ extern crate parsec;
 extern crate rand;
 #[macro_use]
 extern crate unwrap;
+#[macro_use]
+extern crate proptest;
 
 mod utils;
 
+use self::utils::proptest::{ScheduleOptionsStrategy, ScheduleStrategy};
 use self::utils::{
-    DelayDistribution, Environment, GossipStrategy, PeerCount, Schedule, ScheduleOptions,
-    TransactionCount,
+    DelayDistribution, Environment, GossipStrategy, PeerCount, RngChoice, Schedule,
+    ScheduleOptions, TransactionCount,
 };
+use proptest::prelude::ProptestConfig;
+use proptest::test_runner::FileFailurePersistence;
 use rand::Rng;
 use std::collections::BTreeMap;
 
 // Alter the seed here to reproduce failures
-static SEED: Option<[u32; 4]> = None;
+static SEED: RngChoice = RngChoice::SeededRandom;
 
 #[test]
 fn minimal_network() {
@@ -246,4 +251,27 @@ fn random_schedule_probabilistic_gossip() {
 
     let result = env.network.blocks_all_in_sequence();
     assert!(result.is_ok(), "{:?}", result);
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("regressions"))),
+        ..Default::default()
+    })]
+
+    #[test]
+    fn vary_transactions_and_peers((mut env, sched) in ScheduleStrategy {
+        opts: ScheduleOptionsStrategy {
+            local_step: (0.05..0.8).into(),
+            recv_trans: (0.01..0.2).into(),
+            failure: (0.0..0.1).into(),
+            vote_duplication: (0.0..0.5).into(),
+        },
+        ..Default::default()
+    }) {
+        env.network.execute_schedule(sched);
+
+        let result = env.network.blocks_all_in_sequence();
+        prop_assert!(result.is_ok(), "{:?}", result);
+    }
 }

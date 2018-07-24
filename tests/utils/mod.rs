@@ -9,9 +9,10 @@
 mod environment;
 mod network;
 mod peer;
+pub mod proptest;
 mod schedule;
 
-pub use self::environment::{Environment, PeerCount, TransactionCount};
+pub use self::environment::{Environment, PeerCount, RngChoice, TransactionCount};
 pub use self::network::Network;
 pub use self::peer::Peer;
 pub use self::schedule::*;

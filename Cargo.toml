@@ -21,6 +21,7 @@ tiny-keccak = "~1.4.2"
 [dev-dependencies]
 clap = "~2.31.2"
 unwrap = "~1.1.0"
+proptest = "~0.8"
 
 [features]
 dump-graphs = ["lazy_static"]

@@ -316,6 +316,7 @@ impl Default for ScheduleOptions {
 }
 
 /// Stores the list of network events to be simulated.
+#[derive(Clone)]
 pub struct Schedule {
     pub num_transactions: usize,
     pub events: Vec<ScheduleEvent>,

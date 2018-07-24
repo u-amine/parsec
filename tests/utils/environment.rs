@@ -8,32 +8,46 @@
 
 use maidsafe_utilities::SeededRng;
 use parsec::mock::Transaction;
-use rand::Rng;
+use rand::{Rng, SeedableRng, XorShiftRng};
+use std::fmt;
 use utils::Network;
 
 pub struct PeerCount(pub usize);
 pub struct TransactionCount(pub usize);
 
+pub trait RngDebug: Rng + fmt::Debug {}
+
+impl RngDebug for SeededRng {}
+impl RngDebug for XorShiftRng {}
+
 pub struct Environment {
     pub network: Network,
     pub transactions: Vec<Transaction>,
-    pub rng: SeededRng,
+    pub rng: Box<RngDebug>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum RngChoice {
+    SeededRandom,
+    #[allow(unused)]
+    Seeded([u32; 4]),
+    SeededXor([u32; 4]),
 }
 
 impl Environment {
     /// Initialise the test environment with the given number of peers and transactions.  The random
-    /// number generator will be seeded with `seed` or randomly if this is `None`.
+    /// number generator will be seeded with `seed` or randomly if this is `SeededRandom`.
     pub fn new(
         peer_count: &PeerCount,
         transaction_count: &TransactionCount,
-        seed: Option<[u32; 4]>,
+        seed: RngChoice,
     ) -> Self {
         let network = Network::new(peer_count.0);
 
-        let mut rng = if let Some(seed) = seed {
-            SeededRng::from_seed(seed)
-        } else {
-            SeededRng::new()
+        let mut rng: Box<RngDebug> = match seed {
+            RngChoice::SeededRandom => Box::new(SeededRng::new()),
+            RngChoice::Seeded(seed) => Box::new(SeededRng::from_seed(seed)),
+            RngChoice::SeededXor(seed) => Box::new(XorShiftRng::from_seed(seed)),
         };
         println!("Using {:?}", rng);
 
@@ -46,5 +60,17 @@ impl Environment {
             transactions,
             rng,
         }
+    }
+}
+
+impl fmt::Debug for Environment {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Environment({} peers, {} transactions, {:?})",
+            self.network.peers.len(),
+            self.transactions.len(),
+            self.rng
+        )
     }
 }

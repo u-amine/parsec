@@ -38,7 +38,12 @@ impl Network {
     /// Create test network with the given initial number of peers (the genesis group).
     pub fn new(count: usize) -> Self {
         let all_ids = mock::create_ids(count);
-        let genesis_group = all_ids.iter().cloned().collect::<BTreeSet<_>>();
+        Self::with_peers(all_ids)
+    }
+
+    /// Create a test network with initial peers constructed from the given IDs
+    pub fn with_peers<I: IntoIterator<Item = PeerId>>(all_ids: I) -> Self {
+        let genesis_group = all_ids.into_iter().collect::<BTreeSet<_>>();
         let peers = genesis_group
             .iter()
             .map(|id| Peer::new(id.clone(), &genesis_group))
