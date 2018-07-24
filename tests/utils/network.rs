@@ -7,12 +7,24 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use parsec::mock::{self, PeerId, Transaction};
-use rand::Rng;
-use std::collections::BTreeSet;
-use utils::Peer;
+use parsec::{Request, Response};
+use std::collections::{BTreeSet, HashMap, HashSet};
+use utils::{self, Peer, RequestTiming, Schedule, ScheduleEvent};
+
+enum Message {
+    Request(Request<Transaction, PeerId>, usize),
+    Response(Response<Transaction, PeerId>),
+}
+
+struct QueueEntry {
+    pub sender: PeerId,
+    pub message: Message,
+    pub deliver_after: usize,
+}
 
 pub struct Network {
     pub peers: Vec<Peer>,
+    msg_queue: HashMap<PeerId, Vec<QueueEntry>>,
 }
 
 impl Network {
@@ -24,65 +36,31 @@ impl Network {
             .iter()
             .map(|id| Peer::new(id.clone(), &genesis_group))
             .collect();
-        Network { peers }
-    }
-
-    /// For each node of `sender_id`, which sends a parsec request to a randomly chosen peer of
-    /// `receiver_id`, which causes `receiver_id` node to reply with a parsec response.
-    pub fn send_random_syncs<R: Rng>(&mut self, rng: &mut R) {
-        let peer_ids = self
-            .peers
-            .iter()
-            .map(|peer| peer.id.clone())
-            .collect::<Vec<_>>();
-        for sender_id in &peer_ids {
-            let receiver_id = unwrap!(
-                peer_ids
-                    .iter()
-                    .filter(|&id| id != sender_id)
-                    .nth(rng.gen_range(0, peer_ids.len() - 1))
-            );
-            self.exchange_messages(sender_id, receiver_id, None);
-        }
-    }
-
-    pub fn interleave_syncs_and_votes<R: Rng>(
-        &mut self,
-        rng: &mut R,
-        transactions: &mut [Transaction],
-    ) {
-        let peer_ids = self
-            .peers
-            .iter()
-            .map(|peer| peer.id.clone())
-            .collect::<Vec<_>>();
-        for sender_id in &peer_ids {
-            let receiver_id = unwrap!(
-                peer_ids
-                    .iter()
-                    .filter(|&id| id != sender_id)
-                    .nth(rng.gen_range(0, peer_ids.len() - 1))
-            );
-            rng.shuffle(transactions);
-            if rng.gen_weighted_bool(10) {
-                self.peer_mut(sender_id)
-                    .vote_for_first_not_already_voted_for(&transactions);
-            }
-            let opt_transactions = if rng.gen_weighted_bool(10) {
-                Some(&*transactions)
-            } else {
-                None
-            };
-            self.exchange_messages(sender_id, receiver_id, opt_transactions);
+        Network {
+            peers,
+            msg_queue: HashMap::new(),
         }
     }
 
     /// Returns true if all peers hold the same sequence of stable blocks.
-    pub fn blocks_all_in_sequence(&self) -> bool {
+    pub fn blocks_all_in_sequence(
+        &self,
+    ) -> Result<(), (&PeerId, Vec<&Transaction>, &PeerId, Vec<&Transaction>)> {
         let payloads = self.peers[0].blocks_payloads();
-        self.peers
+        if let Some(peer) = self
+            .peers
             .iter()
-            .all(|peer| peer.blocks_payloads() == payloads)
+            .find(|peer| peer.blocks_payloads() != payloads)
+        {
+            Err((
+                &self.peers[0].id,
+                payloads,
+                &peer.id,
+                peer.blocks_payloads(),
+            ))
+        } else {
+            Ok(())
+        }
     }
 
     fn peer(&mut self, id: &PeerId) -> &Peer {
@@ -93,33 +71,100 @@ impl Network {
         unwrap!(self.peers.iter_mut().find(|peer| peer.id == *id))
     }
 
-    fn exchange_messages(
-        &mut self,
-        sender_id: &PeerId,
-        receiver_id: &PeerId,
-        transactions: Option<&[Transaction]>,
-    ) {
-        let request = unwrap!(
-            self.peer(sender_id)
-                .parsec
-                .create_gossip(Some(receiver_id.clone()))
-        );
+    fn send_message(&mut self, src: PeerId, dst: PeerId, message: Message, deliver_after: usize) {
+        self.msg_queue
+            .entry(dst.clone())
+            .or_insert_with(Vec::new)
+            .push(QueueEntry {
+                sender: src,
+                message,
+                deliver_after,
+            });
+    }
 
-        let response = unwrap!(
-            self.peer_mut(receiver_id)
-                .parsec
-                .handle_request(sender_id, request)
-        );
-
-        if let Some(transactns) = transactions {
-            self.peer_mut(sender_id)
-                .vote_for_first_not_already_voted_for(transactns);
+    /// Handles incoming requests and responses
+    fn handle_messages(&mut self, peer: &PeerId, step: usize) -> bool {
+        if let Some(msgs) = self.msg_queue.remove(peer) {
+            let (to_handle, rest) = msgs
+                .into_iter()
+                .partition(|entry| entry.deliver_after <= step);
+            let _ = self.msg_queue.insert(peer.clone(), rest);
+            let result = !to_handle.is_empty();
+            for entry in to_handle {
+                match entry.message {
+                    Message::Request(req, resp_delay) => {
+                        let response = unwrap!(
+                            self.peer_mut(peer)
+                                .parsec
+                                .handle_request(&entry.sender, req)
+                        );
+                        self.send_message(
+                            peer.clone(),
+                            entry.sender,
+                            Message::Response(response),
+                            step + resp_delay,
+                        );
+                    }
+                    Message::Response(resp) => {
+                        unwrap!(
+                            self.peer_mut(peer)
+                                .parsec
+                                .handle_response(&entry.sender, resp)
+                        );
+                    }
+                }
+            }
+            result
+        } else {
+            false
         }
+    }
 
-        unwrap!(
-            self.peer_mut(sender_id)
-                .parsec
-                .handle_response(receiver_id, response)
-        )
+    /// Simulates the network according to the given schedule
+    pub fn execute_schedule(&mut self, schedule: Schedule) {
+        let mut started_up = HashSet::new();
+        for event in schedule.0 {
+            match event {
+                ScheduleEvent::LocalStep {
+                    global_step,
+                    peer,
+                    request_timing,
+                } => {
+                    let has_new_data = self.handle_messages(&peer, global_step);
+                    self.peer_mut(&peer).poll();
+                    let mut handle_req = |req: utils::Request| {
+                        let request = unwrap!(
+                            self.peer(&peer)
+                                .parsec
+                                .create_gossip(Some(req.recipient.clone()))
+                        );
+                        self.send_message(
+                            peer.clone(),
+                            req.recipient,
+                            Message::Request(request, req.resp_delay),
+                            global_step + req.req_delay,
+                        );
+                    };
+                    match request_timing {
+                        RequestTiming::DuringThisStep(req) => {
+                            handle_req(req);
+                        }
+                        RequestTiming::DuringThisStepIfNewData(req) => {
+                            if has_new_data || !started_up.contains(&peer) {
+                                let _ = started_up.insert(peer.clone());
+                                handle_req(req);
+                            }
+                        }
+                        RequestTiming::Later => (),
+                    }
+                }
+                ScheduleEvent::VoteFor(peer, transaction) => {
+                    let _ = self.peer_mut(&peer).vote_for(&transaction);
+                }
+                ScheduleEvent::Fail(peer) => {
+                    self.peers.retain(|p| p.id != peer);
+                }
+            }
+        }
     }
 }

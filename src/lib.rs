@@ -68,6 +68,8 @@ mod vote;
 pub mod mock;
 
 pub use block::Block;
+#[cfg(feature = "dump-graphs")]
+pub use dump_graph::DIR;
 pub use error::Error;
 pub use gossip::{Request, Response};
 pub use id::{Proof, PublicId, SecretId};
