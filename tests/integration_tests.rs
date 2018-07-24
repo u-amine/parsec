@@ -122,7 +122,7 @@ fn faulty_third_never_gossip() {
     let mut env = Environment::new(
         &PeerCount(num_peers),
         &TransactionCount(num_transactions),
-        None,
+        SEED,
     );
 
     let mut failures = HashMap::new();
@@ -148,7 +148,7 @@ fn faulty_third_terminate_concurrently() {
     let mut env = Environment::new(
         &PeerCount(num_peers),
         &TransactionCount(num_transactions),
-        None,
+        SEED,
     );
 
     let mut failures = HashMap::new();
@@ -174,7 +174,7 @@ fn faulty_nodes_terminate_at_random_points() {
     let mut env = Environment::new(
         &PeerCount(num_peers),
         &TransactionCount(num_transactions),
-        None,
+        SEED,
     );
     let schedule = Schedule::new(
         &mut env,
