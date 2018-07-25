@@ -232,11 +232,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         if let Some(block) = self.next_stable_block() {
             dump_graph::to_file(self.our_pub_id(), &self.events, &self.meta_votes);
             self.clear_consensus_data(block.payload());
-            let block_hash = Hash::from(serialise(&block)?.as_slice());
             let payload_hash = Hash::from(serialise(block.payload())?.as_slice());
             self.consensus_history.push(payload_hash);
             self.consensused_blocks.push_back(block);
-            self.restart_consensus(&block_hash)?;
+            self.restart_consensus(&payload_hash)?;
         }
         Ok(())
     }
