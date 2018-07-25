@@ -24,15 +24,11 @@ pub(crate) struct PeerManager<S: SecretId> {
 impl<S: SecretId> PeerManager<S> {
     /// Constructor of `PeerManager`.
     pub fn new(our_id: S) -> Self {
-        let our_public_id = our_id.public_id().clone();
-        let mut peer_manager = PeerManager {
+        PeerManager {
             our_id,
             peers: BTreeMap::new(),
             peer_id_hashes: vec![],
-        };
-        // TODO - we shouldn't just automatically add ourself once we begin work on milestone 2.
-        peer_manager.add_peer(our_public_id);
-        peer_manager
+        }
     }
 
     /// Returns `our_id`.
