@@ -8,7 +8,7 @@
 
 use parsec::mock::{self, PeerId, Transaction};
 use parsec::{Request, Response};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use utils::{self, Peer, RequestTiming, Schedule, ScheduleEvent};
 
 enum Message {
@@ -24,7 +24,7 @@ struct QueueEntry {
 
 pub struct Network {
     pub peers: Vec<Peer>,
-    msg_queue: HashMap<PeerId, Vec<QueueEntry>>,
+    msg_queue: BTreeMap<PeerId, Vec<QueueEntry>>,
 }
 
 impl Network {
@@ -38,7 +38,7 @@ impl Network {
             .collect();
         Network {
             peers,
-            msg_queue: HashMap::new(),
+            msg_queue: BTreeMap::new(),
         }
     }
 
@@ -122,7 +122,7 @@ impl Network {
 
     /// Simulates the network according to the given schedule
     pub fn execute_schedule(&mut self, schedule: Schedule) {
-        let mut started_up = HashSet::new();
+        let mut started_up = BTreeSet::new();
         for event in schedule.0 {
             match event {
                 ScheduleEvent::LocalStep {
