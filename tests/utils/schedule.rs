@@ -11,7 +11,7 @@ use parsec::mock::{PeerId, Transaction};
 #[cfg(feature = "dump-graphs")]
 use parsec::DIR;
 use rand::Rng;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 #[cfg(feature = "dump-graphs")]
 use std::fs::File;
@@ -189,7 +189,7 @@ impl ScheduleEvent {
 }
 
 /// Stores pending transactions per node, so that nodes only vote for each transaction once.
-pub struct PendingTransactions(HashMap<PeerId, Vec<Transaction>>);
+pub struct PendingTransactions(BTreeMap<PeerId, Vec<Transaction>>);
 
 impl PendingTransactions {
     pub fn new<R: Rng>(
@@ -197,7 +197,7 @@ impl PendingTransactions {
         peers: &[PeerId],
         transactions: &Vec<Transaction>,
     ) -> PendingTransactions {
-        let mut inner = HashMap::new();
+        let mut inner = BTreeMap::new();
         for peer in peers {
             let mut trans = transactions.clone();
             rng.shuffle(&mut trans);
@@ -240,7 +240,7 @@ impl PendingTransactions {
     /// Returns an iterator of all (peer, transaction) pairs, clearing the transaction cache in the
     /// process.
     pub fn all_transactions(&mut self) -> impl Iterator<Item = (PeerId, Transaction)> {
-        let data = mem::replace(&mut self.0, HashMap::new());
+        let data = mem::replace(&mut self.0, BTreeMap::new());
         data.into_iter()
             .flat_map(|(peer, x)| x.into_iter().map(move |trans| (peer.clone(), trans)))
     }
@@ -274,7 +274,7 @@ pub struct ScheduleOptions {
     /// Probability that a vote will get repeated
     pub prob_vote_duplication: f64,
     /// A map: step number → num of nodes to fail
-    pub deterministic_failures: HashMap<usize, usize>,
+    pub deterministic_failures: BTreeMap<usize, usize>,
     /// The distribution of message delays
     pub delay_distr: DelayDistribution,
     /// The strategy that defines when a node gossips
@@ -304,7 +304,7 @@ impl Default for ScheduleOptions {
             // no vote duplication
             prob_vote_duplication: 0.0,
             // no deterministic failures
-            deterministic_failures: HashMap::new(),
+            deterministic_failures: BTreeMap::new(),
             // randomised delays, 4 steps on average
             delay_distr: DelayDistribution::Poisson(4.0),
             // gossip when we receive new data
@@ -391,7 +391,7 @@ impl Schedule {
         let fails: Vec<_> = fails.into_iter().take(max_number_of_failures).collect();
         // since we have fails separated, take this opportunity to remove failed peers from
         // the peers vector
-        let failed_peers: HashSet<_> = fails.iter().filter_map(|e| e.fail().cloned()).collect();
+        let failed_peers: BTreeSet<_> = fails.iter().filter_map(|e| e.fail().cloned()).collect();
         // other events can still refer to failed peers, as they were drawn using the full peer
         // list
         other.retain(|ev| !failed_peers.contains(ev.get_peer()));

@@ -42,7 +42,7 @@ use self::utils::{
     TransactionCount,
 };
 use rand::Rng;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 // Alter the seed here to reproduce failures
 static SEED: Option<[u32; 4]> = None;
@@ -125,7 +125,7 @@ fn faulty_third_never_gossip() {
         SEED,
     );
 
-    let mut failures = HashMap::new();
+    let mut failures = BTreeMap::new();
     let _ = failures.insert(0, num_faulty);
     let schedule = Schedule::new(
         &mut env,
@@ -151,7 +151,7 @@ fn faulty_third_terminate_concurrently() {
         SEED,
     );
 
-    let mut failures = HashMap::new();
+    let mut failures = BTreeMap::new();
     let _ = failures.insert(env.rng.gen_range(10, 50), num_faulty);
     let schedule = Schedule::new(
         &mut env,
