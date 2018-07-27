@@ -316,13 +316,16 @@ impl Default for ScheduleOptions {
 }
 
 /// Stores the list of network events to be simulated.
-pub struct Schedule(pub Vec<ScheduleEvent>);
+pub struct Schedule {
+    pub num_transactions: usize,
+    pub events: Vec<ScheduleEvent>,
+}
 
 impl fmt::Debug for Schedule {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "----------------------------")?;
         writeln!(f, " Schedule:")?;
-        for event in &self.0 {
+        for event in &self.events {
             writeln!(f, "- {:?}", event)?;
         }
         writeln!(f, "----------------------------")
@@ -439,7 +442,7 @@ impl Schedule {
         // of a local step - each node will take on avg [num steps]*[prob] local steps
         // Thus, we divide log N by the probability.
         // The constant (adjustment_coeff) is for making the number big enough.
-        let adjustment_coeff = 30.0;
+        let adjustment_coeff = 200.0;
         let additional_steps = (adjustment_coeff * n.ln() / options.prob_local_step) as usize;
         for _ in 0..additional_steps {
             Self::perform_step(
@@ -453,7 +456,10 @@ impl Schedule {
             );
             step += 1;
         }
-        let result = Schedule(schedule);
+        let result = Schedule {
+            num_transactions: env.transactions.len(),
+            events: schedule,
+        };
         #[cfg(feature = "dump-graphs")]
         result.save(options);
         result
