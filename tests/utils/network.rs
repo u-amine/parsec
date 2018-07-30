@@ -120,10 +120,33 @@ impl Network {
         }
     }
 
+    fn consensus_broken(&self) -> bool {
+        let mut block_order = BTreeMap::new();
+        for peer in &self.peers {
+            for (index, block) in peer.blocks_payloads().into_iter().enumerate() {
+                let old_index = block_order.insert(block, index);
+                if old_index.map(|idx| idx != index).unwrap_or(false) {
+                    // old index exists and isn't equal to the new one
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn consensus_complete(&self, num_transactions: usize) -> bool {
+        self.peers[0].blocks_payloads().len() == num_transactions
+            && self.blocks_all_in_sequence().is_ok()
+    }
+
     /// Simulates the network according to the given schedule
     pub fn execute_schedule(&mut self, schedule: Schedule) {
         let mut started_up = BTreeSet::new();
-        for event in schedule.0 {
+        let Schedule {
+            num_transactions,
+            events,
+        } = schedule;
+        for event in events {
             match event {
                 ScheduleEvent::LocalStep {
                     global_step,
@@ -164,6 +187,9 @@ impl Network {
                 ScheduleEvent::Fail(peer) => {
                     self.peers.retain(|p| p.id != peer);
                 }
+            }
+            if self.consensus_broken() || self.consensus_complete(num_transactions) {
+                break;
             }
         }
     }
