@@ -228,8 +228,15 @@ impl ValueTree for ScheduleValueTree {
     type Value = (Environment, Schedule);
 
     fn current(&self) -> (Environment, Schedule) {
+        println!("Scheduling with options: {:?}", self.opts.current());
         let env = self.env.current();
+        println!(
+            "{} peers, {} transactions",
+            env.network.peers.len(),
+            env.transactions.len()
+        );
         let schedule = self.filtered_schedule(&env);
+        println!("{:?}", schedule);
         (env, schedule)
     }
 
