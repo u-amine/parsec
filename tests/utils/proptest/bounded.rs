@@ -94,6 +94,14 @@ impl<T: Debug> Strategy for BoundedBoxedStrategy<T> {
 // Deliberately not implemented as Bounded, or the implementation of From would conflict with the
 // blanket impl From<T> for T
 impl<T: Clone + Debug> BoundedBoxedStrategy<T> {
+    pub fn from_boxed(s: BoxedStrategy<T>, min: T, max: T) -> Self {
+        BoundedBoxedStrategy {
+            strategy: s,
+            min,
+            max,
+        }
+    }
+
     pub fn min(&self) -> T {
         self.min.clone()
     }

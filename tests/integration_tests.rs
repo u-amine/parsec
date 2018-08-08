@@ -266,6 +266,7 @@ proptest! {
             recv_trans: (0.01..0.2).into(),
             failure: (0.0..0.1).into(),
             vote_duplication: (0.0..0.5).into(),
+            ..Default::default()
         },
         ..Default::default()
     }) {
