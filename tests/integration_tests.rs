@@ -64,7 +64,7 @@ extern crate proptest;
 
 mod utils;
 
-use self::utils::proptest::{ScheduleOptionsStrategy, ScheduleStrategy};
+use self::utils::proptest::{arbitrary_delay, ScheduleOptionsStrategy, ScheduleStrategy};
 use self::utils::{
     DelayDistribution, Environment, GossipStrategy, PeerCount, RngChoice, Schedule,
     ScheduleOptions, TransactionCount,
@@ -260,12 +260,13 @@ proptest! {
     })]
 
     #[test]
-    fn vary_transactions_and_peers((mut env, sched) in ScheduleStrategy {
+    fn agreement_under_various_conditions((mut env, sched) in ScheduleStrategy {
         opts: ScheduleOptionsStrategy {
-            local_step: (0.05..0.8).into(),
-            recv_trans: (0.01..0.2).into(),
-            failure: (0.0..0.1).into(),
+            local_step: (0.01..=1.0).into(),
+            recv_trans: (0.001..0.5).into(),
+            failure: (0.0..1.0).into(),
             vote_duplication: (0.0..0.5).into(),
+            delay_distr: arbitrary_delay(0..10, 0.0..10.0),
             ..Default::default()
         },
         ..Default::default()
