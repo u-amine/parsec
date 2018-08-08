@@ -256,6 +256,7 @@ fn random_schedule_probabilistic_gossip() {
 proptest! {
     #![proptest_config(ProptestConfig {
         failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("regressions"))),
+        cases: 5,
         ..Default::default()
     })]
 
