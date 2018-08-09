@@ -55,7 +55,7 @@ impl BoolSet {
     fn insert(&mut self, val: bool) -> bool {
         match self.clone() {
             BoolSet::Empty => *self = BoolSet::Single(val),
-            BoolSet::Single(ref s) if *s != val => *self = BoolSet::Both,
+            BoolSet::Single(s) if s != val => *self = BoolSet::Both,
             _ => return false,
         }
         true
