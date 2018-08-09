@@ -110,16 +110,16 @@ fn write_bool(f: &mut Formatter, a_bool: bool) -> fmt::Result {
     }
 }
 
-fn write_multiple_bool_values(
-    f: &mut Formatter,
-    field: &str,
-    input: &BoolSet,
-) -> fmt::Result {
+fn write_multiple_bool_values(f: &mut Formatter, field: &str, input: &BoolSet) -> fmt::Result {
     write!(f, "{}:{{", field)?;
     match *input {
         BoolSet::Empty => (),
-        BoolSet::True => { write_bool(f, true)?; },
-        BoolSet::False => { write_bool(f, false)?; },
+        BoolSet::True => {
+            write_bool(f, true)?;
+        }
+        BoolSet::False => {
+            write_bool(f, false)?;
+        }
         BoolSet::TrueFalse => {
             write_bool(f, true)?;
             write!(f, ", ")?;
