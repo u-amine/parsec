@@ -6,15 +6,9 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::iter;
-
-fn new_set_with_value(value: bool) -> BTreeSet<bool> {
-    let mut set = BTreeSet::new();
-    let _ = set.insert(value);
-    set
-}
 
 #[derive(Clone, PartialEq, PartialOrd)]
 pub(crate) enum Step {
@@ -40,13 +34,61 @@ impl Debug for Step {
     }
 }
 
+/// A simple enum to hold a set of bools
+#[derive(Clone, PartialEq)]
+pub(crate) enum BoolSet {
+    Empty,
+    Single(bool),
+    Both,
+}
+
+impl Default for BoolSet {
+    fn default() -> BoolSet {
+        BoolSet::Empty
+    }
+}
+
+impl BoolSet {
+    pub fn is_empty(&self) -> bool {
+        *self == BoolSet::Empty
+    }
+    fn insert(&mut self, val: bool) -> bool {
+        match self.clone() {
+            BoolSet::Empty => *self = BoolSet::Single(val),
+            BoolSet::Single(s) if s != val => *self = BoolSet::Both,
+            _ => return false,
+        }
+        true
+    }
+    fn contains(&self, val: &bool) -> bool {
+        match *self {
+            BoolSet::Empty => false,
+            BoolSet::Single(ref s) => *s == *val,
+            BoolSet::Both => true,
+        }
+    }
+    fn clear(&mut self) {
+        *self = BoolSet::Empty
+    }
+    fn len(&self) -> usize {
+        match *self {
+            BoolSet::Empty => 0,
+            BoolSet::Single(_) => 1,
+            BoolSet::Both => 2,
+        }
+    }
+    fn from_bool(val: bool) -> Self {
+        BoolSet::Single(val)
+    }
+}
+
 // This holds the state of a (binary) meta vote about which we're trying to achieve consensus.
 #[derive(Clone, Default)]
 pub(crate) struct MetaVote {
     pub round: usize,
     pub step: Step,
-    pub estimates: BTreeSet<bool>,
-    pub bin_values: BTreeSet<bool>,
+    pub estimates: BoolSet,
+    pub bin_values: BoolSet,
     pub aux_value: Option<bool>,
     pub decision: Option<bool>,
 }
@@ -59,19 +101,18 @@ fn write_bool(f: &mut Formatter, a_bool: bool) -> fmt::Result {
     }
 }
 
-fn write_multiple_bool_values(
-    f: &mut Formatter,
-    field: &str,
-    input: &BTreeSet<bool>,
-) -> fmt::Result {
+fn write_multiple_bool_values(f: &mut Formatter, field: &str, input: &BoolSet) -> fmt::Result {
     write!(f, "{}:{{", field)?;
-    let values: Vec<&bool> = input.iter().collect();
-    if values.len() == 1 {
-        write_bool(f, *values[0])?;
-    } else if values.len() == 2 {
-        write_bool(f, *values[0])?;
-        write!(f, ", ")?;
-        write_bool(f, *values[1])?;
+    match *input {
+        BoolSet::Empty => (),
+        BoolSet::Single(ref s) => {
+            write_bool(f, *s)?;
+        }
+        BoolSet::Both => {
+            write_bool(f, true)?;
+            write!(f, ", ")?;
+            write_bool(f, false)?;
+        }
     }
     write!(f, "}} ")
 }
@@ -104,7 +145,7 @@ impl Debug for MetaVote {
 impl MetaVote {
     pub fn new(initial_estimate: bool, others: &[Vec<MetaVote>], total_peers: usize) -> Vec<Self> {
         let mut initial = Self::default();
-        initial.estimates = new_set_with_value(initial_estimate);
+        initial.estimates = BoolSet::from_bool(initial_estimate);
         Self::next(&[initial], others, &BTreeMap::new(), total_peers)
     }
 
@@ -189,7 +230,7 @@ impl MetaVote {
                 } else {
                     counts.estimates_false += 1;
                 }
-                meta_vote.estimates = new_set_with_value(*toss);
+                meta_vote.estimates = BoolSet::from_bool(*toss);
             }
         } else {
             if counts.at_least_one_third(counts.estimates_true) && meta_vote.estimates.insert(true)
@@ -256,8 +297,8 @@ impl MetaVote {
             Step::GenuineFlip => None,
         };
         if let Some(decision) = opt_decision {
-            meta_vote.estimates = new_set_with_value(decision);
-            meta_vote.bin_values = new_set_with_value(decision);
+            meta_vote.estimates = BoolSet::from_bool(decision);
+            meta_vote.bin_values = BoolSet::from_bool(decision);
             meta_vote.aux_value = Some(decision);
             meta_vote.decision = Some(decision);
         }
@@ -275,27 +316,27 @@ impl MetaVote {
         match new_meta_vote.step {
             Step::ForcedTrue => {
                 if counts.is_super_majority(counts.aux_values_false) {
-                    new_meta_vote.estimates = new_set_with_value(false);
+                    new_meta_vote.estimates = BoolSet::from_bool(false);
                 } else if !counts.is_super_majority(counts.aux_values_true) {
-                    new_meta_vote.estimates = new_set_with_value(true);
+                    new_meta_vote.estimates = BoolSet::from_bool(true);
                 }
                 new_meta_vote.step = Step::ForcedFalse;
             }
             Step::ForcedFalse => {
                 if counts.is_super_majority(counts.aux_values_true) {
-                    new_meta_vote.estimates = new_set_with_value(true);
+                    new_meta_vote.estimates = BoolSet::from_bool(true);
                 } else if !counts.is_super_majority(counts.aux_values_false) {
-                    new_meta_vote.estimates = new_set_with_value(false);
+                    new_meta_vote.estimates = BoolSet::from_bool(false);
                 }
                 new_meta_vote.step = Step::GenuineFlip;
             }
             Step::GenuineFlip => {
                 if counts.is_super_majority(counts.aux_values_true) {
-                    new_meta_vote.estimates = new_set_with_value(true);
+                    new_meta_vote.estimates = BoolSet::from_bool(true);
                 } else if counts.is_super_majority(counts.aux_values_false) {
-                    new_meta_vote.estimates = new_set_with_value(false);
+                    new_meta_vote.estimates = BoolSet::from_bool(false);
                 } else if let Some(coin_toss_result) = coin_toss {
-                    new_meta_vote.estimates = new_set_with_value(coin_toss_result);
+                    new_meta_vote.estimates = BoolSet::from_bool(coin_toss_result);
                 } else {
                     // Clear the estimates to indicate we're waiting for further events to be
                     // gossiped to try and get the coin toss result.
