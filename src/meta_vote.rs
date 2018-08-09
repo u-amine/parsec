@@ -61,10 +61,10 @@ impl BoolSet {
         true
     }
     fn contains(&self, val: &bool) -> bool {
-        match self.clone() {
+        match *self {
+            BoolSet::Empty => false,
+            BoolSet::Single(ref s) => *s == *val,
             BoolSet::Both => true,
-            BoolSet::Single(ref s) if *s == *val => true,
-            _ => false,
         }
     }
     fn clear(&mut self) {
