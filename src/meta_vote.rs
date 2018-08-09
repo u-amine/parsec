@@ -35,12 +35,11 @@ impl Debug for Step {
 }
 
 /// A simple enum to hold a set of bools
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub(crate) enum BoolSet {
     Empty,
-    True,
-    False,
-    TrueFalse,
+    Single(bool),
+    Both,
 }
 
 impl Default for BoolSet {
@@ -51,24 +50,20 @@ impl Default for BoolSet {
 
 impl BoolSet {
     pub fn is_empty(&self) -> bool {
-        if let BoolSet::Empty = *self {
-            true
-        } else {
-            false
-        }
+        *self == BoolSet::Empty
     }
     fn insert(&mut self, val: bool) -> bool {
-        match (self.clone(), val) {
-            (BoolSet::Empty, true) => *self = BoolSet::True,
-            (BoolSet::Empty, false) => *self = BoolSet::False,
-            (BoolSet::True, false) | (BoolSet::False, true) => *self = BoolSet::TrueFalse,
+        match self.clone() {
+            BoolSet::Empty => *self = BoolSet::Single(val),
+            BoolSet::Single(ref s) if *s != val => *self = BoolSet::Both,
             _ => return false,
         }
         true
     }
     fn contains(&self, val: &bool) -> bool {
-        match (self.clone(), *val) {
-            (BoolSet::TrueFalse, _) | (BoolSet::True, true) | (BoolSet::False, false) => true,
+        match self.clone() {
+            BoolSet::Both => true,
+            BoolSet::Single(ref s) if *s == *val => true,
             _ => false,
         }
     }
@@ -78,16 +73,12 @@ impl BoolSet {
     fn len(&self) -> usize {
         match *self {
             BoolSet::Empty => 0,
-            BoolSet::TrueFalse => 2,
-            _ => 1,
+            BoolSet::Single(_) => 1,
+            BoolSet::Both => 2,
         }
     }
     fn from_bool(val: bool) -> Self {
-        if val {
-            BoolSet::True
-        } else {
-            BoolSet::False
-        }
+        BoolSet::Single(val)
     }
 }
 
@@ -114,13 +105,10 @@ fn write_multiple_bool_values(f: &mut Formatter, field: &str, input: &BoolSet) -
     write!(f, "{}:{{", field)?;
     match *input {
         BoolSet::Empty => (),
-        BoolSet::True => {
-            write_bool(f, true)?;
+        BoolSet::Single(ref s) => {
+            write_bool(f, *s)?;
         }
-        BoolSet::False => {
-            write_bool(f, false)?;
-        }
-        BoolSet::TrueFalse => {
+        BoolSet::Both => {
             write_bool(f, true)?;
             write!(f, ", ")?;
             write_bool(f, false)?;
