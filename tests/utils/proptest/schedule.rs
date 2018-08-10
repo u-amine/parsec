@@ -97,7 +97,15 @@ impl Strategy for ScheduleOptionsStrategy {
             &self.recv_trans,
             (&self.local_step).prop_map(move |l| l_max + l_min - l),
             &self.delay_distr,
-        ).new_tree(runner)
+        ).prop_map(|(f, v, r, l, d)| ScheduleOptions {
+                prob_failure: f,
+                prob_vote_duplication: v,
+                prob_recv_trans: r,
+                prob_local_step: l,
+                delay_distr: d,
+                ..Default::default()
+            })
+            .new_tree(runner)
             .map(|t| ScheduleOptionsValueTree {
                 max_sched,
                 min_sched,
@@ -106,10 +114,11 @@ impl Strategy for ScheduleOptionsStrategy {
     }
 }
 
+// This struct is a wrapper around a mapped value tree that lets us implement Bounded
 pub struct ScheduleOptionsValueTree {
     max_sched: ScheduleOptions,
     min_sched: ScheduleOptions,
-    generator: Box<ValueTree<Value = (f64, f64, f64, f64, DelayDistribution)>>,
+    generator: Box<ValueTree<Value = ScheduleOptions>>,
 }
 
 impl Bounded for ScheduleOptionsValueTree {
@@ -128,15 +137,7 @@ impl ValueTree for ScheduleOptionsValueTree {
     type Value = ScheduleOptions;
 
     fn current(&self) -> ScheduleOptions {
-        let (f, v, r, l, d) = self.generator.current();
-        ScheduleOptions {
-            prob_local_step: l,
-            prob_recv_trans: r,
-            prob_failure: f,
-            prob_vote_duplication: v,
-            delay_distr: d,
-            ..Default::default()
-        }
+        self.generator.current()
     }
 
     fn simplify(&mut self) -> bool {
