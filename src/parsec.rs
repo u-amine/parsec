@@ -563,14 +563,14 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let mut event_hash = self.peer_manager.last_event_hash(self.our_pub_id());
         let mut response_count = 0;
         loop {
-            if let Some(evnt) = event_hash.and_then(|hash| self.events.get(hash)) {
-                if evnt.is_response() {
+            if let Some(event) = event_hash.and_then(|hash| self.events.get(hash)) {
+                if event.is_response() {
                     response_count += 1;
                     if response_count == self.responsiveness_threshold {
                         break;
                     }
                 }
-                event_hash = evnt.self_parent();
+                event_hash = event.self_parent();
             } else {
                 return false;
             }
