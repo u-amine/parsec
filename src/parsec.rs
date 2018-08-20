@@ -147,10 +147,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// Checks if the given `network_event` has already been voted for by us.
     pub fn have_voted_for(&self, network_event: &T) -> bool {
         self.events.values().any(|event| {
-            event.creator() == self.our_pub_id()
-                && event
-                    .vote()
-                    .map_or(false, |voted| voted.payload() == network_event)
+            event.creator() == self.our_pub_id() && event
+                .vote()
+                .map_or(false, |voted| voted.payload() == network_event)
         })
     }
 
@@ -327,13 +326,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                             .get(hash)
                             .and_then(|event| event.vote().map(|vote| vote.payload()))
                     })
-                })
-                .filter(|&this_payload| !self.payload_is_already_carried(event, this_payload))
+                }).filter(|&this_payload| !self.payload_is_already_carried(event, this_payload))
                 .filter(|&this_payload| {
                     self.peer_manager
                         .is_super_majority(self.n_ancestors_carrying_payload(event, this_payload))
-                })
-                .cloned()
+                }).cloned()
                 .collect::<BTreeSet<T>>()
         };
         if !valid_blocks_carried.is_empty() {
@@ -344,8 +341,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .entry(creator_id)
                 .and_modify(|hashes| {
                     hashes.push_back(*event_hash);
-                })
-                .or_insert_with(|| iter::once(*event_hash).collect());
+                }).or_insert_with(|| iter::once(*event_hash).collect());
         }
         self.events
             .get_mut(event_hash)
@@ -389,8 +385,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                         }
                         None => false,
                     })
-            })
-            .count()
+            }).count()
     }
 
     fn set_observations(&mut self, event_hash: &Hash) -> Result<(), Error> {
@@ -406,8 +401,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     } else {
                         None
                     }
-                })
-                .cloned()
+                }).cloned()
                 .collect()
         };
         self.events
@@ -554,7 +548,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             round,
             &Step::GenuineFlip,
         ).first()
-            .and_then(|meta_vote| meta_vote.aux_value)
+        .and_then(|meta_vote| meta_vote.aux_value)
     }
 
     // Skips back through our events until we've passed `responsiveness_threshold` response events
@@ -614,8 +608,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                         .filter(|meta_vote| {
                             meta_vote.round > round
                                 || meta_vote.round == round && meta_vote.step >= *step
-                        })
-                        .cloned()
+                        }).cloned()
                         .collect()
                 }) {
                 latest_votes
@@ -688,8 +681,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                             } else {
                                 None
                             }
-                        })
-                        .collect::<Vec<BTreeSet<T>>>();
+                        }).collect::<Vec<BTreeSet<T>>>();
                     // This is sorted by peer_ids, which should avoid ties when picking the event
                     // with the most represented payload.
                     let payloads = elected_valid_blocks
@@ -709,8 +701,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                                 .filter(|payload_carried| rhs_payload == payload_carried)
                                 .count();
                             lhs_count.cmp(&rhs_count)
-                        })
-                        .cloned()
+                        }).cloned()
                         .and_then(|winning_payload| {
                             let votes = self
                                 .events
@@ -723,8 +714,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                                             None
                                         }
                                     })
-                                })
-                                .collect();
+                                }).collect();
                             Block::new(winning_payload.clone(), &votes).ok()
                         })
                 }
@@ -764,8 +754,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 RoundHash::new(*peer, *latest_block_hash)
                     .ok()
                     .map(|round_hash| (peer_id.clone(), vec![round_hash]))
-            })
-            .collect();
+            }).collect();
         let events_hashes = self
             .events_order
             .iter()
@@ -795,8 +784,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     .get(&peer_id)
                     .map(|last_ancestor| last_ancestor >= *descendant)
                     .unwrap_or(false)
-            })
-            .count()
+            }).count()
     }
 
     // Returns whether event X can strongly see the event Y.
