@@ -27,6 +27,13 @@ pub struct Network {
     msg_queue: BTreeMap<PeerId, Vec<QueueEntry>>,
 }
 
+type DifferingBlocksOrder<'a> = (
+    &'a PeerId,
+    Vec<&'a Transaction>,
+    &'a PeerId,
+    Vec<&'a Transaction>,
+);
+
 impl Network {
     /// Create test network with the given initial number of peers (the genesis group).
     pub fn new(count: usize) -> Self {
@@ -43,9 +50,7 @@ impl Network {
     }
 
     /// Returns true if all peers hold the same sequence of stable blocks.
-    pub fn blocks_all_in_sequence(
-        &self,
-    ) -> Result<(), (&PeerId, Vec<&Transaction>, &PeerId, Vec<&Transaction>)> {
+    pub fn blocks_all_in_sequence(&self) -> Result<(), DifferingBlocksOrder> {
         let payloads = self.peers[0].blocks_payloads();
         if let Some(peer) = self
             .peers
@@ -71,7 +76,7 @@ impl Network {
         unwrap!(self.peers.iter_mut().find(|peer| peer.id == *id))
     }
 
-    fn send_message(&mut self, src: PeerId, dst: PeerId, message: Message, deliver_after: usize) {
+    fn send_message(&mut self, src: PeerId, dst: &PeerId, message: Message, deliver_after: usize) {
         self.msg_queue
             .entry(dst.clone())
             .or_insert_with(Vec::new)
@@ -100,7 +105,7 @@ impl Network {
                         );
                         self.send_message(
                             peer.clone(),
-                            entry.sender,
+                            &entry.sender,
                             Message::Response(response),
                             step + resp_delay,
                         );
@@ -163,7 +168,7 @@ impl Network {
                         );
                         self.send_message(
                             peer.clone(),
-                            req.recipient,
+                            &req.recipient,
                             Message::Request(request, req.resp_delay),
                             global_step + req.req_delay,
                         );

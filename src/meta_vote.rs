@@ -60,10 +60,10 @@ impl BoolSet {
         }
         true
     }
-    fn contains(&self, val: &bool) -> bool {
+    fn contains(&self, val: bool) -> bool {
         match *self {
             BoolSet::Empty => false,
-            BoolSet::Single(ref s) => *s == *val,
+            BoolSet::Single(ref s) => *s == val,
             BoolSet::Both => true,
         }
     }
@@ -264,7 +264,7 @@ impl MetaVote {
         }
         if bin_values_was_empty {
             if meta_vote.bin_values.len() == 1 {
-                if meta_vote.bin_values.contains(&true) {
+                if meta_vote.bin_values.contains(true) {
                     meta_vote.aux_value = Some(true);
                     counts.aux_values_true += 1;
                 } else {
@@ -280,14 +280,14 @@ impl MetaVote {
 
     fn calculate_new_decision(meta_vote: &mut MetaVote, counts: &MetaVoteCounts) {
         let opt_decision = match meta_vote.step {
-            Step::ForcedTrue => if meta_vote.bin_values.contains(&true)
+            Step::ForcedTrue => if meta_vote.bin_values.contains(true)
                 && counts.is_super_majority(counts.aux_values_true)
             {
                 Some(true)
             } else {
                 None
             },
-            Step::ForcedFalse => if meta_vote.bin_values.contains(&false)
+            Step::ForcedFalse => if meta_vote.bin_values.contains(false)
                 && counts.is_super_majority(counts.aux_values_false)
             {
                 Some(false)
@@ -379,16 +379,16 @@ impl MetaVoteCounts {
             })
             .chain(iter::once(parent))
         {
-            if vote.estimates.contains(&true) {
+            if vote.estimates.contains(true) {
                 counts.estimates_true += 1;
             }
-            if vote.estimates.contains(&false) {
+            if vote.estimates.contains(false) {
                 counts.estimates_false += 1;
             }
-            if vote.bin_values.contains(&true) {
+            if vote.bin_values.contains(true) {
                 counts.bin_values_true += 1;
             }
-            if vote.bin_values.contains(&false) {
+            if vote.bin_values.contains(false) {
                 counts.bin_values_false += 1;
             }
             match vote.aux_value {
