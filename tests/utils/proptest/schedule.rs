@@ -105,15 +105,15 @@ impl Strategy for ScheduleOptionsStrategy {
             &self.recv_trans,
             (&self.local_step).prop_map(move |l| l_max + l_min - l),
             &self.delay_distr,
-        ).prop_map(|(f, v, r, l, d)| ScheduleOptions {
+        )
+            .prop_map(|(f, v, r, l, d)| ScheduleOptions {
                 prob_failure: f,
                 prob_vote_duplication: v,
                 prob_recv_trans: r,
                 prob_local_step: l,
                 delay_distr: d,
                 ..Default::default()
-            })
-            .new_tree(runner)
+            }).new_tree(runner)
             .map(|t| ScheduleOptionsValueTree {
                 max_sched,
                 min_sched,
@@ -223,8 +223,7 @@ impl ScheduleValueTree {
                 ScheduleEvent::VoteFor(ref peer, ref trans) => {
                     peers_set.contains(peer) && trans_set.contains(trans)
                 }
-            })
-            .cloned()
+            }).cloned()
             .collect();
         Schedule {
             events: result,
