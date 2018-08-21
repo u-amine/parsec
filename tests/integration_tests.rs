@@ -268,7 +268,6 @@ proptest! {
             failure: (0.0..1.0).into(),
             vote_duplication: (0.0..0.5).into(),
             delay_distr: arbitrary_delay(0..10, 0.0..10.0),
-            ..Default::default()
         },
         ..Default::default()
     }) {
