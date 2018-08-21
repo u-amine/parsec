@@ -195,11 +195,11 @@ impl PendingTransactions {
     pub fn new<R: Rng>(
         rng: &mut R,
         peers: &[PeerId],
-        transactions: &Vec<Transaction>,
+        transactions: &[Transaction],
     ) -> PendingTransactions {
         let mut inner = BTreeMap::new();
         for peer in peers {
-            let mut trans = transactions.clone();
+            let mut trans = transactions.to_vec();
             rng.shuffle(&mut trans);
             let _ = inner.insert(peer.clone(), trans);
         }
@@ -370,7 +370,7 @@ impl Schedule {
         let mut events: Vec<_> = peers_to_fail
             .into_iter()
             .take(num_deterministic_fails)
-            .map(|p| ScheduleEvent::Fail(p))
+            .map(ScheduleEvent::Fail)
             .collect();
         // extend that with random events
         events.extend(ScheduleEvent::gen_random(
@@ -407,7 +407,11 @@ impl Schedule {
         schedule.extend(other);
     }
 
-    /// Creates a new pseudo-random schedule based on the given options
+    // Creates a new pseudo-random schedule based on the given options
+    //
+    // The `let_and_return` clippy lint is allowed since it is actually necessary to create the
+    // `result` variable so the result can be saved when the `dump-graphs` feature is used.
+    #[cfg_attr(feature = "cargo-clippy", allow(let_and_return))]
     pub fn new(env: &mut Environment, options: &ScheduleOptions) -> Schedule {
         let mut peers: Vec<_> = env.network.peers.iter().map(|p| p.id.clone()).collect();
         let num_peers = env.network.peers.len();

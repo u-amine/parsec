@@ -115,8 +115,7 @@ mod detail {
                     } else {
                         None
                     }
-                })
-                .collect();
+                }).collect();
             if let Err(error) =
                 write_gossip_graph_dot(&mut file, gossip_graph, meta_votes, &initial_events)
             {
@@ -384,8 +383,7 @@ mod detail {
                     } else {
                         None
                     }
-                })
-                .collect();
+                }).collect();
             events.sort_by_key(|event| event.index.unwrap_or(0));
             write_subgraph(writer, node, gossip_graph, &events, &positions)?;
             write_other_parents(writer, &events)?;

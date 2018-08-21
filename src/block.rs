@@ -31,8 +31,7 @@ impl<T: NetworkEvent, P: PublicId> Block<T, P> {
                 } else {
                     None
                 }
-            })
-            .collect();
+            }).collect();
         if proofs.len() != votes.len() {
             return Err(Error::SignatureFailure);
         }

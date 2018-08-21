@@ -9,20 +9,46 @@
 //! A basic example of running some nodes which reach consensus on the order of some random events.
 
 #![forbid(
-    exceeding_bitshifts, mutable_transmutes, no_mangle_const_items, unknown_crate_types, warnings
+    exceeding_bitshifts,
+    mutable_transmutes,
+    no_mangle_const_items,
+    unknown_crate_types,
+    warnings
 )]
 #![deny(
-    bad_style, deprecated, improper_ctypes, missing_docs, non_shorthand_field_patterns,
-    overflowing_literals, plugin_as_library, private_no_mangle_fns, private_no_mangle_statics,
-    stable_features, unconditional_recursion, unknown_lints, unsafe_code, unused, unused_allocation,
-    unused_attributes, unused_comparisons, unused_features, unused_parens, while_true
+    bad_style,
+    deprecated,
+    improper_ctypes,
+    missing_docs,
+    non_shorthand_field_patterns,
+    overflowing_literals,
+    plugin_as_library,
+    private_no_mangle_fns,
+    private_no_mangle_statics,
+    stable_features,
+    unconditional_recursion,
+    unknown_lints,
+    unsafe_code,
+    unused,
+    unused_allocation,
+    unused_attributes,
+    unused_comparisons,
+    unused_features,
+    unused_parens,
+    while_true
 )]
 #![warn(
-    trivial_casts, trivial_numeric_casts, unused_extern_crates, unused_import_braces,
-    unused_qualifications, unused_results
+    trivial_casts,
+    trivial_numeric_casts,
+    unused_extern_crates,
+    unused_import_braces,
+    unused_qualifications,
+    unused_results
 )]
 #![allow(
-    box_pointers, missing_copy_implementations, missing_debug_implementations,
+    box_pointers,
+    missing_copy_implementations,
+    missing_debug_implementations,
     variant_size_differences
 )]
 
@@ -147,8 +173,7 @@ fn get_params() -> Params {
              each dot file will have a corresponding SVG file created for it.  Otherwise you can \
              copy the contents of a generated dot file into an online converter (e.g. \
              http://viz-js.com) to view the gossip graph.",
-        )
-        .set_term_width(100)
+        ).set_term_width(100)
         .arg(
             Arg::with_name(EVENTS_ARG_NAME)
                 .short("e")
@@ -158,10 +183,8 @@ fn get_params() -> Params {
                 .help(&format!(
                     "Number of random network events to reach consensus on; {}",
                     events_info
-                ))
-                .takes_value(true),
-        )
-        .arg(
+                )).takes_value(true),
+        ).arg(
             Arg::with_name(PEERS_ARG_NAME)
                 .short("p")
                 .long(PEERS_ARG_NAME)
@@ -169,8 +192,7 @@ fn get_params() -> Params {
                 .value_name("COUNT")
                 .help(&format!("Number of peers in the network; {}", peers_info))
                 .takes_value(true),
-        )
-        .arg(
+        ).arg(
             Arg::with_name(MAX_ROUNDS_ARG_NAME)
                 .short("r")
                 .long(MAX_ROUNDS_ARG_NAME)
@@ -180,10 +202,8 @@ fn get_params() -> Params {
                     "Max. number of rounds of gossip between peers in the network.  If consensus \
                      on all events is achieved by all peers in fewer rounds than this, the example \
                      will exit.",
-                )
-                .takes_value(true),
-        )
-        .arg(
+                ).takes_value(true),
+        ).arg(
             Arg::with_name(SEED_ARG_NAME)
                 .short("s")
                 .long(SEED_ARG_NAME)
@@ -191,10 +211,8 @@ fn get_params() -> Params {
                 .help(&format!(
                     "Seed used to initialise the random number generator; {}",
                     seed_info
-                ))
-                .takes_value(true),
-        )
-        .get_matches();
+                )).takes_value(true),
+        ).get_matches();
     let mut params = Params::default();
     match value_t!(matches.value_of(EVENTS_ARG_NAME), usize) {
         Ok(count) if count >= MIN_EVENT_COUNT && count <= MAX_EVENT_COUNT => {
