@@ -517,7 +517,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
 
         // If we've already waited long enough, get the aux value of the highest ranking leader.
-        if self.stop_waiting(round) {
+        if self.stop_waiting(round, event) {
             for (_, creator) in &peer_id_hashes[1..] {
                 if let Some(creator_event_index) = event.last_ancestors.get(creator) {
                     if let Some(aux_value) =
@@ -551,10 +551,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         .and_then(|meta_vote| meta_vote.aux_value)
     }
 
-    // Skips back through our events until we've passed `responsiveness_threshold` response events
-    // and sees if we had our own `aux_value` set at this round and step.  If so, returns `true`.
-    fn stop_waiting(&self, round: usize) -> bool {
-        let mut event_hash = self.peer_manager.last_event_hash(self.our_pub_id());
+    // Skips back through events created by the peer until passed `responsiveness_threshold`
+    // response events and sees if the peer had its `aux_value` set at this round.  If so, returns
+    // `true`.
+    fn stop_waiting(&self, round: usize, event: &Event<T, S::PublicId>) -> bool {
+        let mut event_hash = Some(event.hash());
         let mut response_count = 0;
         loop {
             if let Some(event) = event_hash.and_then(|hash| self.events.get(hash)) {
@@ -575,7 +576,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         };
         self.meta_votes
             .get(&hash)
-            .and_then(|meta_votes| meta_votes.get(self.our_pub_id()))
+            .and_then(|meta_votes| meta_votes.get(event.creator()))
             .map_or(false, |event_votes| {
                 event_votes
                     .iter()
