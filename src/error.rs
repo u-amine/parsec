@@ -29,7 +29,7 @@ quick_error! {
         /// Peer is not known to this node.
         UnknownPeer {
             description("Peer is not known")
-            display("The peer_id is not known to this node's peer_manager.")
+            display("The peer_id is not known to this node's peer_list.")
         }
         /// The given event is invalid or malformed.
         InvalidEvent {
