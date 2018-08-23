@@ -28,7 +28,7 @@ configuration:
   - Release
 
 build_script:
-  - cargo check --verbose --release --all-targets --features dump-graphs
+  - cargo check --verbose --release --all-targets --features=dump-graphs
 
 test_script:
-  - cargo test --verbose --release
+  - cargo test --verbose --release --features=testing

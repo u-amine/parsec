@@ -495,6 +495,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             hashes[round].value()
         } else {
             // Should be unreachable.
+            log_or_panic!("{:?} missing round hash.", self.our_pub_id());
             return Err(Error::Logic);
         };
 
