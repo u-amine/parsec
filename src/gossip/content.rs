@@ -19,16 +19,27 @@ pub(super) struct Content<T: NetworkEvent, P: PublicId> {
     // Whether it was created by receiving a gossip request, response or by being given a network
     // event to vote for.
     pub cause: Cause<T, P>,
-    // Hash of our own immediate ancestor.  Only `None` for our first `Event`.
-    pub self_parent: Option<Hash>,
 }
 
 impl<T: NetworkEvent, P: PublicId> Content<T, P> {
     // Hash of sender's latest event if the `cause` is a request or response; otherwise `None`.
     pub fn other_parent(&self) -> Option<&Hash> {
         match &self.cause {
-            Cause::Request(hash) | Cause::Response(hash) => Some(hash),
-            Cause::Observation(_) | Cause::Initial => None,
+            Cause::Request { other_parent, .. } | Cause::Response { other_parent, .. } => {
+                Some(other_parent)
+            }
+            Cause::Observation { .. } | Cause::Initial => None,
+        }
+    }
+
+    // Hash of our latest event if the `cause` is a request, response or observation; otherwise
+    // `None`.
+    pub fn self_parent(&self) -> Option<&Hash> {
+        match &self.cause {
+            Cause::Request { self_parent, .. }
+            | Cause::Response { self_parent, .. }
+            | Cause::Observation { self_parent, .. } => Some(self_parent),
+            Cause::Initial => None,
         }
     }
 }
