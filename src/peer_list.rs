@@ -14,17 +14,17 @@ use maidsafe_utilities::serialisation::serialise;
 use network_event::NetworkEvent;
 use std::collections::btree_map::{self, BTreeMap, Entry};
 
-pub(crate) struct PeerManager<S: SecretId> {
+pub(crate) struct PeerList<S: SecretId> {
     our_id: S,
     peers: BTreeMap<S::PublicId, BTreeMap<u64, Hash>>,
     // Map of Hash(peer_id) => peer_id
     peer_id_hashes: Vec<(Hash, S::PublicId)>,
 }
 
-impl<S: SecretId> PeerManager<S> {
-    /// Constructor of `PeerManager`.
+impl<S: SecretId> PeerList<S> {
+    /// Constructor of `PeerList`.
     pub fn new(our_id: S) -> Self {
-        PeerManager {
+        PeerList {
             our_id,
             peers: BTreeMap::new(),
             peer_id_hashes: vec![],

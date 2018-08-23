@@ -15,7 +15,7 @@ use id::SecretId;
 use maidsafe_utilities::serialisation::serialise;
 use meta_vote::{MetaVote, Step};
 use network_event::NetworkEvent;
-use peer_manager::PeerManager;
+use peer_list::PeerList;
 use round_hash::RoundHash;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::iter;
@@ -24,7 +24,7 @@ use std::iter;
 /// which provides a sequence of consensused `Block`s by applying the PARSEC algorithm.
 pub struct Parsec<T: NetworkEvent, S: SecretId> {
     // The PeerInfo of other nodes.
-    peer_manager: PeerManager<S>,
+    peer_list: PeerList<S>,
     // Gossip events created locally and received from other peers.
     events: BTreeMap<Hash, Event<T, S::PublicId>>,
     // The sequence in which all gossip events were added to this `Parsec`.
@@ -48,17 +48,17 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     pub fn new(our_id: S, genesis_group: &BTreeSet<S::PublicId>) -> Result<Self, Error> {
         let responsiveness_threshold = (genesis_group.len() as f64).log2().ceil() as usize;
 
-        let mut peer_manager = PeerManager::new(our_id);
+        let mut peer_list = PeerList::new(our_id);
         let mut round_hashes = BTreeMap::new();
         let initial_hash = Hash::from([].as_ref());
         for peer_id in genesis_group.iter().cloned() {
-            peer_manager.add_peer(peer_id.clone());
+            peer_list.add_peer(peer_id.clone());
             let round_hash = RoundHash::new(&peer_id, initial_hash)?;
             let _ = round_hashes.insert(peer_id, vec![round_hash]);
         }
 
         let mut parsec = Parsec {
-            peer_manager,
+            peer_list,
             events: BTreeMap::new(),
             events_order: vec![],
             events_with_valid_blocks: BTreeMap::new(),
@@ -68,7 +68,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             round_hashes,
             responsiveness_threshold,
         };
-        let initial_event = Event::new_initial(parsec.peer_manager.our_id())?;
+        let initial_event = Event::new_initial(parsec.peer_list.our_id())?;
         parsec.add_initial_event(initial_event)?;
         dump_graph::init();
         Ok(parsec)
@@ -80,11 +80,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             return Err(Error::DuplicateVote);
         }
         let self_parent_hash = self.our_last_event_hash().ok_or(Error::InvalidEvent)?;
-        let event = Event::new_from_observation(
-            self.peer_manager.our_id(),
-            self_parent_hash,
-            network_event,
-        )?;
+        let event =
+            Event::new_from_observation(self.peer_list.our_id(), self_parent_hash, network_event)?;
         self.add_event(event)
     }
 
@@ -97,10 +94,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         peer_id: Option<S::PublicId>,
     ) -> Result<Request<T, S::PublicId>, Error> {
         if let Some(recipient_id) = peer_id {
-            if !self.peer_manager.has_peer(&recipient_id) {
+            if !self.peer_list.has_peer(&recipient_id) {
                 return Err(Error::UnknownPeer);
             }
-            if self.peer_manager.last_event_hash(&recipient_id).is_some() {
+            if self.peer_list.last_event_hash(&recipient_id).is_some() {
                 return self
                     .events_to_gossip_to_peer(&recipient_id)
                     .map(Request::new);
@@ -154,13 +151,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn our_pub_id(&self) -> &S::PublicId {
-        self.peer_manager.our_id().public_id()
+        self.peer_list.our_id().public_id()
     }
 
     fn our_last_event_hash(&self) -> Option<Hash> {
-        self.peer_manager
-            .last_event_hash(self.our_pub_id())
-            .cloned()
+        self.peer_list.last_event_hash(self.our_pub_id()).cloned()
     }
 
     fn self_parent<'a>(
@@ -178,8 +173,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn is_observer(&self, event: &Event<T, S::PublicId>) -> bool {
-        self.peer_manager
-            .is_super_majority(event.observations.len())
+        self.peer_list.is_super_majority(event.observations.len())
     }
 
     fn add_event(&mut self, mut event: Event<T, S::PublicId>) -> Result<(), Error> {
@@ -202,7 +196,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
 
         self.set_index(&mut event);
-        self.peer_manager.add_event(&event)?;
+        self.peer_list.add_event(&event)?;
         self.set_last_ancestors(&mut event)?;
         self.set_first_descendants(&mut event)?;
 
@@ -218,7 +212,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let creator_id = event.creator().clone();
         let _ = event.first_descendants.insert(creator_id, 0);
         let event_hash = *event.hash();
-        self.peer_manager.add_event(&event)?;
+        self.peer_list.add_event(&event)?;
         self.events_order.push(event_hash);
         let _ = self.events.insert(event_hash, event);
         Ok(())
@@ -255,7 +249,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             event.last_ancestors = self_parent.last_ancestors.clone();
 
             if let Some(other_parent) = self.other_parent(event) {
-                for (peer_id, _) in self.peer_manager.iter() {
+                for (peer_id, _) in self.peer_list.iter() {
                     if let Some(other_index) = other_parent.last_ancestors.get(peer_id) {
                         let existing_index = event
                             .last_ancestors
@@ -288,7 +282,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let creator_id = event.creator().clone();
         let _ = event.first_descendants.insert(creator_id, event_index);
 
-        for (peer_id, peer_info) in self.peer_manager.iter() {
+        for (peer_id, peer_info) in self.peer_list.iter() {
             let mut opt_hash = event
                 .last_ancestors
                 .get(peer_id)
@@ -318,7 +312,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // Collect payloads from any block made valid by this event
         let valid_blocks_carried = {
             let event = self.events.get(event_hash).ok_or(Error::Logic)?;
-            self.peer_manager
+            self.peer_list
                 .iter()
                 .flat_map(|(_peer, events)| {
                     events.iter().filter_map(|(_index, hash)| {
@@ -328,7 +322,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     })
                 }).filter(|&this_payload| !self.payload_is_already_carried(event, this_payload))
                 .filter(|&this_payload| {
-                    self.peer_manager
+                    self.peer_list
                         .is_super_majority(self.n_ancestors_carrying_payload(event, this_payload))
                 }).cloned()
                 .collect::<BTreeSet<T>>()
@@ -370,7 +364,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         if payload_already_reached_consensus {
             return 0;
         }
-        self.peer_manager
+        self.peer_list
             .iter()
             .filter(|(peer, events)| {
                 events
@@ -411,7 +405,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn set_meta_votes(&mut self, event_hash: &Hash) -> Result<(), Error> {
-        let total_peers = self.peer_manager.iter().count();
+        let total_peers = self.peer_list.iter().count();
         let mut meta_votes = BTreeMap::new();
         // If self-parent already has meta votes associated with it, derive this event's meta votes
         // from those ones.
@@ -430,7 +424,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             }
         } else if self.is_observer(event) {
             // Start meta votes for this event.
-            for peer_id in self.peer_manager.all_ids() {
+            for peer_id in self.peer_list.all_ids() {
                 let other_votes = self.collect_other_meta_votes(peer_id, event);
                 let initial_estimate = event.observations.contains(peer_id);
                 let _ = meta_votes.insert(
@@ -505,7 +499,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         };
 
         // Get the gradient of leadership.
-        let mut peer_id_hashes = self.peer_manager.peer_id_hashes().clone();
+        let mut peer_id_hashes = self.peer_list.peer_id_hashes().clone();
         peer_id_hashes.sort_by(|lhs, rhs| round_hash.xor_cmp(&lhs.0, &rhs.0));
 
         // Try to get the "most-leader"'s aux value.
@@ -595,10 +589,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         round: usize,
         step: &Step,
     ) -> Vec<MetaVote> {
-        if let Some(event_hash) = self
-            .peer_manager
-            .event_by_index(creator, creator_event_index)
-        {
+        if let Some(event_hash) = self.peer_list.event_by_index(creator, creator_event_index) {
             if let Some(latest_votes) = self
                 .meta_votes
                 .get(event_hash)
@@ -630,7 +621,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     ) -> Vec<Vec<MetaVote>> {
         let mut other_votes = vec![];
         for creator in self
-            .peer_manager
+            .peer_list
             .all_ids()
             .iter()
             .filter(|&id| *id != event.creator())
@@ -668,7 +659,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                             }
                         })
                     });
-                if our_decided_meta_votes.clone().count() < self.peer_manager.all_ids().len() {
+                if our_decided_meta_votes.clone().count() < self.peer_list.all_ids().len() {
                     None
                 } else {
                     let elected_valid_blocks = our_decided_meta_votes
@@ -747,7 +738,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     fn restart_consensus(&mut self, latest_block_hash: &Hash) -> Result<(), Error> {
         self.round_hashes = self
-            .peer_manager
+            .peer_list
             .all_ids()
             .iter()
             .filter_map(|peer| {
@@ -790,7 +781,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     // Returns whether event X can strongly see the event Y.
     fn does_strongly_see(&self, x: &Event<T, S::PublicId>, y: &Event<T, S::PublicId>) -> bool {
-        self.peer_manager
+        self.peer_list
             .is_super_majority(self.n_peers_with_directed_paths(x, y))
     }
 
@@ -798,14 +789,14 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     // of `is_request`) from `src`, then add it to our graph.
     fn create_sync_event(&mut self, src: &S::PublicId, is_request: bool) -> Result<(), Error> {
         let self_parent = *self
-            .peer_manager
+            .peer_list
             .last_event_hash(self.our_pub_id())
             .ok_or(Error::Logic)?;
-        let other_parent = *self.peer_manager.last_event_hash(src).ok_or(Error::Logic)?;
+        let other_parent = *self.peer_list.last_event_hash(src).ok_or(Error::Logic)?;
         let sync_event = if is_request {
-            Event::new_from_request(self.peer_manager.our_id(), self_parent, other_parent)
+            Event::new_from_request(self.peer_list.our_id(), self_parent, other_parent)
         } else {
-            Event::new_from_response(self.peer_manager.our_id(), self_parent, other_parent)
+            Event::new_from_response(self.peer_list.our_id(), self_parent, other_parent)
         }?;
         self.add_event(sync_event)
     }
@@ -818,7 +809,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     ) -> Result<impl Iterator<Item = &Event<T, S::PublicId>>, Error> {
         let other_parent = {
             let other_parent_hash = self
-                .peer_manager
+                .peer_list
                 .last_event_hash(peer_id)
                 .ok_or(Error::Logic)?;
             self.events.get(other_parent_hash).ok_or(Error::Logic)?
@@ -826,14 +817,14 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let mut last_ancestors_hashes = other_parent
             .last_ancestors
             .iter()
-            .filter_map(|(id, &index)| self.peer_manager.event_by_index(id, index))
+            .filter_map(|(id, &index)| self.peer_list.event_by_index(id, index))
             .collect::<BTreeSet<_>>();
         // As `peer_id` isn't guaranteed to have `last_ancestor_hash` for all peers (which will
         // happen during the early stage when a node has not heard from all others), this may cause
         // the early events in `self.events_order` to be skipped mistakenly. To avoid this, if there
         // are any peers for which `peer_id` doesn't have a `last_ancestors` entry, add those peers'
         // oldest events we know about to the list of hashes.
-        for (peer, events) in self.peer_manager.iter() {
+        for (peer, events) in self.peer_list.iter() {
             if !other_parent.last_ancestors.contains_key(peer) {
                 if let Some(hash) = events.get(&0) {
                     let _ = last_ancestors_hashes.insert(hash);

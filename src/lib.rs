@@ -81,7 +81,7 @@ mod id;
 mod meta_vote;
 mod network_event;
 mod parsec;
-mod peer_manager;
+mod peer_list;
 mod round_hash;
 mod vote;
 
