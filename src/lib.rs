@@ -14,7 +14,7 @@
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/maidsafe/QA/master/Images/maidsafe_logo.png",
     html_favicon_url = "https://maidsafe.net/img/favicon.ico",
-    html_root_url = "https://docs.rs/parsec"
+    test(attr(forbid(warnings)))
 )]
 #![forbid(
     exceeding_bitshifts,
