@@ -14,12 +14,21 @@ use vote::Vote;
 #[serde(bound = "")]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub(super) enum Cause<T: NetworkEvent, P: PublicId> {
-    // Hash is of the latest `Event` of the peer which sent the request.
-    Request(Hash),
-    // Hash is of the latest `Event` of the peer which sent the response.
-    Response(Hash),
-    // Vote for a single network event of type `T`.
-    Observation(Vote<T, P>),
+    // Hashes are the latest `Event` of own and the peer which sent the request.
+    Request {
+        self_parent: Hash,
+        other_parent: Hash,
+    },
+    // Hashes are the latest `Event` of own and the peer which sent the response.
+    Response {
+        self_parent: Hash,
+        other_parent: Hash,
+    },
+    // Hash of our latest `Event`. Vote for a single network event of type `T`.
+    Observation {
+        self_parent: Hash,
+        vote: Vote<T, P>,
+    },
     // Initial empty `Event` of this peer.
     Initial,
 }

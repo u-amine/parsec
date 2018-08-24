@@ -43,7 +43,13 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         self_parent: Hash,
         other_parent: Hash,
     ) -> Result<Self, Error> {
-        Self::new(secret_id, Cause::Request(other_parent), Some(self_parent))
+        Self::new(
+            secret_id,
+            Cause::Request {
+                self_parent,
+                other_parent,
+            },
+        )
     }
 
     // Creates a new event as the result of receiving a gossip response message.
@@ -52,7 +58,13 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         self_parent: Hash,
         other_parent: Hash,
     ) -> Result<Self, Error> {
-        Self::new(secret_id, Cause::Response(other_parent), Some(self_parent))
+        Self::new(
+            secret_id,
+            Cause::Response {
+                self_parent,
+                other_parent,
+            },
+        )
     }
 
     // Creates a new event as the result of observing a network event.
@@ -62,12 +74,12 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         network_event: T,
     ) -> Result<Self, Error> {
         let vote = Vote::new(secret_id, network_event)?;
-        Self::new(secret_id, Cause::Observation(vote), Some(self_parent))
+        Self::new(secret_id, Cause::Observation { self_parent, vote })
     }
 
     // Creates an initial event.  This is the first event by its creator in the graph.
     pub fn new_initial<S: SecretId<PublicId = P>>(secret_id: &S) -> Result<Self, Error> {
-        Self::new(secret_id, Cause::Initial, None)
+        Self::new(secret_id, Cause::Initial)
     }
 
     // Creates an event from a `PackedEvent`.
@@ -107,7 +119,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
 
     /// Returns `Some(vote)` if the event is for a vote of network event, otherwise returns `None`.
     pub fn vote(&self) -> Option<&Vote<T, P>> {
-        if let Cause::Observation(ref vote) = self.content.cause {
+        if let Cause::Observation { ref vote, .. } = self.content.cause {
             Some(vote)
         } else {
             None
@@ -119,7 +131,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     }
 
     pub fn self_parent(&self) -> Option<&Hash> {
-        self.content.self_parent.as_ref()
+        self.content.self_parent()
     }
 
     pub fn other_parent(&self) -> Option<&Hash> {
@@ -131,7 +143,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     }
 
     pub fn is_response(&self) -> bool {
-        if let Cause::Response(_) = self.content.cause {
+        if let Cause::Response { .. } = self.content.cause {
             true
         } else {
             false
@@ -146,15 +158,10 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         }
     }
 
-    fn new<S: SecretId<PublicId = P>>(
-        secret_id: &S,
-        cause: Cause<T, P>,
-        self_parent: Option<Hash>,
-    ) -> Result<Self, Error> {
+    fn new<S: SecretId<PublicId = P>>(secret_id: &S, cause: Cause<T, P>) -> Result<Self, Error> {
         let content = Content {
             creator: secret_id.public_id().clone(),
             cause,
-            self_parent,
         };
         let serialised_content = serialise(&content)?;
         // All fields except `content`, `signature` and `hash` still need to be set correctly by the
@@ -182,12 +189,12 @@ impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
             self.index.unwrap_or(u64::max_value()),
             self.hash,
             match &self.content.cause {
-                Cause::Request(_) => "Request".to_string(),
-                Cause::Response(_) => "Response".to_string(),
-                Cause::Observation(vote) => format!("Observation({:?})", vote.payload()),
+                Cause::Request { .. } => "Request".to_string(),
+                Cause::Response { .. } => "Response".to_string(),
+                Cause::Observation { vote, .. } => format!("Observation({:?})", vote.payload()),
                 Cause::Initial => "Initial".to_string(),
             },
-            self.content.self_parent,
+            self.content.self_parent(),
             self.content.other_parent(),
             self.last_ancestors,
             self.first_descendants,

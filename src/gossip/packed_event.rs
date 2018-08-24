@@ -25,7 +25,7 @@ impl<T: NetworkEvent, P: PublicId> Debug for PackedEvent<T, P> {
             "Event{{ {:?}, creator: {:?}, self_parent: {:?}, other_parent: {:?} }}",
             self.content.cause,
             self.content.creator,
-            self.content.self_parent,
+            self.content.self_parent(),
             self.content.other_parent()
         )
     }
