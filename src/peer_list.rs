@@ -92,27 +92,20 @@ impl<S: SecretId> PeerList<S> {
         &mut self,
         event: &Event<T, S::PublicId>,
     ) -> Result<(), Error> {
-        let (peer, index) = if let Some(index) = event.index {
-            if let Some(peer) = self.peers.get_mut(event.creator()) {
-                (peer, index)
-            } else {
-                return Err(Error::UnknownPeer);
-            }
-        } else {
-            return Err(Error::InvalidEvent);
-        };
-
-        match peer.entry(index) {
-            Entry::Occupied(entry) => {
-                if entry.get() != event.hash() {
-                    return Err(Error::InvalidEvent);
+        if let Some(peer) = self.peers.get_mut(event.creator()) {
+            match peer.entry(event.index()) {
+                Entry::Occupied(entry) => {
+                    if entry.get() != event.hash() {
+                        return Err(Error::InvalidEvent);
+                    }
+                }
+                Entry::Vacant(entry) => {
+                    let _ = entry.insert(*event.hash());
                 }
             }
-            Entry::Vacant(entry) => {
-                let _ = entry.insert(*event.hash());
-            }
+            Ok(())
+        } else {
+            Err(Error::UnknownPeer)
         }
-
-        Ok(())
     }
 }

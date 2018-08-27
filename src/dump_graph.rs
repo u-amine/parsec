@@ -110,7 +110,7 @@ mod detail {
             let initial_events: Vec<Hash> = gossip_graph
                 .iter()
                 .filter_map(|(hash, event)| {
-                    if event.index.unwrap_or(0) == 0 {
+                    if event.index() == 0 {
                         Some(*hash)
                     } else {
                         None
@@ -250,7 +250,7 @@ mod detail {
                 writer,
                 "fillcolor=white, label=\"{}_{}",
                 first_char(event.creator()).unwrap_or('E'),
-                event.index.unwrap_or(0)
+                event.index()
             )?;
 
             if let Some(event_payload) = event.vote().map(|vote| vote.payload()) {
@@ -307,7 +307,7 @@ mod detail {
     }
 
     fn parent_pos(
-        index: Option<u64>,
+        index: u64,
         parent_hash: Option<&Hash>,
         positions: &BTreeMap<Hash, u64>,
     ) -> Option<u64> {
@@ -318,7 +318,7 @@ mod detail {
                 None
             }
         } else {
-            Some(index.unwrap_or(0))
+            Some(index)
         }
     }
 
@@ -330,14 +330,14 @@ mod detail {
             for (hash, event) in gossip_graph.iter() {
                 if !positions.contains_key(hash) {
                     let self_parent_pos = if let Some(position) =
-                        parent_pos(event.index, event.self_parent(), &positions)
+                        parent_pos(event.index(), event.self_parent(), &positions)
                     {
                         position
                     } else {
                         continue;
                     };
                     let other_parent_pos = if let Some(position) =
-                        parent_pos(event.index, event.other_parent(), &positions)
+                        parent_pos(event.index(), event.other_parent(), &positions)
                     {
                         position
                     } else {
@@ -384,7 +384,7 @@ mod detail {
                         None
                     }
                 }).collect();
-            events.sort_by_key(|event| event.index.unwrap_or(0));
+            events.sort_by_key(|event| event.index());
             write_subgraph(writer, node, gossip_graph, &events, &positions)?;
             write_other_parents(writer, &events)?;
         }

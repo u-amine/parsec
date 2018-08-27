@@ -13,7 +13,9 @@ use gossip::packed_event::PackedEvent;
 use hash::Hash;
 use id::{PublicId, SecretId};
 use network_event::NetworkEvent;
+use peer_list::PeerList;
 use serialise;
+use std::cmp;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 use vote::Vote;
@@ -24,9 +26,9 @@ pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
     signature: P::Signature,
     hash: Hash,
     // Sequential index of this event: this event is the `index`-th one made by its creator.
-    pub index: Option<u64>,
+    index: u64,
     // Index of each peer's latest event that is an ancestor of this event.
-    pub last_ancestors: BTreeMap<P, u64>,
+    last_ancestors: BTreeMap<P, u64>,
     // Payloads of all the blocks made valid by this event
     pub valid_blocks_carried: BTreeSet<T>,
     // The set of peers for which this event can strongly-see an event by that peer which carries a
@@ -37,51 +39,60 @@ pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
 impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     // Creates a new event as the result of receiving a gossip request message.
     pub fn new_from_request<S: SecretId<PublicId = P>>(
-        secret_id: &S,
         self_parent: Hash,
         other_parent: Hash,
+        events: &BTreeMap<Hash, Event<T, P>>,
+        peer_list: &PeerList<S>,
     ) -> Self {
         Self::new(
-            secret_id,
             Cause::Request {
                 self_parent,
                 other_parent,
             },
+            events,
+            peer_list,
         )
     }
 
     // Creates a new event as the result of receiving a gossip response message.
     pub fn new_from_response<S: SecretId<PublicId = P>>(
-        secret_id: &S,
         self_parent: Hash,
         other_parent: Hash,
+        events: &BTreeMap<Hash, Event<T, P>>,
+        peer_list: &PeerList<S>,
     ) -> Self {
         Self::new(
-            secret_id,
             Cause::Response {
                 self_parent,
                 other_parent,
             },
+            events,
+            peer_list,
         )
     }
 
     // Creates a new event as the result of observing a network event.
     pub fn new_from_observation<S: SecretId<PublicId = P>>(
-        secret_id: &S,
         self_parent: Hash,
         network_event: T,
+        events: &BTreeMap<Hash, Event<T, P>>,
+        peer_list: &PeerList<S>,
     ) -> Self {
-        let vote = Vote::new(secret_id, network_event);
-        Self::new(secret_id, Cause::Observation { self_parent, vote })
+        let vote = Vote::new(peer_list.our_id(), network_event);
+        Self::new(Cause::Observation { self_parent, vote }, events, peer_list)
     }
 
     // Creates an initial event.  This is the first event by its creator in the graph.
-    pub fn new_initial<S: SecretId<PublicId = P>>(secret_id: &S) -> Self {
-        Self::new(secret_id, Cause::Initial)
+    pub fn new_initial<S: SecretId<PublicId = P>>(peer_list: &PeerList<S>) -> Self {
+        Self::new(Cause::Initial, &BTreeMap::new(), peer_list)
     }
 
     // Creates an event from a `PackedEvent`.
-    pub(super) fn unpack(packed_event: PackedEvent<T, P>) -> Result<Self, Error> {
+    pub(crate) fn unpack<S: SecretId<PublicId = P>>(
+        packed_event: PackedEvent<T, P>,
+        events: &BTreeMap<Hash, Event<T, P>>,
+        peer_list: &PeerList<S>,
+    ) -> Result<Self, Error> {
         let serialised_content = serialise(&packed_event.content);
         let hash = if packed_event
             .content
@@ -93,14 +104,16 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             return Err(Error::SignatureFailure);
         };
 
-        // All fields except `content`, `signature` and `hash` still need to be set correctly by the
-        // caller.
+        let (index, last_ancestors) =
+            Self::index_and_last_ancestors(&packed_event.content, events, peer_list);
+
+        // `valid_blocks_carried` and `observations` still need to be set correctly by the caller.
         Ok(Self {
             content: packed_event.content,
             signature: packed_event.signature,
             hash,
-            index: None,
-            last_ancestors: BTreeMap::default(),
+            index,
+            last_ancestors,
             valid_blocks_carried: BTreeSet::default(),
             observations: BTreeSet::default(),
         })
@@ -139,6 +152,14 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         &self.hash
     }
 
+    pub fn index(&self) -> u64 {
+        self.index
+    }
+
+    pub fn last_ancestors(&self) -> &BTreeMap<P, u64> {
+        &self.last_ancestors
+    }
+
     pub fn is_response(&self) -> bool {
         if let Cause::Response { .. } = self.content.cause {
             true
@@ -155,23 +176,64 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         }
     }
 
-    fn new<S: SecretId<PublicId = P>>(secret_id: &S, cause: Cause<T, P>) -> Self {
+    fn new<S: SecretId<PublicId = P>>(
+        cause: Cause<T, P>,
+        events: &BTreeMap<Hash, Event<T, P>>,
+        peer_list: &PeerList<S>,
+    ) -> Self {
         let content = Content {
-            creator: secret_id.public_id().clone(),
+            creator: peer_list.our_id().public_id().clone(),
             cause,
         };
         let serialised_content = serialise(&content);
-        // All fields except `content`, `signature` and `hash` still need to be set correctly by the
-        // caller.
+
+        let (index, last_ancestors) = Self::index_and_last_ancestors(&content, events, peer_list);
+
+        // `valid_blocks_carried` and `observations` still need to be set correctly by the caller.
         Self {
             content,
-            signature: secret_id.sign_detached(&serialised_content),
+            signature: peer_list.our_id().sign_detached(&serialised_content),
             hash: Hash::from(serialised_content.as_slice()),
-            index: None,
-            last_ancestors: BTreeMap::default(),
+            index,
+            last_ancestors,
             valid_blocks_carried: BTreeSet::default(),
             observations: BTreeSet::default(),
         }
+    }
+
+    fn index_and_last_ancestors<S: SecretId<PublicId = P>>(
+        content: &Content<T, P>,
+        events: &BTreeMap<Hash, Event<T, P>>,
+        peer_list: &PeerList<S>,
+    ) -> (u64, BTreeMap<P, u64>) {
+        // An initial event, which doesn't have self_parent, will have an index of 0.
+        let index = content
+            .self_parent()
+            .and_then(|hash| events.get(hash))
+            .map_or(0, |parent| parent.index + 1);
+
+        let mut last_ancestors = BTreeMap::default();
+        if let Some(self_parent) = content.self_parent().and_then(|hash| events.get(hash)) {
+            last_ancestors = self_parent.last_ancestors().clone();
+
+            if let Some(other_parent) = content.other_parent().and_then(|hash| events.get(hash)) {
+                for (peer_id, _) in peer_list.iter() {
+                    if let Some(other_index) = other_parent.last_ancestors().get(peer_id) {
+                        let existing_index = last_ancestors
+                            .entry(peer_id.clone())
+                            .or_insert(*other_index);
+                        *existing_index = cmp::max(*existing_index, *other_index);
+                    }
+                }
+            }
+        } else if content.other_parent().is_some() {
+            log_or_panic!(
+                "event {:?} has no self-parent, should not have other-parent either.",
+                content
+            );
+        }
+        let _ = last_ancestors.insert(content.creator.clone(), index);
+        (index, last_ancestors)
     }
 }
 
@@ -182,7 +244,7 @@ impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
             "Event{{ {:?}[{}] {:?}, {}, self_parent: {:?}, other_parent: {:?}, last_ancestors: \
              {:?}, valid_blocks_carried: {:?}, observations: {:?} }}",
             self.content.creator,
-            self.index.unwrap_or(u64::max_value()),
+            self.index,
             self.hash,
             match &self.content.cause {
                 Cause::Request { .. } => "Request".to_string(),
