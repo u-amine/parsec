@@ -233,7 +233,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.set_index(&mut event);
         self.peer_list.add_event(&event)?;
         self.set_last_ancestors(&mut event)?;
-        self.set_first_descendants(&mut event)?;
 
         let event_hash = *event.hash();
         self.events_order.push(event_hash);
@@ -244,8 +243,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     fn add_initial_event(&mut self, mut event: Event<T, S::PublicId>) -> Result<(), Error> {
         event.index = Some(0);
-        let creator_id = event.creator().clone();
-        let _ = event.first_descendants.insert(creator_id, 0);
         let event_hash = *event.hash();
         self.peer_list.add_event(&event)?;
         self.events_order.push(event_hash);
@@ -303,43 +300,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         let creator_id = event.creator().clone();
         let _ = event.last_ancestors.insert(creator_id, event_index);
-        Ok(())
-    }
-
-    // This should be called only once `event` has had its `index` and `last_ancestors` set
-    // correctly (i.e. after calling `Parsec::set_last_ancestors()` on it)
-    fn set_first_descendants(&mut self, event: &mut Event<T, S::PublicId>) -> Result<(), Error> {
-        if event.last_ancestors.is_empty() {
-            return Err(Error::InvalidEvent);
-        }
-
-        let event_index = event.index.ok_or(Error::InvalidEvent)?;
-        let creator_id = event.creator().clone();
-        let _ = event.first_descendants.insert(creator_id, event_index);
-
-        for (peer_id, peer_info) in self.peer_list.iter() {
-            let mut opt_hash = event
-                .last_ancestors
-                .get(peer_id)
-                .and_then(|index| peer_info.get(index))
-                .cloned();
-
-            loop {
-                if let Some(hash) = opt_hash {
-                    if let Some(other_event) = self.events.get_mut(&hash) {
-                        if !other_event.first_descendants.contains_key(event.creator()) {
-                            let _ = other_event
-                                .first_descendants
-                                .insert(event.creator().clone(), event_index);
-                            opt_hash = other_event.self_parent().cloned();
-                            continue;
-                        }
-                    }
-                }
-                break;
-            }
-        }
-
         Ok(())
     }
 
@@ -802,19 +762,20 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     // Returns the number of peers through which there is a directed path in the gossip graph
-    // between event X and event Y.
+    // from event X (descendant) to event Y (ancestor).
     fn n_peers_with_directed_paths(
         &self,
         x: &Event<T, S::PublicId>,
         y: &Event<T, S::PublicId>,
     ) -> usize {
-        y.first_descendants
+        x.last_ancestors
             .iter()
-            .filter(|(peer_id, descendant)| {
-                x.last_ancestors
-                    .get(&peer_id)
-                    .map(|last_ancestor| last_ancestor >= *descendant)
-                    .unwrap_or(false)
+            .filter(|(peer_id, ancestor)| {
+                self.peer_list
+                    .event_by_index(peer_id, **ancestor)
+                    .and_then(|hash| self.events.get(hash))
+                    .and_then(|event| event.last_ancestors.get(y.creator()))
+                    .map_or(false, |last_index| *last_index >= y.index)
             }).count()
     }
 

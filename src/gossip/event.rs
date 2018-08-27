@@ -27,8 +27,6 @@ pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
     pub index: Option<u64>,
     // Index of each peer's latest event that is an ancestor of this event.
     pub last_ancestors: BTreeMap<P, u64>,
-    // Index of each peer's earliest event that is a descendant of this event.
-    pub first_descendants: BTreeMap<P, u64>,
     // Payloads of all the blocks made valid by this event
     pub valid_blocks_carried: BTreeSet<T>,
     // The set of peers for which this event can strongly-see an event by that peer which carries a
@@ -103,7 +101,6 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             hash,
             index: None,
             last_ancestors: BTreeMap::default(),
-            first_descendants: BTreeMap::default(),
             valid_blocks_carried: BTreeSet::default(),
             observations: BTreeSet::default(),
         })
@@ -172,7 +169,6 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             hash: Hash::from(serialised_content.as_slice()),
             index: None,
             last_ancestors: BTreeMap::default(),
-            first_descendants: BTreeMap::default(),
             valid_blocks_carried: BTreeSet::default(),
             observations: BTreeSet::default(),
         }
@@ -184,7 +180,7 @@ impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
         write!(
             formatter,
             "Event{{ {:?}[{}] {:?}, {}, self_parent: {:?}, other_parent: {:?}, last_ancestors: \
-             {:?}, first_descendants: {:?}, valid_blocks_carried: {:?}, observations: {:?} }}",
+             {:?}, valid_blocks_carried: {:?}, observations: {:?} }}",
             self.content.creator,
             self.index.unwrap_or(u64::max_value()),
             self.hash,
@@ -197,7 +193,6 @@ impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
             self.content.self_parent(),
             self.content.other_parent(),
             self.last_ancestors,
-            self.first_descendants,
             self.valid_blocks_carried,
             self.observations,
         )
