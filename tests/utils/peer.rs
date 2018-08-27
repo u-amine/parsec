@@ -22,7 +22,7 @@ impl Peer {
     pub fn new(id: PeerId, genesis_group: &BTreeSet<PeerId>) -> Self {
         Self {
             id: id.clone(),
-            parsec: unwrap!(Parsec::new(id, genesis_group)),
+            parsec: Parsec::new(id, genesis_group),
             blocks: vec![],
         }
     }

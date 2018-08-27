@@ -10,8 +10,8 @@ use error::Error;
 use gossip::Event;
 use hash::Hash;
 use id::SecretId;
-use maidsafe_utilities::serialisation::serialise;
 use network_event::NetworkEvent;
+use serialise;
 use std::collections::btree_map::{self, BTreeMap, Entry};
 
 pub(crate) struct PeerList<S: SecretId> {
@@ -62,10 +62,8 @@ impl<S: SecretId> PeerList<S> {
             .peers
             .entry(peer_id.clone())
             .or_insert_with(BTreeMap::new);
-        if let Ok(serialised_id) = serialise(&peer_id) {
-            self.peer_id_hashes
-                .push((Hash::from(serialised_id.as_slice()), peer_id));
-        }
+        self.peer_id_hashes
+            .push((Hash::from(serialise(&peer_id).as_slice()), peer_id));
     }
 
     /// Checks whether the input count becomes the super majority of the network.

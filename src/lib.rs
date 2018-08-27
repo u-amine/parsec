@@ -105,3 +105,16 @@ pub use id::{Proof, PublicId, SecretId};
 pub use network_event::NetworkEvent;
 pub use parsec::Parsec;
 pub use vote::Vote;
+
+use maidsafe_utilities::serialisation;
+use serde::ser::Serialize;
+use std::fmt::Debug;
+
+fn serialise<T: Serialize + Debug>(data: &T) -> Vec<u8> {
+    if let Ok(serialised) = serialisation::serialise(data) {
+        serialised
+    } else {
+        log_or_panic!("Failed to serialise {:?}", data);
+        vec![]
+    }
+}
