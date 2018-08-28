@@ -28,13 +28,16 @@ script:
   - if [[ ! $TRAVIS_RUST_VERSION =~ ^nightly.* ]]; then
       (
         set -x;
-        cargo test --verbose --release
+        cargo test --verbose --release --features=testing
       );
     elif [[ $TRAVIS_OS_NAME == linux ]]; then
       (
         set -x;
         cargo fmt -- --check &&
-        cargo clippy --verbose --all-targets --features dump-graphs
+        cargo clippy --verbose --all-targets &&
+        cargo clippy --verbose --all-targets --features=dump-graphs &&
+        cargo clippy --verbose --all-targets --features=testing &&
+        cargo clippy --verbose --all-targets --features=dump-graphs,testing
       );
     fi
 before_cache:
