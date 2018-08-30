@@ -88,11 +88,17 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     }
 
     // Creates an event from a `PackedEvent`.
+    //
+    // Returns:
+    //   * `Ok(None)` if the event already exists
+    //   * `Err(Error::SignatureFailure)` if signature validation fails
+    //   * `Err(Error::UnknownParent)` if the event indicates it should have an ancestor, but the
+    //     ancestor isn't in `events`.
     pub(crate) fn unpack<S: SecretId<PublicId = P>>(
         packed_event: PackedEvent<T, P>,
         events: &BTreeMap<Hash, Event<T, P>>,
         peer_list: &PeerList<S>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Option<Self>, Error> {
         let serialised_content = serialise(&packed_event.content);
         let hash = if packed_event
             .content
@@ -103,12 +109,15 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         } else {
             return Err(Error::SignatureFailure);
         };
+        if events.contains_key(&hash) {
+            return Ok(None);
+        }
 
         let (index, last_ancestors) =
-            Self::index_and_last_ancestors(&packed_event.content, events, peer_list);
+            Self::index_and_last_ancestors(&packed_event.content, events, peer_list)?;
 
         // `valid_blocks_carried` and `observations` still need to be set correctly by the caller.
-        Ok(Self {
+        Ok(Some(Self {
             content: packed_event.content,
             signature: packed_event.signature,
             hash,
@@ -116,7 +125,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             last_ancestors,
             valid_blocks_carried: BTreeSet::default(),
             observations: BTreeSet::default(),
-        })
+        }))
     }
 
     // Creates a `PackedEvent` from this `Event`.
@@ -144,6 +153,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         self.content.self_parent()
     }
 
+    #[cfg(feature = "dump-graphs")]
     pub fn other_parent(&self) -> Option<&Hash> {
         self.content.other_parent()
     }
@@ -187,7 +197,17 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         };
         let serialised_content = serialise(&content);
 
-        let (index, last_ancestors) = Self::index_and_last_ancestors(&content, events, peer_list);
+        let (index, last_ancestors) = if let Ok((index, last_ancestors)) =
+            Self::index_and_last_ancestors(&content, events, peer_list)
+        {
+            (index, last_ancestors)
+        } else {
+            log_or_panic!(
+                "{:?} constructed an invalid event.",
+                peer_list.our_id().public_id()
+            );
+            (0, BTreeMap::default())
+        };
 
         // `valid_blocks_carried` and `observations` still need to be set correctly by the caller.
         Self {
@@ -205,18 +225,30 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         content: &Content<T, P>,
         events: &BTreeMap<Hash, Event<T, P>>,
         peer_list: &PeerList<S>,
-    ) -> (u64, BTreeMap<P, u64>) {
-        // An initial event, which doesn't have self_parent, will have an index of 0.
-        let index = content
-            .self_parent()
-            .and_then(|hash| events.get(hash))
-            .map_or(0, |parent| parent.index + 1);
+    ) -> Result<(u64, BTreeMap<P, u64>), Error> {
+        let self_parent = if let Some(self_parent_hash) = content.self_parent() {
+            if let Some(event) = events.get(&self_parent_hash) {
+                event
+            } else {
+                debug!(
+                    "{:?} missing self parent for {:?}",
+                    peer_list.our_id().public_id(),
+                    content
+                );
+                return Err(Error::UnknownParent);
+            }
+        } else {
+            // This must be an initial event, i.e. having index 0
+            let mut last_ancestors = BTreeMap::default();
+            let _ = last_ancestors.insert(content.creator.clone(), 0);
+            return Ok((0, last_ancestors));
+        };
 
-        let mut last_ancestors = BTreeMap::default();
-        if let Some(self_parent) = content.self_parent().and_then(|hash| events.get(hash)) {
-            last_ancestors = self_parent.last_ancestors().clone();
+        let index = self_parent.index + 1;
+        let mut last_ancestors = self_parent.last_ancestors().clone();
 
-            if let Some(other_parent) = content.other_parent().and_then(|hash| events.get(hash)) {
+        if let Some(other_parent_hash) = content.other_parent() {
+            if let Some(other_parent) = events.get(&other_parent_hash) {
                 for (peer_id, _) in peer_list.iter() {
                     if let Some(other_index) = other_parent.last_ancestors().get(peer_id) {
                         let existing_index = last_ancestors
@@ -225,15 +257,17 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
                         *existing_index = cmp::max(*existing_index, *other_index);
                     }
                 }
+            } else {
+                debug!(
+                    "{:?} missing other parent for {:?}",
+                    peer_list.our_id().public_id(),
+                    content
+                );
+                return Err(Error::UnknownParent);
             }
-        } else if content.other_parent().is_some() {
-            log_or_panic!(
-                "event {:?} has no self-parent, should not have other-parent either.",
-                content
-            );
         }
         let _ = last_ancestors.insert(content.creator.clone(), index);
-        (index, last_ancestors)
+        Ok((index, last_ancestors))
     }
 }
 
