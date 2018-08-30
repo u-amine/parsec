@@ -12,7 +12,7 @@ use network_event::NetworkEvent;
 use vote::Vote;
 
 #[serde(bound = "")]
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub(super) enum Cause<T: NetworkEvent, P: PublicId> {
     // Hashes are the latest `Event` of own and the peer which sent the request.
     Request {

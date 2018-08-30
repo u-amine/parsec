@@ -20,6 +20,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 use vote::Vote;
 
+#[derive(PartialEq)]
 pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
     content: Content<T, P>,
     // Creator's signature of `content`.
@@ -161,7 +162,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         self.content.self_parent()
     }
 
-    #[cfg(feature = "dump-graphs")]
+    #[cfg(any(test, feature = "dump-graphs"))]
     pub fn other_parent(&self) -> Option<&Hash> {
         self.content.other_parent()
     }
@@ -310,5 +311,256 @@ impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
         )?;
         write!(formatter, ", observations: {:?}", self.observations)?;
         write!(formatter, " }}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gossip::cause::Cause;
+    use gossip::Event;
+    use hash::Hash;
+    use id::SecretId;
+    use mock::{PeerId, Transaction};
+    use peer_list::PeerList;
+    use std::collections::BTreeMap;
+
+    struct PeerListAndEvent {
+        peer_list: PeerList<PeerId>,
+        event: Event<Transaction, PeerId>,
+    }
+
+    impl PeerListAndEvent {
+        fn new(peer_list: PeerList<PeerId>) -> Self {
+            Self {
+                event: Event::<Transaction, PeerId>::new_initial(&peer_list),
+                peer_list,
+            }
+        }
+    }
+
+    fn create_peer_list(id: &str) -> (PeerId, PeerList<PeerId>) {
+        let peer_id = PeerId::new(id);
+        let peer_list = PeerList::<PeerId>::new(peer_id.clone());
+        (peer_id, peer_list)
+    }
+
+    fn create_event_with_single_peer(id: &str) -> PeerListAndEvent {
+        let (_, peer_list) = create_peer_list(id);
+        PeerListAndEvent::new(peer_list)
+    }
+
+    fn insert_into_gossip_graph(
+        initial_event: Event<Transaction, PeerId>,
+        events: &mut BTreeMap<Hash, Event<Transaction, PeerId>>,
+    ) -> Hash {
+        let initial_event_hash = *initial_event.hash();
+        assert!(events.insert(initial_event_hash, initial_event).is_none());
+        initial_event_hash
+    }
+
+    fn create_two_events(id0: &str, id1: &str) -> (PeerListAndEvent, PeerListAndEvent) {
+        let (peer_id0, mut peer_id0_list) = create_peer_list(id0);
+        let (peer_id1, mut peer_id1_list) = create_peer_list(id1);
+        peer_id0_list.add_peer(peer_id1);
+        peer_id1_list.add_peer(peer_id0);
+        (
+            PeerListAndEvent::new(peer_id0_list),
+            PeerListAndEvent::new(peer_id1_list),
+        )
+    }
+
+    fn create_gossip_graph_with_two_events(
+        alice_initial: Event<Transaction, PeerId>,
+        bob_initial: Event<Transaction, PeerId>,
+    ) -> (Hash, Hash, BTreeMap<Hash, Event<Transaction, PeerId>>) {
+        let mut events = BTreeMap::new();
+        let alice_initial_hash = insert_into_gossip_graph(alice_initial, &mut events);
+        let bob_initial_hash = insert_into_gossip_graph(bob_initial, &mut events);
+        (alice_initial_hash, bob_initial_hash, events)
+    }
+
+    #[test]
+    fn event_construction_initial() {
+        let initial = create_event_with_single_peer("Alice").event;
+        assert!(initial.is_initial());
+        assert!(!initial.is_response());
+        assert!(initial.self_parent().is_none());
+        assert!(initial.other_parent().is_none());
+        assert_eq!(initial.index, 0);
+    }
+
+    #[test]
+    fn event_construction_from_observation() {
+        let alice = create_event_with_single_peer("Alice");
+        let mut events = BTreeMap::new();
+        let initial_event_hash = insert_into_gossip_graph(alice.event, &mut events);
+
+        // Our observation
+        let net_event = Transaction::new("event_observed_by_alice");
+
+        let event_from_observation = Event::<Transaction, PeerId>::new_from_observation(
+            initial_event_hash,
+            net_event.clone(),
+            &events,
+            &alice.peer_list,
+        );
+
+        assert_eq!(
+            event_from_observation.content.creator,
+            *alice.peer_list.our_id().public_id()
+        );
+        match &event_from_observation.content.cause {
+            Cause::Observation { self_parent, vote } => {
+                assert_eq!(self_parent, &initial_event_hash);
+                assert_eq!(*vote.payload(), net_event);
+            }
+            _ => panic!(
+                "Expected Observation, got {:?}",
+                event_from_observation.content.cause
+            ),
+        }
+        assert_eq!(event_from_observation.index, 1);
+        assert!(!event_from_observation.is_initial());
+        assert!(!event_from_observation.is_response());
+        assert_eq!(
+            event_from_observation.self_parent(),
+            Some(&initial_event_hash)
+        );
+        assert!(event_from_observation.other_parent().is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "Alice constructed an invalid event")]
+    #[cfg(feature = "testing")]
+    fn event_construction_from_observation_with_phony_hash() {
+        let alice = create_event_with_single_peer("Alice");
+        let hash = Hash::from(vec![42].as_slice());
+        let events = BTreeMap::new();
+        let net_event = Transaction::new("event_observed_by_alice");
+        let _ = Event::<Transaction, PeerId>::new_from_observation(
+            hash,
+            net_event.clone(),
+            &events,
+            &alice.peer_list,
+        );
+    }
+
+    #[test]
+    fn event_construction_from_request() {
+        let (alice, bob) = create_two_events("Alice", "Bob");
+        let (alice_initial_hash, bob_initial_hash, events) =
+            create_gossip_graph_with_two_events(alice.event, bob.event);
+
+        // Alice receives request from Bob
+        let event_from_request = Event::<Transaction, PeerId>::new_from_request(
+            alice_initial_hash,
+            bob_initial_hash,
+            &events,
+            &alice.peer_list,
+        );
+
+        assert_eq!(
+            event_from_request.content.creator,
+            *alice.peer_list.our_id().public_id()
+        );
+        assert_eq!(event_from_request.index, 1);
+        assert!(!event_from_request.is_initial());
+        assert!(!event_from_request.is_response());
+        assert_eq!(event_from_request.self_parent(), Some(&alice_initial_hash));
+        assert_eq!(event_from_request.other_parent(), Some(&bob_initial_hash));
+    }
+
+    #[test]
+    #[should_panic(expected = "Alice constructed an invalid event")]
+    #[cfg(feature = "testing")]
+    fn event_construction_from_request_without_self_parent_event_in_graph() {
+        let (alice, bob) = create_two_events("Alice", "Bob");
+        let mut events = BTreeMap::new();
+        let alice_initial_hash = *alice.event.hash();
+        let bob_initial_hash = insert_into_gossip_graph(bob.event, &mut events);
+        let _ = Event::<Transaction, PeerId>::new_from_request(
+            alice_initial_hash,
+            bob_initial_hash,
+            &events,
+            &alice.peer_list,
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Alice constructed an invalid event")]
+    #[cfg(feature = "testing")]
+    fn event_construction_from_request_without_other_parent_event_in_graph() {
+        let (alice, bob) = create_two_events("Alice", "Bob");
+        let mut events = BTreeMap::new();
+        let alice_initial_hash = insert_into_gossip_graph(alice.event, &mut events);
+        let bob_initial_hash = *bob.event.hash();
+        let _ = Event::<Transaction, PeerId>::new_from_request(
+            alice_initial_hash,
+            bob_initial_hash,
+            &events,
+            &alice.peer_list,
+        );
+    }
+
+    #[test]
+    fn event_construction_from_response() {
+        let (alice, bob) = create_two_events("Alice", "Bob");
+        let (alice_initial_hash, bob_initial_hash, events) =
+            create_gossip_graph_with_two_events(alice.event, bob.event);
+
+        let event_from_response = Event::<Transaction, PeerId>::new_from_response(
+            alice_initial_hash,
+            bob_initial_hash,
+            &events,
+            &alice.peer_list,
+        );
+
+        assert_eq!(
+            event_from_response.content.creator,
+            *alice.peer_list.our_id().public_id()
+        );
+        assert_eq!(event_from_response.index, 1);
+        assert!(!event_from_response.is_initial());
+        assert!(event_from_response.is_response());
+        assert_eq!(event_from_response.self_parent(), Some(&alice_initial_hash));
+        assert_eq!(event_from_response.other_parent(), Some(&bob_initial_hash));
+    }
+
+    #[test]
+    fn event_construction_unpack() {
+        let alice = create_event_with_single_peer("Alice");
+        let mut events = BTreeMap::new();
+        let initial_event_hash = insert_into_gossip_graph(alice.event, &mut events);
+
+        // Our observation
+        let net_event = Transaction::new("event_observed_by_alice");
+
+        let event_from_observation = Event::<Transaction, PeerId>::new_from_observation(
+            initial_event_hash,
+            net_event,
+            &events,
+            &alice.peer_list,
+        );
+
+        let packed_event = event_from_observation.pack();
+        let unpacked_event = unwrap!(unwrap!(Event::<Transaction, PeerId>::unpack(
+            packed_event.clone(),
+            &events,
+            &alice.peer_list
+        )));
+
+        assert_eq!(event_from_observation, unpacked_event);
+        assert!(
+            events
+                .insert(*unpacked_event.hash(), unpacked_event)
+                .is_none()
+        );
+        assert!(
+            unwrap!(Event::<Transaction, PeerId>::unpack(
+                packed_event,
+                &events,
+                &alice.peer_list
+            )).is_none()
+        );
     }
 }
