@@ -12,8 +12,8 @@ use gossip::content::Content;
 use gossip::packed_event::PackedEvent;
 use hash::Hash;
 use id::{PublicId, SecretId};
-use maidsafe_utilities::serialisation::serialise;
 use network_event::NetworkEvent;
+use serialise;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 use vote::Vote;
@@ -42,7 +42,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         secret_id: &S,
         self_parent: Hash,
         other_parent: Hash,
-    ) -> Result<Self, Error> {
+    ) -> Self {
         Self::new(
             secret_id,
             Cause::Request {
@@ -57,7 +57,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         secret_id: &S,
         self_parent: Hash,
         other_parent: Hash,
-    ) -> Result<Self, Error> {
+    ) -> Self {
         Self::new(
             secret_id,
             Cause::Response {
@@ -72,19 +72,19 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         secret_id: &S,
         self_parent: Hash,
         network_event: T,
-    ) -> Result<Self, Error> {
-        let vote = Vote::new(secret_id, network_event)?;
+    ) -> Self {
+        let vote = Vote::new(secret_id, network_event);
         Self::new(secret_id, Cause::Observation { self_parent, vote })
     }
 
     // Creates an initial event.  This is the first event by its creator in the graph.
-    pub fn new_initial<S: SecretId<PublicId = P>>(secret_id: &S) -> Result<Self, Error> {
+    pub fn new_initial<S: SecretId<PublicId = P>>(secret_id: &S) -> Self {
         Self::new(secret_id, Cause::Initial)
     }
 
     // Creates an event from a `PackedEvent`.
     pub(super) fn unpack(packed_event: PackedEvent<T, P>) -> Result<Self, Error> {
-        let serialised_content = serialise(&packed_event.content)?;
+        let serialised_content = serialise(&packed_event.content);
         let hash = if packed_event
             .content
             .creator
@@ -158,15 +158,15 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         }
     }
 
-    fn new<S: SecretId<PublicId = P>>(secret_id: &S, cause: Cause<T, P>) -> Result<Self, Error> {
+    fn new<S: SecretId<PublicId = P>>(secret_id: &S, cause: Cause<T, P>) -> Self {
         let content = Content {
             creator: secret_id.public_id().clone(),
             cause,
         };
-        let serialised_content = serialise(&content)?;
+        let serialised_content = serialise(&content);
         // All fields except `content`, `signature` and `hash` still need to be set correctly by the
         // caller.
-        Ok(Self {
+        Self {
             content,
             signature: secret_id.sign_detached(&serialised_content),
             hash: Hash::from(serialised_content.as_slice()),
@@ -175,7 +175,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             first_descendants: BTreeMap::default(),
             valid_blocks_carried: BTreeSet::default(),
             observations: BTreeSet::default(),
-        })
+        }
     }
 }
 

@@ -6,10 +6,9 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use error::Error;
 use hash::Hash;
 use id::PublicId;
-use maidsafe_utilities::serialisation::serialise;
+use serialise;
 
 #[derive(Clone, Copy)]
 pub(crate) struct RoundHash {
@@ -21,20 +20,20 @@ pub(crate) struct RoundHash {
 
 impl RoundHash {
     // Constructs a new `RoundHash` with the given `public_id` and `latest_block_hash` for round 0.
-    pub fn new<P: PublicId>(public_id: &P, latest_block_hash: Hash) -> Result<Self, Error> {
-        let public_id_hash = Hash::from(serialise(&public_id)?.as_slice());
-        let final_hash = Self::final_hash(&public_id_hash, &latest_block_hash, 0)?;
-        Ok(Self {
+    pub fn new<P: PublicId>(public_id: &P, latest_block_hash: Hash) -> Self {
+        let public_id_hash = Hash::from(serialise(&public_id).as_slice());
+        let final_hash = Self::final_hash(&public_id_hash, &latest_block_hash, 0);
+        Self {
             public_id_hash,
             latest_block_hash,
             round: 0,
             final_hash,
-        })
+        }
     }
 
     // Constructs a new `RoundHash` with the same values as `self` but with `round += 1`.
-    pub fn increment_round(&self) -> Result<Self, Error> {
-        Ok(Self {
+    pub fn increment_round(&self) -> Self {
+        Self {
             public_id_hash: self.public_id_hash,
             latest_block_hash: self.latest_block_hash,
             round: self.round + 1,
@@ -42,8 +41,8 @@ impl RoundHash {
                 &self.public_id_hash,
                 &self.latest_block_hash,
                 self.round + 1,
-            )?,
-        })
+            ),
+        }
     }
 
     // Returns the final value of the `RoundHash`.
@@ -51,14 +50,8 @@ impl RoundHash {
         &self.final_hash
     }
 
-    fn final_hash(
-        public_id_hash: &Hash,
-        latest_block_hash: &Hash,
-        round: usize,
-    ) -> Result<Hash, Error> {
-        let round_hash = Hash::from(serialise(&round)?.as_slice());
-        Ok(Hash::from(
-            serialise(&(public_id_hash, latest_block_hash, round_hash))?.as_slice(),
-        ))
+    fn final_hash(public_id_hash: &Hash, latest_block_hash: &Hash, round: usize) -> Hash {
+        let round_hash = Hash::from(serialise(&round).as_slice());
+        Hash::from(serialise(&(public_id_hash, latest_block_hash, round_hash)).as_slice())
     }
 }

@@ -34,7 +34,7 @@ impl Debug for Step {
     }
 }
 
-/// A simple enum to hold a set of bools
+/// A simple enum to hold a set of bools.
 #[derive(Clone, PartialEq)]
 pub(crate) enum BoolSet {
     Empty,
@@ -52,6 +52,7 @@ impl BoolSet {
     pub fn is_empty(&self) -> bool {
         *self == BoolSet::Empty
     }
+
     fn insert(&mut self, val: bool) -> bool {
         match self.clone() {
             BoolSet::Empty => *self = BoolSet::Single(val),
@@ -60,6 +61,7 @@ impl BoolSet {
         }
         true
     }
+
     fn contains(&self, val: bool) -> bool {
         match *self {
             BoolSet::Empty => false,
@@ -67,9 +69,11 @@ impl BoolSet {
             BoolSet::Both => true,
         }
     }
+
     fn clear(&mut self) {
         *self = BoolSet::Empty
     }
+
     fn len(&self) -> usize {
         match *self {
             BoolSet::Empty => 0,
@@ -77,6 +81,7 @@ impl BoolSet {
             BoolSet::Both => 2,
         }
     }
+
     fn from_bool(val: bool) -> Self {
         BoolSet::Single(val)
     }
