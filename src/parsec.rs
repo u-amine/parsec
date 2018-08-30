@@ -68,7 +68,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             round_hashes,
             responsiveness_threshold,
         };
-        let initial_event = Event::new_initial(parsec.peer_list.our_id());
+        let initial_event = Event::new_initial(&parsec.peer_list);
         if let Err(error) = parsec.add_initial_event(initial_event) {
             log_or_panic!(
                 "{:?} initialising Parsec failed when adding initial_event: {:?}",
@@ -86,8 +86,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             return Err(Error::DuplicateVote);
         }
         let self_parent_hash = self.our_last_event_hash();
-        let event =
-            Event::new_from_observation(self.peer_list.our_id(), self_parent_hash, network_event);
+        let event = Event::new_from_observation(
+            self_parent_hash,
+            network_event,
+            &self.events,
+            &self.peer_list,
+        );
         self.add_event(event)
     }
 
@@ -123,7 +127,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         src: &S::PublicId,
         req: Request<T, S::PublicId>,
     ) -> Result<Response<T, S::PublicId>, Error> {
-        for event in req.unpack() {
+        for packed_event in req.packed_events {
+            let event = Event::unpack(packed_event, &self.events, &self.peer_list)?;
             self.add_event(event)?;
         }
         self.create_sync_event(src, true)?;
@@ -136,7 +141,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         src: &S::PublicId,
         resp: Response<T, S::PublicId>,
     ) -> Result<(), Error> {
-        for event in resp.unpack() {
+        for packed_event in resp.packed_events {
+            let event = Event::unpack(packed_event, &self.events, &self.peer_list)?;
             self.add_event(event)?;
         }
         self.create_sync_event(src, false)
@@ -200,18 +206,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         event.self_parent().and_then(|hash| self.events.get(hash))
     }
 
-    fn other_parent<'a>(
-        &'a self,
-        event: &Event<T, S::PublicId>,
-    ) -> Option<&'a Event<T, S::PublicId>> {
-        event.other_parent().and_then(|hash| self.events.get(hash))
-    }
-
     fn is_observer(&self, event: &Event<T, S::PublicId>) -> bool {
         self.peer_list.is_super_majority(event.observations.len())
     }
 
-    fn add_event(&mut self, mut event: Event<T, S::PublicId>) -> Result<(), Error> {
+    fn add_event(&mut self, event: Event<T, S::PublicId>) -> Result<(), Error> {
         if self.events.contains_key(event.hash()) {
             return Ok(());
         }
@@ -230,10 +229,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             }
         }
 
-        self.set_index(&mut event);
         self.peer_list.add_event(&event)?;
-        self.set_last_ancestors(&mut event)?;
-        self.set_first_descendants(&mut event)?;
 
         let event_hash = *event.hash();
         self.events_order.push(event_hash);
@@ -242,10 +238,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.process_event(&event_hash)
     }
 
-    fn add_initial_event(&mut self, mut event: Event<T, S::PublicId>) -> Result<(), Error> {
-        event.index = Some(0);
-        let creator_id = event.creator().clone();
-        let _ = event.first_descendants.insert(creator_id, 0);
+    fn add_initial_event(&mut self, event: Event<T, S::PublicId>) -> Result<(), Error> {
         let event_hash = *event.hash();
         self.peer_list.add_event(&event)?;
         self.events_order.push(event_hash);
@@ -265,81 +258,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             self.consensused_blocks.push_back(block);
             self.restart_consensus(&payload_hash);
         }
-        Ok(())
-    }
-
-    fn set_index(&self, event: &mut Event<T, S::PublicId>) {
-        event.index = Some(
-            self.self_parent(event)
-                .and_then(|parent| parent.index)
-                .map_or(0, |index| index + 1),
-        );
-    }
-
-    // This should only be called once `event` has had its `index` set correctly.
-    fn set_last_ancestors(&self, event: &mut Event<T, S::PublicId>) -> Result<(), Error> {
-        let event_index = event.index.ok_or(Error::InvalidEvent)?;
-
-        if let Some(self_parent) = self.self_parent(event) {
-            event.last_ancestors = self_parent.last_ancestors.clone();
-
-            if let Some(other_parent) = self.other_parent(event) {
-                for (peer_id, _) in self.peer_list.iter() {
-                    if let Some(other_index) = other_parent.last_ancestors.get(peer_id) {
-                        let existing_index = event
-                            .last_ancestors
-                            .entry(peer_id.clone())
-                            .or_insert(*other_index);
-                        if *existing_index < *other_index {
-                            *existing_index = *other_index;
-                        }
-                    }
-                }
-            }
-        } else if self.other_parent(event).is_some() {
-            // If we have no self-parent, we should also have no other-parent.
-            return Err(Error::InvalidEvent);
-        }
-
-        let creator_id = event.creator().clone();
-        let _ = event.last_ancestors.insert(creator_id, event_index);
-        Ok(())
-    }
-
-    // This should be called only once `event` has had its `index` and `last_ancestors` set
-    // correctly (i.e. after calling `Parsec::set_last_ancestors()` on it)
-    fn set_first_descendants(&mut self, event: &mut Event<T, S::PublicId>) -> Result<(), Error> {
-        if event.last_ancestors.is_empty() {
-            return Err(Error::InvalidEvent);
-        }
-
-        let event_index = event.index.ok_or(Error::InvalidEvent)?;
-        let creator_id = event.creator().clone();
-        let _ = event.first_descendants.insert(creator_id, event_index);
-
-        for (peer_id, peer_info) in self.peer_list.iter() {
-            let mut opt_hash = event
-                .last_ancestors
-                .get(peer_id)
-                .and_then(|index| peer_info.get(index))
-                .cloned();
-
-            loop {
-                if let Some(hash) = opt_hash {
-                    if let Some(other_event) = self.events.get_mut(&hash) {
-                        if !other_event.first_descendants.contains_key(event.creator()) {
-                            let _ = other_event
-                                .first_descendants
-                                .insert(event.creator().clone(), event_index);
-                            opt_hash = other_event.self_parent().cloned();
-                            continue;
-                        }
-                    }
-                }
-                break;
-            }
-        }
-
         Ok(())
     }
 
@@ -404,7 +322,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                         Ok(that_event) => {
                             (Some(payload) == that_event.vote().map(|vote| vote.payload())
                                 && (event
-                                    .last_ancestors
+                                    .last_ancestors()
                                     .get(peer)
                                     .map_or(false, |last_index| last_index >= index)))
                         }
@@ -539,7 +457,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         // Try to get the "most-leader"'s aux value.
         let creator = &peer_id_hashes[0].1;
-        if let Some(creator_event_index) = event.last_ancestors.get(creator) {
+        if let Some(creator_event_index) = event.last_ancestors().get(creator) {
             if let Some(aux_value) = self.aux_value(creator, *creator_event_index, peer_id, round) {
                 return Ok(Some(aux_value));
             }
@@ -548,7 +466,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // If we've already waited long enough, get the aux value of the highest ranking leader.
         if self.stop_waiting(round, event) {
             for (_, creator) in &peer_id_hashes[1..] {
-                if let Some(creator_event_index) = event.last_ancestors.get(creator) {
+                if let Some(creator_event_index) = event.last_ancestors().get(creator) {
                     if let Some(aux_value) =
                         self.aux_value(creator, *creator_event_index, peer_id, round)
                     {
@@ -664,18 +582,19 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .iter()
             .filter(|&id| *id != event.creator())
         {
-            if let Some(meta_votes) = event
-                .last_ancestors
-                .get(creator)
-                .map(|creator_event_index| {
-                    self.meta_votes_since_round_and_step(
-                        creator,
-                        *creator_event_index,
-                        &peer_id,
-                        0,
-                        &Step::ForcedTrue,
-                    )
-                }) {
+            if let Some(meta_votes) =
+                event
+                    .last_ancestors()
+                    .get(creator)
+                    .map(|creator_event_index| {
+                        self.meta_votes_since_round_and_step(
+                            creator,
+                            *creator_event_index,
+                            &peer_id,
+                            0,
+                            &Step::ForcedTrue,
+                        )
+                    }) {
                 other_votes.push(meta_votes)
             }
         }
@@ -802,19 +721,20 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     // Returns the number of peers through which there is a directed path in the gossip graph
-    // between event X and event Y.
+    // from event X (descendant) to event Y (ancestor).
     fn n_peers_with_directed_paths(
         &self,
         x: &Event<T, S::PublicId>,
         y: &Event<T, S::PublicId>,
     ) -> usize {
-        y.first_descendants
+        x.last_ancestors()
             .iter()
-            .filter(|(peer_id, descendant)| {
-                x.last_ancestors
-                    .get(&peer_id)
-                    .map(|last_ancestor| last_ancestor >= *descendant)
-                    .unwrap_or(false)
+            .filter(|(peer_id, ancestor)| {
+                self.peer_list
+                    .event_by_index(peer_id, **ancestor)
+                    .and_then(|hash| self.events.get(hash))
+                    .and_then(|event| event.last_ancestors().get(y.creator()))
+                    .map_or(false, |last_index| *last_index >= y.index())
             }).count()
     }
 
@@ -839,9 +759,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             Error::Logic
         })?;
         let sync_event = if is_request {
-            Event::new_from_request(self.peer_list.our_id(), self_parent, other_parent)
+            Event::new_from_request(self_parent, other_parent, &self.events, &self.peer_list)
         } else {
-            Event::new_from_response(self.peer_list.our_id(), self_parent, other_parent)
+            Event::new_from_response(self_parent, other_parent, &self.events, &self.peer_list)
         };
         self.add_event(sync_event)
     }
@@ -860,7 +780,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             return Err(Error::Logic);
         };
         let mut last_ancestors_hashes = peer_last_event
-            .last_ancestors
+            .last_ancestors()
             .iter()
             .filter_map(|(id, &index)| self.peer_list.event_by_index(id, index))
             .collect::<BTreeSet<_>>();
@@ -870,7 +790,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // are any peers for which `peer_id` doesn't have a `last_ancestors` entry, add those peers'
         // oldest events we know about to the list of hashes.
         for (peer, events) in self.peer_list.iter() {
-            if !peer_last_event.last_ancestors.contains_key(peer) {
+            if !peer_last_event.last_ancestors().contains_key(peer) {
                 if let Some(hash) = events.get(&0) {
                     let _ = last_ancestors_hashes.insert(hash);
                 }

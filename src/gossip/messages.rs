@@ -15,7 +15,7 @@ use network_event::NetworkEvent;
 #[serde(bound = "")]
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Request<T: NetworkEvent, P: PublicId> {
-    packed_events: Vec<PackedEvent<T, P>>,
+    pub(crate) packed_events: Vec<PackedEvent<T, P>>,
 }
 
 impl<'a, T: 'a + NetworkEvent, P: 'a + PublicId> Request<T, P> {
@@ -26,20 +26,11 @@ impl<'a, T: 'a + NetworkEvent, P: 'a + PublicId> Request<T, P> {
     }
 }
 
-impl<T: NetworkEvent, P: PublicId> Request<T, P> {
-    pub(crate) fn unpack(self) -> Vec<Event<T, P>> {
-        self.packed_events
-            .into_iter()
-            .filter_map(|packed| Event::unpack(packed).ok())
-            .collect()
-    }
-}
-
 /// A gossip response message.
 #[serde(bound = "")]
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Response<T: NetworkEvent, P: PublicId> {
-    packed_events: Vec<PackedEvent<T, P>>,
+    pub(crate) packed_events: Vec<PackedEvent<T, P>>,
 }
 
 impl<'a, T: 'a + NetworkEvent, P: 'a + PublicId> Response<T, P> {
@@ -47,14 +38,5 @@ impl<'a, T: 'a + NetworkEvent, P: 'a + PublicId> Response<T, P> {
         Self {
             packed_events: events_iter.map(Event::pack).collect(),
         }
-    }
-}
-
-impl<T: NetworkEvent, P: PublicId> Response<T, P> {
-    pub(crate) fn unpack(self) -> Vec<Event<T, P>> {
-        self.packed_events
-            .into_iter()
-            .filter_map(|packed| Event::unpack(packed).ok())
-            .collect()
     }
 }
