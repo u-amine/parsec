@@ -14,3 +14,4 @@ mod packed_event;
 
 pub(super) use self::event::Event;
 pub use self::messages::{Request, Response};
+pub(super) use self::packed_event::PackedEvent;

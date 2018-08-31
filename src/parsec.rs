@@ -9,7 +9,7 @@
 use block::Block;
 use dump_graph;
 use error::Error;
-use gossip::{Event, Request, Response};
+use gossip::{Event, PackedEvent, Request, Response};
 use hash::Hash;
 use id::SecretId;
 use meta_vote::{MetaVote, Step};
@@ -69,7 +69,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             responsiveness_threshold,
         };
         let initial_event = Event::new_initial(&parsec.peer_list);
-        if let Err(error) = parsec.add_initial_event(initial_event) {
+        if let Err(error) = parsec.add_event(initial_event) {
             log_or_panic!(
                 "{:?} initialising Parsec failed when adding initial_event: {:?}",
                 parsec.our_pub_id(),
@@ -127,10 +127,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         src: &S::PublicId,
         req: Request<T, S::PublicId>,
     ) -> Result<Response<T, S::PublicId>, Error> {
-        for packed_event in req.packed_events {
-            let event = Event::unpack(packed_event, &self.events, &self.peer_list)?;
-            self.add_event(event)?;
-        }
+        self.unpack_and_add_events(req.packed_events)?;
         self.create_sync_event(src, true)?;
         self.events_to_gossip_to_peer(src).map(Response::new)
     }
@@ -141,10 +138,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         src: &S::PublicId,
         resp: Response<T, S::PublicId>,
     ) -> Result<(), Error> {
-        for packed_event in resp.packed_events {
-            let event = Event::unpack(packed_event, &self.events, &self.peer_list)?;
-            self.add_event(event)?;
-        }
+        self.unpack_and_add_events(resp.packed_events)?;
         self.create_sync_event(src, false)
     }
 
@@ -210,40 +204,29 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.peer_list.is_super_majority(event.observations.len())
     }
 
-    fn add_event(&mut self, event: Event<T, S::PublicId>) -> Result<(), Error> {
-        if self.events.contains_key(event.hash()) {
-            return Ok(());
-        }
-
-        if self.self_parent(&event).is_none() {
-            if event.is_initial() {
-                return self.add_initial_event(event);
-            } else {
-                return Err(Error::UnknownParent);
+    fn unpack_and_add_events(
+        &mut self,
+        packed_events: Vec<PackedEvent<T, S::PublicId>>,
+    ) -> Result<(), Error> {
+        for packed_event in packed_events {
+            if let Some(event) = Event::unpack(packed_event, &self.events, &self.peer_list)? {
+                self.add_event(event)?;
             }
         }
-
-        if let Some(hash) = event.other_parent() {
-            if !self.events.contains_key(hash) {
-                return Err(Error::UnknownParent);
-            }
-        }
-
-        self.peer_list.add_event(&event)?;
-
-        let event_hash = *event.hash();
-        self.events_order.push(event_hash);
-        let _ = self.events.insert(event_hash, event);
-        self.set_valid_blocks_carried(&event_hash)?;
-        self.process_event(&event_hash)
+        Ok(())
     }
 
-    fn add_initial_event(&mut self, event: Event<T, S::PublicId>) -> Result<(), Error> {
-        let event_hash = *event.hash();
+    fn add_event(&mut self, event: Event<T, S::PublicId>) -> Result<(), Error> {
         self.peer_list.add_event(&event)?;
+        let event_hash = *event.hash();
+        let is_initial = event.is_initial();
         self.events_order.push(event_hash);
         let _ = self.events.insert(event_hash, event);
-        Ok(())
+        if is_initial {
+            return Ok(());
+        }
+        self.set_valid_blocks_carried(&event_hash)?;
+        self.process_event(&event_hash)
     }
 
     fn process_event(&mut self, event_hash: &Hash) -> Result<(), Error> {
@@ -732,7 +715,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .filter(|(peer_id, ancestor)| {
                 self.peer_list
                     .event_by_index(peer_id, **ancestor)
-                    .and_then(|hash| self.events.get(hash))
+                    .and_then(|hash| self.get_known_event(hash).ok())
                     .and_then(|event| event.last_ancestors().get(y.creator()))
                     .map_or(false, |last_index| *last_index >= y.index())
             }).count()
