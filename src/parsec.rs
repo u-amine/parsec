@@ -82,6 +82,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     /// Adds a vote for `network_event`.  Returns an error if we have already voted for this.
     pub fn vote_for(&mut self, network_event: T) -> Result<(), Error> {
+        debug!("{:?} voting for {:?}", self.our_pub_id(), network_event);
         if self.have_voted_for(&network_event) {
             return Err(Error::DuplicateVote);
         }
@@ -103,6 +104,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         &self,
         peer_id: Option<S::PublicId>,
     ) -> Result<Request<T, S::PublicId>, Error> {
+        debug!(
+            "{:?} preparing gossip request for {:?}",
+            self.our_pub_id(),
+            peer_id
+        );
         if let Some(recipient_id) = peer_id {
             if !self.peer_list.has_peer(&recipient_id) {
                 return Err(Error::UnknownPeer);
@@ -127,6 +133,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         src: &S::PublicId,
         req: Request<T, S::PublicId>,
     ) -> Result<Response<T, S::PublicId>, Error> {
+        debug!(
+            "{:?} received gossip request from {:?}",
+            self.our_pub_id(),
+            src
+        );
         self.unpack_and_add_events(req.packed_events)?;
         self.create_sync_event(src, true)?;
         self.events_to_gossip_to_peer(src).map(Response::new)
@@ -138,6 +149,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         src: &S::PublicId,
         resp: Response<T, S::PublicId>,
     ) -> Result<(), Error> {
+        debug!(
+            "{:?} received gossip response from {:?}",
+            self.our_pub_id(),
+            src
+        );
         self.unpack_and_add_events(resp.packed_events)?;
         self.create_sync_event(src, false)
     }
@@ -237,6 +253,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             dump_graph::to_file(self.our_pub_id(), &self.events, &self.meta_votes);
             self.clear_consensus_data(block.payload());
             let payload_hash = Hash::from(serialise(block.payload()).as_slice());
+            info!(
+                "{:?} got consensus on block {} with payload {:?} and payload hash {:?}",
+                self.our_pub_id(),
+                self.consensus_history.len(),
+                block.payload(),
+                payload_hash
+            );
             self.consensus_history.push(payload_hash);
             self.consensused_blocks.push_back(block);
             self.restart_consensus(&payload_hash);
@@ -365,6 +388,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     );
                 }
             };
+            trace!(
+                "{:?} has set the meta votes for {:?}",
+                self.our_pub_id(),
+                event
+            );
         }
 
         if !meta_votes.is_empty() {

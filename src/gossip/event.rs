@@ -275,22 +275,32 @@ impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         write!(
             formatter,
-            "Event{{ {:?}[{}] {:?}, {}, self_parent: {:?}, other_parent: {:?}, last_ancestors: \
-             {:?}, valid_blocks_carried: {:?}, observations: {:?} }}",
-            self.content.creator,
-            self.index,
-            self.hash,
+            "Event{{ {:?}[{}] {:?}",
+            self.content.creator, self.index, self.hash,
+        )?;
+        write!(
+            formatter,
+            ", {}",
             match &self.content.cause {
                 Cause::Request { .. } => "Request".to_string(),
                 Cause::Response { .. } => "Response".to_string(),
                 Cause::Observation { vote, .. } => format!("Observation({:?})", vote.payload()),
                 Cause::Initial => "Initial".to_string(),
-            },
+            }
+        )?;
+        write!(
+            formatter,
+            ", self_parent: {:?}, other_parent: {:?}",
             self.content.self_parent(),
-            self.content.other_parent(),
-            self.last_ancestors,
-            self.valid_blocks_carried,
-            self.observations,
-        )
+            self.content.other_parent()
+        )?;
+        write!(formatter, ", last_ancestors: {:?}", self.last_ancestors)?;
+        write!(
+            formatter,
+            ", valid_blocks_carried: {:?}",
+            self.valid_blocks_carried
+        )?;
+        write!(formatter, ", observations: {:?}", self.observations)?;
+        write!(formatter, " }}")
     }
 }
