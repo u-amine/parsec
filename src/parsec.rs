@@ -105,7 +105,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         peer_id: Option<S::PublicId>,
     ) -> Result<Request<T, S::PublicId>, Error> {
         debug!(
-            "{:?} preparing gossip request for {:?}",
+            "{:?} creating gossip request for {:?}",
             self.our_pub_id(),
             peer_id
         );
@@ -740,12 +740,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     ) -> usize {
         x.last_ancestors()
             .iter()
-            .filter(|(peer_id, ancestor)| {
+            .filter(|(peer_id, &event_index)| {
                 self.peer_list
-                    .event_by_index(peer_id, **ancestor)
-                    .and_then(|hash| self.get_known_event(hash).ok())
-                    .and_then(|event| event.last_ancestors().get(y.creator()))
-                    .map_or(false, |last_index| *last_index >= y.index())
+                    .event_by_index(peer_id, event_index)
+                    .and_then(|event_hash| self.get_known_event(event_hash).ok())
+                    .map_or(false, |last_ancestor_of_x| last_ancestor_of_x.sees(y))
             }).count()
     }
 

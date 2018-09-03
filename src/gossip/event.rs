@@ -136,6 +136,14 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         }
     }
 
+    // Returns whether this event can see `other`, i.e. whether there's a directed path from `other`
+    // to `self` in the graph.
+    pub fn sees(&self, other: &Event<T, P>) -> bool {
+        self.last_ancestors
+            .get(other.creator())
+            .map_or(false, |last_index| *last_index >= other.index())
+    }
+
     /// Returns `Some(vote)` if the event is for a vote of network event, otherwise returns `None`.
     pub fn vote(&self) -> Option<&Vote<T, P>> {
         if let Cause::Observation { ref vote, .. } = self.content.cause {
