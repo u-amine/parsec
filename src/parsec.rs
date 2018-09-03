@@ -346,7 +346,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .filter_map(|(peer, hashes)| {
                     let old_hash = hashes.front()?;
                     let old_event = self.get_known_event(old_hash).ok()?;
-                    if self.does_strongly_see(event, old_event) {
+                    if self.strongly_sees(event, old_event) {
                         Some(peer)
                     } else {
                         None
@@ -749,7 +749,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     // Returns whether event X can strongly see the event Y.
-    fn does_strongly_see(&self, x: &Event<T, S::PublicId>, y: &Event<T, S::PublicId>) -> bool {
+    fn strongly_sees(&self, x: &Event<T, S::PublicId>, y: &Event<T, S::PublicId>) -> bool {
         self.peer_list
             .is_super_majority(self.n_peers_with_directed_paths(x, y))
     }
