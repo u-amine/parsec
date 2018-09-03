@@ -61,7 +61,7 @@ extern crate rand;
 extern crate unwrap;
 
 use clap::{App, Arg};
-use maidsafe_utilities::SeededRng;
+use maidsafe_utilities::{log, SeededRng};
 use parsec::mock::{self, PeerId, Transaction};
 use parsec::{Block, Parsec};
 use rand::Rng;
@@ -262,6 +262,7 @@ fn get_params() -> Params {
 }
 
 fn main() {
+    unwrap!(log::init(false));
     let params = get_params();
 
     // Set up the requested number of peers and random network events.
