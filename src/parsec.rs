@@ -20,6 +20,16 @@ use serialise;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::iter;
 
+pub type IsInterestingEventFn<P> = fn(voters: &BTreeSet<&P>, current_peers: &BTreeSet<&P>) -> bool;
+
+/// Function which can be used as `is_interesting_event` in
+/// [`Parsec::new()`](struct.Parsec.html#method.new) and which returns `true` if there are >2/3
+/// `voters` which are members of `current_peers`.
+pub fn is_supermajority<P: Ord>(voters: &BTreeSet<&P>, current_peers: &BTreeSet<&P>) -> bool {
+    let valid_voter_count = current_peers.intersection(voters).count();
+    3 * valid_voter_count > 2 * current_peers.len()
+}
+
 /// The main object which manages creating and receiving gossip about network events from peers, and
 /// which provides a sequence of consensused `Block`s by applying the PARSEC algorithm.
 pub struct Parsec<T: NetworkEvent, S: SecretId> {
@@ -29,8 +39,8 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     events: BTreeMap<Hash, Event<T, S::PublicId>>,
     // The sequence in which all gossip events were added to this `Parsec`.
     events_order: Vec<Hash>,
-    // The hashes of events for each peer that have a non-empty set of `valid_blocks_carried`
-    events_with_valid_blocks: BTreeMap<S::PublicId, VecDeque<Hash>>,
+    // The hashes of events for each peer that have a non-empty set of `interesting_content`
+    interesting_events: BTreeMap<S::PublicId, VecDeque<Hash>>,
     // Consensused network events that have not been returned via `poll()` yet.
     consensused_blocks: VecDeque<Block<T, S::PublicId>>,
     // Hash of all payloads that were consensused ever
@@ -41,11 +51,16 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     // the one for round `x` is held at index `x`.
     round_hashes: BTreeMap<S::PublicId, Vec<RoundHash>>,
     responsiveness_threshold: usize,
+    is_interesting_event: IsInterestingEventFn<S::PublicId>,
 }
 
 impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// Creates a new `Parsec` for a peer with the given ID and genesis peer IDs (ours included).
-    pub fn new(our_id: S, genesis_group: &BTreeSet<S::PublicId>) -> Self {
+    pub fn new(
+        our_id: S,
+        genesis_group: &BTreeSet<S::PublicId>,
+        is_interesting_event: IsInterestingEventFn<S::PublicId>,
+    ) -> Self {
         let responsiveness_threshold = (genesis_group.len() as f64).log2().ceil() as usize;
 
         let mut peer_list = PeerList::new(our_id);
@@ -61,12 +76,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             peer_list,
             events: BTreeMap::new(),
             events_order: vec![],
-            events_with_valid_blocks: BTreeMap::new(),
+            interesting_events: BTreeMap::new(),
             consensused_blocks: VecDeque::new(),
             consensus_history: vec![],
             meta_votes: BTreeMap::new(),
             round_hashes,
             responsiveness_threshold,
+            is_interesting_event,
         };
         let initial_event = Event::new_initial(&parsec.peer_list);
         if let Err(error) = parsec.add_event(initial_event) {
@@ -241,7 +257,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         if is_initial {
             return Ok(());
         }
-        self.set_valid_blocks_carried(&event_hash)?;
+        self.set_interesting_content(&event_hash)?;
         self.process_event(&event_hash)
     }
 
@@ -267,44 +283,49 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Ok(())
     }
 
-    fn set_valid_blocks_carried(&mut self, event_hash: &Hash) -> Result<(), Error> {
-        // Collect payloads from any block made valid by this event
-        let valid_blocks_carried = {
-            let event = self.get_known_event(event_hash)?;
-            self.peer_list
-                .iter()
-                .flat_map(|(_peer, events)| {
-                    events.iter().filter_map(|(_index, hash)| {
-                        self.events
-                            .get(hash)
-                            .and_then(|event| event.vote().map(|vote| vote.payload()))
-                    })
-                }).filter(|&this_payload| !self.payload_is_already_carried(event, this_payload))
-                .filter(|&this_payload| {
-                    self.peer_list
-                        .is_super_majority(self.n_ancestors_carrying_payload(event, this_payload))
-                }).cloned()
-                .collect::<BTreeSet<T>>()
-        };
-        if !valid_blocks_carried.is_empty() {
+    fn set_interesting_content(&mut self, event_hash: &Hash) -> Result<(), Error> {
+        let interesting_content = self.interesting_content(event_hash)?;
+        if !interesting_content.is_empty() {
             let creator_id = self.get_known_event(event_hash)?.creator().clone();
             let _ = self
-                .events_with_valid_blocks
+                .interesting_events
                 .entry(creator_id)
                 .and_modify(|hashes| {
                     hashes.push_back(*event_hash);
                 }).or_insert_with(|| iter::once(*event_hash).collect());
         }
         self.get_known_event_mut(event_hash)
-            .map(|ref mut event| event.valid_blocks_carried = valid_blocks_carried)
+            .map(|ref mut event| event.interesting_content = interesting_content)
+    }
+
+    // Any payloads which this event sees as "interesting".  If this returns a non-empty set, then
+    // this event is classed as an interesting one.
+    fn interesting_content(&self, event_hash: &Hash) -> Result<BTreeSet<T>, Error> {
+        let event = self.get_known_event(event_hash)?;
+        Ok(self
+            .peer_list
+            .iter()
+            .flat_map(|(_peer, events)| {
+                events.iter().filter_map(|(_index, hash)| {
+                    self.events
+                        .get(hash)
+                        .and_then(|event| event.vote().map(|vote| vote.payload()))
+                })
+            }).filter(|&this_payload| !self.payload_is_already_carried(event, this_payload))
+            .filter(|&this_payload| {
+                let voters = self.ancestors_carrying_payload(event, this_payload);
+                let all_peers = self.peer_list.iter().map(|(peer, _)| peer).collect();
+                (self.is_interesting_event)(&voters, &all_peers)
+            }).cloned()
+            .collect())
     }
 
     fn payload_is_already_carried(&self, event: &Event<T, S::PublicId>, payload: &T) -> bool {
-        let hashes = self.events_with_valid_blocks.get(event.creator());
+        let hashes = self.interesting_events.get(event.creator());
         hashes.map_or(false, |hashes| {
             hashes.iter().any(|hash| {
                 if let Ok(event) = self.get_known_event(hash) {
-                    event.valid_blocks_carried.contains(payload)
+                    event.interesting_content.contains(payload)
                 } else {
                     false
                 }
@@ -312,36 +333,41 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         })
     }
 
-    fn n_ancestors_carrying_payload(&self, event: &Event<T, S::PublicId>, payload: &T) -> usize {
+    fn ancestors_carrying_payload(
+        &self,
+        event: &Event<T, S::PublicId>,
+        payload: &T,
+    ) -> BTreeSet<&S::PublicId> {
         let payload_already_reached_consensus = self
             .consensus_history
             .iter()
             .any(|payload_hash| *payload_hash == Hash::from(serialise(&payload).as_slice()));
         if payload_already_reached_consensus {
-            return 0;
+            return BTreeSet::new();
         }
+        let sees_vote_for_same_payload =
+            |(_index, event_hash)| match self.get_known_event(event_hash) {
+                Ok(that_event) => {
+                    Some(payload) == that_event.vote().map(|vote| vote.payload())
+                        && event.sees(that_event)
+                }
+                Err(_) => false,
+            };
         self.peer_list
             .iter()
-            .filter(|(peer, events)| {
-                events.iter().any(
-                    |(index, event_hash)| match self.get_known_event(event_hash) {
-                        Ok(that_event) => {
-                            (Some(payload) == that_event.vote().map(|vote| vote.payload())
-                                && (event
-                                    .last_ancestors()
-                                    .get(peer)
-                                    .map_or(false, |last_index| last_index >= index)))
-                        }
-                        Err(_) => false,
-                    },
-                )
-            }).count()
+            .filter_map(|(peer, events)| {
+                if events.iter().any(sees_vote_for_same_payload) {
+                    Some(peer)
+                } else {
+                    None
+                }
+            }).collect()
     }
 
     fn set_observations(&mut self, event_hash: &Hash) -> Result<(), Error> {
         let observations = {
             let event = self.get_known_event(event_hash)?;
-            self.events_with_valid_blocks
+            self.interesting_events
                 .iter()
                 .filter_map(|(peer, hashes)| {
                     let old_hash = hashes.front()?;
@@ -633,11 +659,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     let elected_valid_blocks = our_decided_meta_votes
                         .filter_map(|(id, vote)| {
                             if vote.decision == Some(true) {
-                                self.events_with_valid_blocks
+                                self.interesting_events
                                     .get(&id)
                                     .and_then(|hashes| hashes.front())
                                     .and_then(|hash| self.get_known_event(&hash).ok())
-                                    .map(|oldest_event| oldest_event.valid_blocks_carried.clone())
+                                    .map(|oldest_event| oldest_event.interesting_content.clone())
                             } else {
                                 None
                             }
@@ -689,8 +715,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let mut events_made_empty = vec![];
         for event in self.events.values_mut() {
             event.observations = BTreeSet::new();
-            let removed = event.valid_blocks_carried.remove(payload);
-            if removed && event.valid_blocks_carried.is_empty() {
+            let removed = event.interesting_content.remove(payload);
+            if removed && event.interesting_content.is_empty() {
                 events_made_empty.push(*event.hash())
             }
         }
@@ -699,7 +725,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .get_known_event(event_hash)
                 .map(|event| event.creator().clone())
             {
-                if let Some(hashes) = self.events_with_valid_blocks.get_mut(&id) {
+                if let Some(hashes) = self.interesting_events.get_mut(&id) {
                     hashes.retain(|hash| hash != event_hash);
                 }
             }
@@ -722,7 +748,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .skip_while(|hash| {
                 self.get_known_event(&hash)
                     .ok()
-                    .map_or(true, |event| event.valid_blocks_carried.is_empty())
+                    .map_or(true, |event| event.interesting_content.is_empty())
             })
             .cloned()
             .collect::<Vec<_>>();

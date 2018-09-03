@@ -257,9 +257,9 @@ mod detail {
                 write!(writer, "\n{:?}", event_payload)?;
             }
 
-            // Write the `valid_blocks_carried` if have
-            if !event.valid_blocks_carried.is_empty() {
-                write!(writer, "\n{:?}", event.valid_blocks_carried)?;
+            // Write the `interesting_content` if have
+            if !event.interesting_content.is_empty() {
+                write!(writer, "\n{:?}", event.interesting_content)?;
             }
 
             // Write the `meta_votes` if have
@@ -288,7 +288,7 @@ mod detail {
             }
             writeln!(writer, "\"]")?;
             // Add any styling
-            if !event.valid_blocks_carried.is_empty() {
+            if !event.interesting_content.is_empty() {
                 writeln!(
                     writer,
                     " \"{:?}\" [shape=rectangle, style=filled, fillcolor=crimson]",

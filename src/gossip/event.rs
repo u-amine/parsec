@@ -29,8 +29,8 @@ pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
     index: u64,
     // Index of each peer's latest event that is an ancestor of this event.
     last_ancestors: BTreeMap<P, u64>,
-    // Payloads of all the blocks made valid by this event
-    pub valid_blocks_carried: BTreeSet<T>,
+    // Payloads of all the votes deemed interesting by this event
+    pub interesting_content: BTreeSet<T>,
     // The set of peers for which this event can strongly-see an event by that peer which carries a
     // valid block.  If there are a supermajority of peers here, this event is an "observer".
     pub observations: BTreeSet<P>,
@@ -116,14 +116,14 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         let (index, last_ancestors) =
             Self::index_and_last_ancestors(&packed_event.content, events, peer_list)?;
 
-        // `valid_blocks_carried` and `observations` still need to be set correctly by the caller.
+        // `interesting_content` and `observations` still need to be set correctly by the caller.
         Ok(Some(Self {
             content: packed_event.content,
             signature: packed_event.signature,
             hash,
             index,
             last_ancestors,
-            valid_blocks_carried: BTreeSet::default(),
+            interesting_content: BTreeSet::default(),
             observations: BTreeSet::default(),
         }))
     }
@@ -217,14 +217,14 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             (0, BTreeMap::default())
         };
 
-        // `valid_blocks_carried` and `observations` still need to be set correctly by the caller.
+        // `interesting_content` and `observations` still need to be set correctly by the caller.
         Self {
             content,
             signature: peer_list.our_id().sign_detached(&serialised_content),
             hash: Hash::from(serialised_content.as_slice()),
             index,
             last_ancestors,
-            valid_blocks_carried: BTreeSet::default(),
+            interesting_content: BTreeSet::default(),
             observations: BTreeSet::default(),
         }
     }
@@ -305,8 +305,8 @@ impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
         write!(formatter, ", last_ancestors: {:?}", self.last_ancestors)?;
         write!(
             formatter,
-            ", valid_blocks_carried: {:?}",
-            self.valid_blocks_carried
+            ", interesting_content: {:?}",
+            self.interesting_content
         )?;
         write!(formatter, ", observations: {:?}", self.observations)?;
         write!(formatter, " }}")

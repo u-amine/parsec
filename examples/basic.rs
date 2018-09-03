@@ -92,7 +92,7 @@ impl Peer {
     fn new(our_id: PeerId, genesis_group: &BTreeSet<PeerId>) -> Self {
         Self {
             id: our_id.clone(),
-            parsec: Parsec::new(our_id, genesis_group),
+            parsec: Parsec::new(our_id, genesis_group, parsec::is_supermajority),
             transactions: vec![],
             blocks: vec![],
         }
