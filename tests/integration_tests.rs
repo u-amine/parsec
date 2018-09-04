@@ -54,6 +54,8 @@
     variant_size_differences
 )]
 
+#[macro_use]
+extern crate log;
 extern crate maidsafe_utilities;
 extern crate parsec;
 extern crate rand;
@@ -271,6 +273,7 @@ proptest! {
         },
         ..Default::default()
     }) {
+        let _ = maidsafe_utilities::log::init(true);
         env.network.execute_schedule(sched);
 
         let result = env.network.blocks_all_in_sequence();
