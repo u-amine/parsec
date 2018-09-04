@@ -6,6 +6,14 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+extern crate maidsafe_utilities;
+extern crate parsec;
+#[macro_use]
+extern crate proptest as proptest_crate;
+extern crate rand;
+#[macro_use]
+extern crate unwrap;
+
 mod environment;
 mod network;
 mod peer;

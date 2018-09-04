@@ -7,14 +7,14 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::{Bounded, BoundedBoxedStrategy, EnvironmentStrategy, EnvironmentValueTree};
-use proptest::prelude::Just;
-use proptest::strategy::{NewTree, Strategy, ValueTree};
-use proptest::test_runner::TestRunner;
-use std::collections::BTreeSet;
-use utils::{
-    DelayDistribution, Environment, Request, RequestTiming, Schedule, ScheduleEvent,
-    ScheduleOptions,
+use environment::Environment;
+use proptest_crate::prelude::Just;
+use proptest_crate::strategy::{NewTree, Strategy, ValueTree};
+use proptest_crate::test_runner::TestRunner;
+use schedule::{
+    DelayDistribution, Request, RequestTiming, Schedule, ScheduleEvent, ScheduleOptions,
 };
+use std::collections::BTreeSet;
 
 #[derive(Debug)]
 pub struct ScheduleOptionsStrategy {

@@ -7,10 +7,10 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use maidsafe_utilities::SeededRng;
+use network::Network;
 use parsec::mock::Transaction;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fmt;
-use utils::Network;
 
 pub struct PeerCount(pub usize);
 pub struct TransactionCount(pub usize);

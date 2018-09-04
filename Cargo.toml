@@ -23,6 +23,7 @@ tiny-keccak = "~1.4.2"
 clap = "~2.31.2"
 proptest = "~0.8.6"
 unwrap = "~1.2.0"
+parsec_dev_utils = { path = "dev_utils" }
 
 [features]
 dump-graphs = ["lazy_static"]
