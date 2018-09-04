@@ -232,8 +232,20 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         event.self_parent().and_then(|hash| self.events.get(hash))
     }
 
-    fn is_observer(&self, event: &Event<T, S::PublicId>) -> bool {
+    fn has_supermajority_observations(&self, event: &Event<T, S::PublicId>) -> bool {
         self.peer_list.is_super_majority(event.observations.len())
+    }
+
+    fn is_observer(&self, event: &Event<T, S::PublicId>) -> bool {
+        // an event is an observer if it has a supermajority of observations and its self-parent
+        // does not
+        self.has_supermajority_observations(event) && self.self_parent(event).map_or_else(
+            || {
+                log_or_panic!("{:?} has observations, but no self-parent", event);
+                true
+            },
+            |parent| !self.has_supermajority_observations(parent),
+        )
     }
 
     fn unpack_and_add_events(
