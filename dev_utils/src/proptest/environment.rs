@@ -6,12 +6,13 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use proptest::prelude::RngCore;
-use proptest::strategy::{NewTree, Strategy, ValueTree};
-use proptest::test_runner::TestRunner;
+use environment::{Environment, PeerCount, RngChoice, TransactionCount};
+use network::Network;
+use proptest::{Bounded, BoundedBoxedStrategy};
+use proptest_crate::prelude::RngCore;
+use proptest_crate::strategy::{NewTree, Strategy, ValueTree};
+use proptest_crate::test_runner::TestRunner;
 use rand::{SeedableRng, XorShiftRng};
-use utils::proptest::{Bounded, BoundedBoxedStrategy};
-use utils::{Environment, Network, PeerCount, RngChoice, TransactionCount};
 
 #[derive(Debug)]
 pub struct EnvironmentStrategy {

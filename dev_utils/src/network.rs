@@ -8,8 +8,9 @@
 
 use parsec::mock::{self, PeerId, Transaction};
 use parsec::{Request, Response};
+use peer::Peer;
+use schedule::{self, RequestTiming, Schedule, ScheduleEvent};
 use std::collections::{BTreeMap, BTreeSet};
-use utils::{self, Peer, RequestTiming, Schedule, ScheduleEvent};
 
 enum Message {
     Request(Request<Transaction, PeerId>, usize),
@@ -165,7 +166,7 @@ impl Network {
                 } => {
                     let has_new_data = self.handle_messages(&peer, global_step);
                     self.peer_mut(&peer).poll();
-                    let mut handle_req = |req: utils::Request| {
+                    let mut handle_req = |req: schedule::Request| {
                         let request = unwrap!(
                             self.peer(&peer)
                                 .parsec

@@ -54,17 +54,11 @@
     variant_size_differences
 )]
 
-#[macro_use]
-extern crate log;
 extern crate maidsafe_utilities;
-extern crate parsec;
-extern crate rand;
-#[macro_use]
-extern crate unwrap;
+extern crate parsec_dev_utils as utils;
 #[macro_use]
 extern crate proptest;
-
-mod utils;
+extern crate rand;
 
 use self::utils::proptest::{arbitrary_delay, ScheduleOptionsStrategy, ScheduleStrategy};
 use self::utils::{

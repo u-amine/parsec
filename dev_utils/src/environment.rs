@@ -7,10 +7,10 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use maidsafe_utilities::SeededRng;
+use network::Network;
 use parsec::mock::Transaction;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fmt;
-use utils::Network;
 
 pub struct PeerCount(pub usize);
 pub struct TransactionCount(pub usize);
@@ -42,15 +42,17 @@ impl Environment {
         transaction_count: &TransactionCount,
         seed: RngChoice,
     ) -> Self {
-        let network = Network::new(peer_count.0);
-
         let mut rng: Box<RngDebug> = match seed {
             RngChoice::SeededRandom => Box::new(SeededRng::new()),
             RngChoice::Seeded(seed) => Box::new(SeededRng::from_seed(seed)),
-            RngChoice::SeededXor(seed) => Box::new(XorShiftRng::from_seed(seed)),
+            RngChoice::SeededXor(seed) => {
+                let rng = Box::new(XorShiftRng::from_seed(seed));
+                println!("Using {:?}", rng);
+                rng
+            }
         };
-        println!("Using {:?}", rng);
 
+        let network = Network::new(peer_count.0);
         let transactions = (0..transaction_count.0)
             .map(|_| rng.gen())
             .collect::<Vec<Transaction>>();

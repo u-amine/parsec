@@ -21,9 +21,15 @@ tiny-keccak = "~1.4.2"
 
 [dev-dependencies]
 clap = "~2.31.2"
+criterion = "~0.2.5"
+parsec_dev_utils = { path = "dev_utils" }
 proptest = "~0.8.6"
 unwrap = "~1.2.0"
 
 [features]
-dump-graphs = ["lazy_static"]
+dump-graphs = ["lazy_static", "parsec_dev_utils/dump-graphs"]
 testing = ["maidsafe_utilities/testing"]
+
+[[bench]]
+name = "bench"
+harness = false

@@ -6,9 +6,9 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use proptest::prelude::Just;
-use proptest::strategy::{BoxedStrategy, NewTree, Strategy, ValueTree};
-use proptest::test_runner::TestRunner;
+use proptest_crate::prelude::Just;
+use proptest_crate::strategy::{BoxedStrategy, NewTree, Strategy, ValueTree};
+use proptest_crate::test_runner::TestRunner;
 use std::convert::From;
 use std::fmt::Debug;
 use std::ops::{Range, RangeInclusive};
