@@ -56,24 +56,26 @@
 #[macro_use]
 extern crate criterion;
 extern crate parsec_dev_utils;
-extern crate rand;
 
 use criterion::Criterion;
-use parsec_dev_utils::{Environment, PeerCount, Schedule, ScheduleOptions, TransactionCount};
-use rand::{SeedableRng, XorShiftRng};
+use parsec_dev_utils::{
+    Environment, PeerCount, RngChoice, Schedule, ScheduleOptions, TransactionCount,
+};
 
 fn bench(c: &mut Criterion) {
-    // Use constant seed to make results comparisons meanigful.
-    let seed = [0, 0, 0, 1];
+    let _ = c.bench_function("minimal", |b| {
+        b.iter_with_setup(
+            || {
+                let mut env =
+                    Environment::new(&PeerCount(4), &TransactionCount(1), RngChoice::SeededRandom);
+                let schedule = Schedule::new(&mut env, &ScheduleOptions::default());
 
-    let _ = c.bench_function("minimal", move |b| {
-        b.iter(|| {
-            let rng = Box::new(XorShiftRng::from_seed(seed));
-            let mut env = Environment::with_rng(&PeerCount(4), &TransactionCount(1), rng);
-
-            let schedule = Schedule::new(&mut env, &ScheduleOptions::default());
-            env.network.execute_schedule(schedule);
-        })
+                (env, schedule)
+            },
+            |(mut env, schedule)| {
+                env.network.execute_schedule(schedule);
+            },
+        )
     });
 }
 
