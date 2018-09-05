@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use parsec::mock::{PeerId, Transaction};
-use parsec::{Block, Parsec};
+use parsec::{self, Block, Parsec};
 use std::collections::BTreeSet;
 use std::fmt::{self, Debug, Formatter};
 
@@ -22,7 +22,7 @@ impl Peer {
     pub fn new(id: PeerId, genesis_group: &BTreeSet<PeerId>) -> Self {
         Self {
             id: id.clone(),
-            parsec: Parsec::new(id, genesis_group),
+            parsec: Parsec::new(id, genesis_group, parsec::is_supermajority),
             blocks: vec![],
         }
     }

@@ -103,7 +103,7 @@ pub use error::Error;
 pub use gossip::{Request, Response};
 pub use id::{Proof, PublicId, SecretId};
 pub use network_event::NetworkEvent;
-pub use parsec::Parsec;
+pub use parsec::{is_supermajority, Parsec};
 pub use vote::Vote;
 
 use maidsafe_utilities::serialisation;
