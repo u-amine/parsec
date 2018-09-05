@@ -42,14 +42,22 @@ impl Environment {
         transaction_count: &TransactionCount,
         seed: RngChoice,
     ) -> Self {
-        let network = Network::new(peer_count.0);
-
-        let mut rng: Box<RngDebug> = match seed {
+        let rng: Box<RngDebug> = match seed {
             RngChoice::SeededRandom => Box::new(SeededRng::new()),
             RngChoice::Seeded(seed) => Box::new(SeededRng::from_seed(seed)),
             RngChoice::SeededXor(seed) => Box::new(XorShiftRng::from_seed(seed)),
         };
         println!("Using {:?}", rng);
+
+        Self::with_rng(peer_count, transaction_count, rng)
+    }
+
+    pub fn with_rng(
+        peer_count: &PeerCount,
+        transaction_count: &TransactionCount,
+        mut rng: Box<RngDebug>,
+    ) -> Self {
+        let network = Network::new(peer_count.0);
 
         let transactions = (0..transaction_count.0)
             .map(|_| rng.gen())
