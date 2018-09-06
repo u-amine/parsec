@@ -97,6 +97,46 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         parsec
     }
 
+    /// Creates a new `Parsec` for a peer that is joining an existing section.
+    pub fn from_existing(
+        our_id: S,
+        section: &BTreeSet<S::PublicId>,
+        is_interesting_event: IsInterestingEventFn<S::PublicId>,
+    ) -> Self {
+        let responsiveness_threshold = (section.len() as f64).log2().ceil() as usize;
+
+        let mut peer_list = PeerList::new(our_id);
+        for peer_id in section {
+            peer_list.add_inactive_peer(peer_id.clone());
+        }
+
+        let mut parsec = Parsec {
+            peer_list,
+            events: BTreeMap::new(),
+            events_order: vec![],
+            interesting_events: BTreeMap::new(),
+            consensused_blocks: VecDeque::new(),
+            consensus_history: vec![],
+            meta_votes: BTreeMap::new(),
+            round_hashes: BTreeMap::new(),
+            responsiveness_threshold,
+            is_interesting_event,
+        };
+
+        let initial_event = Event::new_initial(&parsec.peer_list);
+        if let Err(error) = parsec.add_event(initial_event) {
+            log_or_panic!(
+                "{:?} initialising Parsec failed when adding initial_event: {:?}",
+                parsec.our_pub_id(),
+                error
+            );
+        }
+
+        dump_graph::init();
+
+        parsec
+    }
+
     /// Adds a vote for `network_event`.  Returns an error if we have already voted for this.
     pub fn vote_for(&mut self, network_event: T) -> Result<(), Error> {
         debug!("{:?} voting for {:?}", self.our_pub_id(), network_event);
@@ -127,7 +167,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             peer_id
         );
         if let Some(recipient_id) = peer_id {
-            if !self.peer_list.has_peer(&recipient_id) {
+            if !self
+                .peer_list
+                .get_peer(&recipient_id)
+                .map_or(false, |peer| peer.active)
+            {
                 return Err(Error::UnknownPeer);
             }
             if self.peer_list.last_event_hash(&recipient_id).is_some() {
@@ -324,8 +368,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Ok(self
             .peer_list
             .iter()
-            .flat_map(|(_peer, events)| {
-                events.iter().filter_map(|(_index, hash)| {
+            .flat_map(|(_peer_id, peer)| {
+                peer.events.iter().filter_map(|(_index, hash)| {
                     self.events
                         .get(hash)
                         .and_then(|event| event.vote().map(|vote| vote.payload()))
@@ -378,9 +422,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             };
         self.peer_list
             .iter()
-            .filter_map(|(peer, events)| {
-                if events.iter().any(sees_vote_for_same_payload) {
-                    Some(peer)
+            .filter_map(|(peer_id, peer)| {
+                if peer.events.iter().any(sees_vote_for_same_payload) {
+                    Some(peer_id)
                 } else {
                     None
                 }
@@ -848,9 +892,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // the early events in `self.events_order` to be skipped mistakenly. To avoid this, if there
         // are any peers for which `peer_id` doesn't have a `last_ancestors` entry, add those peers'
         // oldest events we know about to the list of hashes.
-        for (peer, events) in self.peer_list.iter() {
-            if !peer_last_event.last_ancestors().contains_key(peer) {
-                if let Some(hash) = events.get(&0) {
+        for (peer_id, peer) in self.peer_list.iter() {
+            if !peer_last_event.last_ancestors().contains_key(peer_id) {
+                if let Some(hash) = peer.events.get(&0) {
                     let _ = last_ancestors_hashes.insert(hash);
                 }
             }

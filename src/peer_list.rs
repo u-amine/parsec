@@ -16,7 +16,7 @@ use std::collections::btree_map::{self, BTreeMap, Entry};
 
 pub(crate) struct PeerList<S: SecretId> {
     our_id: S,
-    peers: BTreeMap<S::PublicId, BTreeMap<u64, Hash>>,
+    peers: BTreeMap<S::PublicId, Peer>,
     // Map of Hash(peer_id) => peer_id
     peer_id_hashes: Vec<(Hash, S::PublicId)>,
 }
@@ -47,23 +47,40 @@ impl<S: SecretId> PeerList<S> {
     }
 
     /// Returns an iterator of peers.
-    pub fn iter(&self) -> btree_map::Iter<S::PublicId, BTreeMap<u64, Hash>> {
+    pub fn iter(&self) -> btree_map::Iter<S::PublicId, Peer> {
         self.peers.iter()
     }
 
-    /// Returns `true` if the given peer is known.
-    pub fn has_peer(&self, peer_id: &S::PublicId) -> bool {
-        self.peers.contains_key(peer_id)
+    /// Return the peer with the given id.
+    pub fn get_peer(&self, peer_id: &S::PublicId) -> Option<&Peer> {
+        self.peers.get(peer_id)
     }
 
-    /// Adds a peer into the map.
+    /// Add inactive peer.
+    pub fn add_inactive_peer(&mut self, peer_id: S::PublicId) {
+        match self.peers.entry(peer_id.clone()) {
+            Entry::Occupied(_) => return,
+            Entry::Vacant(entry) => {
+                let _ = entry.insert(Peer::new(false));
+                self.peer_id_hashes
+                    .push((Hash::from(serialise(&peer_id).as_slice()), peer_id));
+            }
+        }
+    }
+
+    /// Adds a peer into the map. If the peer has already been added as inactive
+    /// before, activate it.
     pub fn add_peer(&mut self, peer_id: S::PublicId) {
-        let _ = self
-            .peers
-            .entry(peer_id.clone())
-            .or_insert_with(BTreeMap::new);
-        self.peer_id_hashes
-            .push((Hash::from(serialise(&peer_id).as_slice()), peer_id));
+        match self.peers.entry(peer_id.clone()) {
+            Entry::Occupied(mut entry) => {
+                entry.get_mut().active = true;
+            }
+            Entry::Vacant(entry) => {
+                let _ = entry.insert(Peer::new(true));
+                self.peer_id_hashes
+                    .push((Hash::from(serialise(&peer_id).as_slice()), peer_id));
+            }
+        }
     }
 
     /// Checks whether the input count becomes the super majority of the network.
@@ -75,14 +92,14 @@ impl<S: SecretId> PeerList<S> {
     pub fn last_event_hash(&self, peer_id: &S::PublicId) -> Option<&Hash> {
         self.peers
             .get(peer_id)
-            .and_then(|events| events.values().rev().next())
+            .and_then(|peer| peer.events.values().rev().next())
     }
 
     /// Returns the hash of the indexed event.
     pub fn event_by_index(&self, peer_id: &S::PublicId, index: u64) -> Option<&Hash> {
         self.peers
             .get(peer_id)
-            .and_then(|events| events.get(&index))
+            .and_then(|peer| peer.events.get(&index))
     }
 
     /// Adds event created by the peer. Returns an error if the creator is not known, or if we
@@ -93,7 +110,7 @@ impl<S: SecretId> PeerList<S> {
         event: &Event<T, S::PublicId>,
     ) -> Result<(), Error> {
         if let Some(peer) = self.peers.get_mut(event.creator()) {
-            match peer.entry(event.index()) {
+            match peer.events.entry(event.index()) {
                 Entry::Occupied(entry) => {
                     if entry.get() != event.hash() {
                         return Err(Error::InvalidEvent);
@@ -106,6 +123,20 @@ impl<S: SecretId> PeerList<S> {
             Ok(())
         } else {
             Err(Error::UnknownPeer)
+        }
+    }
+}
+
+pub(crate) struct Peer {
+    pub active: bool,
+    pub events: BTreeMap<u64, Hash>,
+}
+
+impl Peer {
+    fn new(active: bool) -> Self {
+        Self {
+            active,
+            events: BTreeMap::new(),
         }
     }
 }
