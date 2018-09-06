@@ -62,29 +62,20 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         genesis_group: &BTreeSet<S::PublicId>,
         is_interesting_event: IsInterestingEventFn<S::PublicId>,
     ) -> Self {
-        let responsiveness_threshold = (genesis_group.len() as f64).log2().ceil() as usize;
+        let mut parsec = Self::empty(our_id, is_interesting_event);
 
-        let mut peer_list = PeerList::new(our_id);
-        let mut round_hashes = BTreeMap::new();
         let initial_hash = Hash::from([].as_ref());
-        for peer_id in genesis_group.iter().cloned() {
-            peer_list.add_peer(peer_id.clone());
-            let round_hash = RoundHash::new(&peer_id, initial_hash);
-            let _ = round_hashes.insert(peer_id, vec![round_hash]);
+        for peer_id in genesis_group {
+            let round_hash = RoundHash::new(peer_id, initial_hash);
+
+            parsec.peer_list.add_peer(peer_id.clone());
+            let _ = parsec
+                .round_hashes
+                .insert(peer_id.clone(), vec![round_hash]);
         }
 
-        let mut parsec = Parsec {
-            peer_list,
-            events: BTreeMap::new(),
-            events_order: vec![],
-            interesting_events: BTreeMap::new(),
-            consensused_blocks: VecDeque::new(),
-            consensus_history: vec![],
-            meta_votes: BTreeMap::new(),
-            round_hashes,
-            responsiveness_threshold,
-            is_interesting_event,
-        };
+        parsec.update_responsiveness_threshold();
+
         let initial_event = Event::new_initial(&parsec.peer_list);
         if let Err(error) = parsec.add_event(initial_event) {
             log_or_panic!(
@@ -93,7 +84,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 error
             );
         }
-        dump_graph::init();
+
         parsec
     }
 
@@ -103,25 +94,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         section: &BTreeSet<S::PublicId>,
         is_interesting_event: IsInterestingEventFn<S::PublicId>,
     ) -> Self {
-        let responsiveness_threshold = (section.len() as f64).log2().ceil() as usize;
+        let mut parsec = Self::empty(our_id, is_interesting_event);
 
-        let mut peer_list = PeerList::new(our_id);
         for peer_id in section {
-            peer_list.add_inactive_peer(peer_id.clone());
+            parsec.peer_list.add_inactive_peer(peer_id.clone());
         }
 
-        let mut parsec = Parsec {
-            peer_list,
-            events: BTreeMap::new(),
-            events_order: vec![],
-            interesting_events: BTreeMap::new(),
-            consensused_blocks: VecDeque::new(),
-            consensus_history: vec![],
-            meta_votes: BTreeMap::new(),
-            round_hashes: BTreeMap::new(),
-            responsiveness_threshold,
-            is_interesting_event,
-        };
+        parsec.update_responsiveness_threshold();
 
         let initial_event = Event::new_initial(&parsec.peer_list);
         if let Err(error) = parsec.add_event(initial_event) {
@@ -132,9 +111,25 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             );
         }
 
+        parsec
+    }
+
+    // Construct empty `Parsec` with no peers (except us) and no gossip events.
+    fn empty(our_id: S, is_interesting_event: IsInterestingEventFn<S::PublicId>) -> Self {
         dump_graph::init();
 
-        parsec
+        Self {
+            peer_list: PeerList::new(our_id),
+            events: BTreeMap::new(),
+            events_order: vec![],
+            interesting_events: BTreeMap::new(),
+            consensused_blocks: VecDeque::new(),
+            consensus_history: vec![],
+            meta_votes: BTreeMap::new(),
+            round_hashes: BTreeMap::new(),
+            responsiveness_threshold: 0,
+            is_interesting_event,
+        }
     }
 
     /// Adds a vote for `network_event`.  Returns an error if we have already voted for this.
@@ -904,6 +899,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .iter()
             .skip_while(move |hash| !last_ancestors_hashes.contains(hash))
             .filter_map(move |hash| self.get_known_event(hash).ok()))
+    }
+
+    // Update the responsiveness threshold based on the number of peers.
+    fn update_responsiveness_threshold(&mut self) {
+        self.responsiveness_threshold = (self.peer_list.num_peers() as f64).log2().ceil() as usize;
     }
 }
 

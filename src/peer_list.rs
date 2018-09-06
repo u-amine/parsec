@@ -51,17 +51,22 @@ impl<S: SecretId> PeerList<S> {
         self.peers.iter()
     }
 
-    /// Return the peer with the given id.
+    /// Returns the number of peers.
+    pub fn num_peers(&self) -> usize {
+        self.peers.len()
+    }
+
+    /// Returns the peer with the given id.
     pub fn get_peer(&self, peer_id: &S::PublicId) -> Option<&Peer> {
         self.peers.get(peer_id)
     }
 
-    /// Add inactive peer.
+    /// Adds an inactive peer.
     pub fn add_inactive_peer(&mut self, peer_id: S::PublicId) {
         match self.peers.entry(peer_id.clone()) {
             Entry::Occupied(_) => return,
             Entry::Vacant(entry) => {
-                let _ = entry.insert(Peer::new(false));
+                let _ = entry.insert(Peer::new_inactive());
                 self.peer_id_hashes
                     .push((Hash::from(serialise(&peer_id).as_slice()), peer_id));
             }
@@ -76,7 +81,7 @@ impl<S: SecretId> PeerList<S> {
                 entry.get_mut().active = true;
             }
             Entry::Vacant(entry) => {
-                let _ = entry.insert(Peer::new(true));
+                let _ = entry.insert(Peer::new_active());
                 self.peer_id_hashes
                     .push((Hash::from(serialise(&peer_id).as_slice()), peer_id));
             }
@@ -133,9 +138,16 @@ pub(crate) struct Peer {
 }
 
 impl Peer {
-    fn new(active: bool) -> Self {
+    fn new_active() -> Self {
         Self {
-            active,
+            active: true,
+            events: BTreeMap::new(),
+        }
+    }
+
+    fn new_inactive() -> Self {
+        Self {
+            active: false,
             events: BTreeMap::new(),
         }
     }
