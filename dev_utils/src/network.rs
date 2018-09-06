@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use parsec::mock::{self, PeerId, Transaction};
-use parsec::{Request, Response};
+use parsec::{Request, Response, Observation};
 use peer::Peer;
 use schedule::{self, RequestTiming, Schedule, ScheduleEvent};
 use std::collections::{BTreeMap, BTreeSet};
@@ -30,9 +30,9 @@ pub struct Network {
 
 type DifferingBlocksOrder<'a> = (
     &'a PeerId,
-    Vec<&'a Transaction>,
+    Vec<&'a Observation<Transaction, PeerId>>,
     &'a PeerId,
-    Vec<&'a Transaction>,
+    Vec<&'a Observation<Transaction, PeerId>>,
 );
 
 impl Network {

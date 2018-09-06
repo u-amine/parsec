@@ -9,25 +9,26 @@
 use error::Error;
 use id::{Proof, PublicId, SecretId};
 use network_event::NetworkEvent;
+use observation::Observation;
 use serialise;
 
-/// A helper struct carrying some data and a signature of this data.
+/// A helper struct carrying an `Observation` and a signature of this `Observation`.
 #[serde(bound = "")]
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Debug)]
 pub struct Vote<T: NetworkEvent, P: PublicId> {
-    payload: T,
+    payload: Observation<T, P>,
     signature: P::Signature,
 }
 
 impl<T: NetworkEvent, P: PublicId> Vote<T, P> {
     /// Creates a `Vote` for `payload`.
-    pub fn new<S: SecretId<PublicId = P>>(secret_id: &S, payload: T) -> Self {
+    pub fn new<S: SecretId<PublicId = P>>(secret_id: &S, payload: Observation<T, P>) -> Self {
         let signature = secret_id.sign_detached(&serialise(&payload));
         Self { payload, signature }
     }
 
     /// Returns the payload being voted for.
-    pub fn payload(&self) -> &T {
+    pub fn payload(&self) -> &Observation<T, P> {
         &self.payload
     }
 
