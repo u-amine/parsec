@@ -86,6 +86,7 @@ mod hash;
 mod id;
 mod meta_vote;
 mod network_event;
+mod observation;
 mod parsec;
 mod peer_list;
 mod round_hash;
@@ -106,6 +107,7 @@ pub use error::Error;
 pub use gossip::{Request, Response};
 pub use id::{Proof, PublicId, SecretId};
 pub use network_event::NetworkEvent;
+pub use observation::Observation;
 pub use parsec::{is_supermajority, Parsec};
 pub use vote::Vote;
 

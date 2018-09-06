@@ -14,6 +14,7 @@ use hash::Hash;
 use id::SecretId;
 use meta_vote::{MetaVote, Step};
 use network_event::NetworkEvent;
+use observation::Observation;
 use peer_list::PeerList;
 use round_hash::RoundHash;
 use serialise;
@@ -105,7 +106,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let self_parent_hash = self.our_last_event_hash();
         let event = Event::new_from_observation(
             self_parent_hash,
-            network_event,
+            Observation::OpaquePayload(network_event),
             &self.events,
             &self.peer_list,
         );
@@ -182,9 +183,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// Checks if the given `network_event` has already been voted for by us.
     pub fn have_voted_for(&self, network_event: &T) -> bool {
         self.events.values().any(|event| {
-            event.creator() == self.our_pub_id() && event
-                .vote()
-                .map_or(false, |voted| voted.payload() == network_event)
+            event.creator() == self.our_pub_id() && event.vote().map_or(false, |voted| match voted
+                .payload()
+            {
+                Observation::OpaquePayload(voted_for) => voted_for == network_event,
+                Observation::Add(_) | Observation::Remove(_) => false,
+            })
         })
     }
 
@@ -312,7 +316,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     // Any payloads which this event sees as "interesting".  If this returns a non-empty set, then
     // this event is classed as an interesting one.
-    fn interesting_content(&self, event_hash: &Hash) -> Result<BTreeSet<T>, Error> {
+    fn interesting_content(
+        &self,
+        event_hash: &Hash,
+    ) -> Result<BTreeSet<Observation<T, S::PublicId>>, Error> {
         let event = self.get_known_event(event_hash)?;
         Ok(self
             .peer_list
@@ -332,7 +339,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .collect())
     }
 
-    fn payload_is_already_carried(&self, event: &Event<T, S::PublicId>, payload: &T) -> bool {
+    fn payload_is_already_carried(
+        &self,
+        event: &Event<T, S::PublicId>,
+        payload: &Observation<T, S::PublicId>,
+    ) -> bool {
         let hashes = self.interesting_events.get(event.creator());
         hashes.map_or(false, |hashes| {
             hashes.iter().any(|hash| {
@@ -348,7 +359,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn ancestors_carrying_payload(
         &self,
         event: &Event<T, S::PublicId>,
-        payload: &T,
+        payload: &Observation<T, S::PublicId>,
     ) -> BTreeSet<&S::PublicId> {
         let payload_already_reached_consensus = self
             .consensus_history
@@ -679,7 +690,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                             } else {
                                 None
                             }
-                        }).collect::<Vec<BTreeSet<T>>>();
+                        }).collect::<Vec<BTreeSet<Observation<T, S::PublicId>>>>();
                     // This is sorted by peer_ids, which should avoid ties when picking the event
                     // with the most represented payload.
                     let payloads = elected_valid_blocks
@@ -719,7 +730,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             })
     }
 
-    fn clear_consensus_data(&mut self, payload: &T) {
+    fn clear_consensus_data(&mut self, payload: &Observation<T, S::PublicId>) {
         // Clear all leftover data from previous consensus
         self.round_hashes = BTreeMap::new();
         self.meta_votes = BTreeMap::new();

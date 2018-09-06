@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use parsec::mock::{PeerId, Transaction};
-use parsec::{self, Block, Parsec};
+use parsec::{self, Block, Parsec, Observation};
 use std::collections::BTreeSet;
 use std::fmt::{self, Debug, Formatter};
 
@@ -43,7 +43,7 @@ impl Peer {
     }
 
     // Returns the payloads of `self.blocks` in the order in which they were returned by `poll()`.
-    pub fn blocks_payloads(&self) -> Vec<&Transaction> {
+    pub fn blocks_payloads(&self) -> Vec<&Observation<Transaction, PeerId>> {
         self.blocks.iter().map(Block::payload).collect()
     }
 }

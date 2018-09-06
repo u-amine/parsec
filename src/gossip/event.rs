@@ -13,6 +13,7 @@ use gossip::packed_event::PackedEvent;
 use hash::Hash;
 use id::{PublicId, SecretId};
 use network_event::NetworkEvent;
+use observation::Observation;
 use peer_list::PeerList;
 use serialise;
 use std::cmp;
@@ -31,7 +32,7 @@ pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
     // Index of each peer's latest event that is an ancestor of this event.
     last_ancestors: BTreeMap<P, u64>,
     // Payloads of all the votes deemed interesting by this event
-    pub interesting_content: BTreeSet<T>,
+    pub interesting_content: BTreeSet<Observation<T, P>>,
     // The set of peers for which this event can strongly-see an event by that peer which carries a
     // valid block.  If there are a supermajority of peers here, this event is an "observer".
     pub observations: BTreeSet<P>,
@@ -75,11 +76,11 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     // Creates a new event as the result of observing a network event.
     pub fn new_from_observation<S: SecretId<PublicId = P>>(
         self_parent: Hash,
-        network_event: T,
+        observation: Observation<T, P>,
         events: &BTreeMap<Hash, Event<T, P>>,
         peer_list: &PeerList<S>,
     ) -> Self {
-        let vote = Vote::new(peer_list.our_id(), network_event);
+        let vote = Vote::new(peer_list.our_id(), observation);
         Self::new(Cause::Observation { self_parent, vote }, events, peer_list)
     }
 
@@ -321,6 +322,7 @@ mod tests {
     use hash::Hash;
     use id::SecretId;
     use mock::{PeerId, Transaction};
+    use observation::Observation;
     use peer_list::PeerList;
     use std::collections::BTreeMap;
 
@@ -396,7 +398,7 @@ mod tests {
         let initial_event_hash = insert_into_gossip_graph(alice.event, &mut events);
 
         // Our observation
-        let net_event = Transaction::new("event_observed_by_alice");
+        let net_event = Observation::OpaquePayload(Transaction::new("event_observed_by_alice"));
 
         let event_from_observation = Event::<Transaction, PeerId>::new_from_observation(
             initial_event_hash,
@@ -436,7 +438,7 @@ mod tests {
         let alice = create_event_with_single_peer("Alice");
         let hash = Hash::from(vec![42].as_slice());
         let events = BTreeMap::new();
-        let net_event = Transaction::new("event_observed_by_alice");
+        let net_event = Observation::OpaquePayload(Transaction::new("event_observed_by_alice"));
         let _ = Event::<Transaction, PeerId>::new_from_observation(
             hash,
             net_event.clone(),
@@ -533,7 +535,7 @@ mod tests {
         let initial_event_hash = insert_into_gossip_graph(alice.event, &mut events);
 
         // Our observation
-        let net_event = Transaction::new("event_observed_by_alice");
+        let net_event = Observation::OpaquePayload(Transaction::new("event_observed_by_alice"));
 
         let event_from_observation = Event::<Transaction, PeerId>::new_from_observation(
             initial_event_hash,

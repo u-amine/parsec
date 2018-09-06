@@ -63,7 +63,7 @@ extern crate unwrap;
 use clap::{App, Arg};
 use maidsafe_utilities::{log, SeededRng};
 use parsec::mock::{self, PeerId, Transaction};
-use parsec::{Block, Parsec};
+use parsec::{Block, Observation, Parsec};
 use rand::Rng;
 use std::collections::BTreeSet;
 use std::process;
@@ -114,7 +114,7 @@ impl Peer {
         }
     }
 
-    fn blocks_payloads(&self) -> Vec<&Transaction> {
+    fn blocks_payloads(&self) -> Vec<&Observation<Transaction, PeerId>> {
         self.blocks.iter().map(Block::payload).collect::<Vec<_>>()
     }
 
