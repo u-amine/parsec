@@ -85,6 +85,35 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         parsec
     }
 
+    /// Creates a new `Parsec` for a peer with the given ID and genesis peer IDs (ours included).
+    /// Version to be used in production
+    pub fn from_genesis(
+        our_id: S,
+        genesis_group: &BTreeSet<S::PublicId>,
+        is_interesting_event: IsInterestingEventFn<S::PublicId>,
+    ) -> Self {
+        let mut parsec = Self::new(our_id, genesis_group, is_interesting_event);
+
+        let genesis_observation = Observation::Genesis(genesis_group.clone());
+        let self_parent_hash = parsec.our_last_event_hash();
+        let event = Event::new_from_observation(
+            self_parent_hash,
+            genesis_observation,
+            &parsec.events,
+            &parsec.peer_list,
+        );
+
+        if let Err(error) = parsec.add_event(event) {
+            log_or_panic!(
+                "{:?} initialising Parsec failed when adding the genesis observation: {:?}",
+                parsec.our_pub_id(),
+                error,
+            );
+        }
+
+        parsec
+    }
+
     /// Creates a new `Parsec` for a peer that is joining an existing section.
     pub fn from_existing(
         our_id: S,
@@ -220,7 +249,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .payload()
             {
                 Observation::OpaquePayload(voted_for) => voted_for == network_event,
-                Observation::Add(_) | Observation::Remove(_) => false,
+                Observation::Add(_) | Observation::Remove(_) | Observation::Genesis(_) => false,
             })
         })
     }

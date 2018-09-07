@@ -8,11 +8,14 @@
 
 use id::PublicId;
 use network_event::NetworkEvent;
+use std::collections::BTreeSet;
 
 /// An enum of the various network events for which a peer can vote.
 #[serde(bound = "")]
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Debug)]
 pub enum Observation<T: NetworkEvent, P: PublicId> {
+    /// Genesis group
+    Genesis(BTreeSet<P>),
     /// Vote to add the indicated peer to the network.
     Add(P),
     /// Vote to remove the indicated peer from the network.
