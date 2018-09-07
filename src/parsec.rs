@@ -51,7 +51,6 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
     // the one for round `x` is held at index `x`.
     round_hashes: BTreeMap<S::PublicId, Vec<RoundHash>>,
-    responsiveness_threshold: usize,
     is_interesting_event: IsInterestingEventFn<S::PublicId>,
 }
 
@@ -73,8 +72,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .round_hashes
                 .insert(peer_id.clone(), vec![round_hash]);
         }
-
-        parsec.update_responsiveness_threshold();
 
         let initial_event = Event::new_initial(&parsec.peer_list);
         if let Err(error) = parsec.add_event(initial_event) {
@@ -99,8 +96,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         for peer_id in section {
             parsec.peer_list.add_inactive_peer(peer_id.clone());
         }
-
-        parsec.update_responsiveness_threshold();
 
         let initial_event = Event::new_initial(&parsec.peer_list);
         if let Err(error) = parsec.add_event(initial_event) {
@@ -127,7 +122,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             consensus_history: vec![],
             meta_votes: BTreeMap::new(),
             round_hashes: BTreeMap::new(),
-            responsiveness_threshold: 0,
             is_interesting_event,
         }
     }
@@ -603,11 +597,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn stop_waiting(&self, round: usize, event: &Event<T, S::PublicId>) -> bool {
         let mut event_hash = Some(event.hash());
         let mut response_count = 0;
+        let responsiveness_threshold = self.responsiveness_threshold();
+
         loop {
             if let Some(event) = event_hash.and_then(|hash| self.get_known_event(hash).ok()) {
                 if event.is_response() {
                     response_count += 1;
-                    if response_count == self.responsiveness_threshold {
+                    if response_count == responsiveness_threshold {
                         break;
                     }
                 }
@@ -901,9 +897,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .filter_map(move |hash| self.get_known_event(hash).ok()))
     }
 
-    // Update the responsiveness threshold based on the number of peers.
-    fn update_responsiveness_threshold(&mut self) {
-        self.responsiveness_threshold = (self.peer_list.num_peers() as f64).log2().ceil() as usize;
+    // Get the responsiveness threshold based on the current number of peers.
+    fn responsiveness_threshold(&self) -> usize {
+        (self.peer_list.num_peers() as f64).log2().ceil() as usize
     }
 }
 
