@@ -51,7 +51,6 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
     // the one for round `x` is held at index `x`.
     round_hashes: BTreeMap<S::PublicId, Vec<RoundHash>>,
-    responsiveness_threshold: usize,
     is_interesting_event: IsInterestingEventFn<S::PublicId>,
 }
 
@@ -62,29 +61,18 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         genesis_group: &BTreeSet<S::PublicId>,
         is_interesting_event: IsInterestingEventFn<S::PublicId>,
     ) -> Self {
-        let responsiveness_threshold = (genesis_group.len() as f64).log2().ceil() as usize;
+        let mut parsec = Self::empty(our_id, is_interesting_event);
 
-        let mut peer_list = PeerList::new(our_id);
-        let mut round_hashes = BTreeMap::new();
         let initial_hash = Hash::from([].as_ref());
-        for peer_id in genesis_group.iter().cloned() {
-            peer_list.add_peer(peer_id.clone());
-            let round_hash = RoundHash::new(&peer_id, initial_hash);
-            let _ = round_hashes.insert(peer_id, vec![round_hash]);
+        for peer_id in genesis_group {
+            let round_hash = RoundHash::new(peer_id, initial_hash);
+
+            parsec.peer_list.add_peer(peer_id.clone());
+            let _ = parsec
+                .round_hashes
+                .insert(peer_id.clone(), vec![round_hash]);
         }
 
-        let mut parsec = Parsec {
-            peer_list,
-            events: BTreeMap::new(),
-            events_order: vec![],
-            interesting_events: BTreeMap::new(),
-            consensused_blocks: VecDeque::new(),
-            consensus_history: vec![],
-            meta_votes: BTreeMap::new(),
-            round_hashes,
-            responsiveness_threshold,
-            is_interesting_event,
-        };
         let initial_event = Event::new_initial(&parsec.peer_list);
         if let Err(error) = parsec.add_event(initial_event) {
             log_or_panic!(
@@ -93,8 +81,49 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 error
             );
         }
-        dump_graph::init();
+
         parsec
+    }
+
+    /// Creates a new `Parsec` for a peer that is joining an existing section.
+    pub fn from_existing(
+        our_id: S,
+        section: &BTreeSet<S::PublicId>,
+        is_interesting_event: IsInterestingEventFn<S::PublicId>,
+    ) -> Self {
+        let mut parsec = Self::empty(our_id, is_interesting_event);
+
+        for peer_id in section {
+            parsec.peer_list.add_inactive_peer(peer_id.clone());
+        }
+
+        let initial_event = Event::new_initial(&parsec.peer_list);
+        if let Err(error) = parsec.add_event(initial_event) {
+            log_or_panic!(
+                "{:?} initialising Parsec failed when adding initial_event: {:?}",
+                parsec.our_pub_id(),
+                error
+            );
+        }
+
+        parsec
+    }
+
+    // Construct empty `Parsec` with no peers (except us) and no gossip events.
+    fn empty(our_id: S, is_interesting_event: IsInterestingEventFn<S::PublicId>) -> Self {
+        dump_graph::init();
+
+        Self {
+            peer_list: PeerList::new(our_id),
+            events: BTreeMap::new(),
+            events_order: vec![],
+            interesting_events: BTreeMap::new(),
+            consensused_blocks: VecDeque::new(),
+            consensus_history: vec![],
+            meta_votes: BTreeMap::new(),
+            round_hashes: BTreeMap::new(),
+            is_interesting_event,
+        }
     }
 
     /// Adds a vote for `network_event`.  Returns an error if we have already voted for this.
@@ -127,7 +156,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             peer_id
         );
         if let Some(recipient_id) = peer_id {
-            if !self.peer_list.has_peer(&recipient_id) {
+            if !self
+                .peer_list
+                .get_peer(&recipient_id)
+                .map_or(false, |peer| peer.active)
+            {
                 return Err(Error::UnknownPeer);
             }
             if self.peer_list.last_event_hash(&recipient_id).is_some() {
@@ -324,8 +357,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Ok(self
             .peer_list
             .iter()
-            .flat_map(|(_peer, events)| {
-                events.iter().filter_map(|(_index, hash)| {
+            .flat_map(|(_peer_id, peer)| {
+                peer.events.iter().filter_map(|(_index, hash)| {
                     self.events
                         .get(hash)
                         .and_then(|event| event.vote().map(|vote| vote.payload()))
@@ -378,9 +411,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             };
         self.peer_list
             .iter()
-            .filter_map(|(peer, events)| {
-                if events.iter().any(sees_vote_for_same_payload) {
-                    Some(peer)
+            .filter_map(|(peer_id, peer)| {
+                if peer.events.iter().any(sees_vote_for_same_payload) {
+                    Some(peer_id)
                 } else {
                     None
                 }
@@ -564,11 +597,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn stop_waiting(&self, round: usize, event: &Event<T, S::PublicId>) -> bool {
         let mut event_hash = Some(event.hash());
         let mut response_count = 0;
+        let responsiveness_threshold = self.responsiveness_threshold();
+
         loop {
             if let Some(event) = event_hash.and_then(|hash| self.get_known_event(hash).ok()) {
                 if event.is_response() {
                     response_count += 1;
-                    if response_count == self.responsiveness_threshold {
+                    if response_count == responsiveness_threshold {
                         break;
                     }
                 }
@@ -848,9 +883,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // the early events in `self.events_order` to be skipped mistakenly. To avoid this, if there
         // are any peers for which `peer_id` doesn't have a `last_ancestors` entry, add those peers'
         // oldest events we know about to the list of hashes.
-        for (peer, events) in self.peer_list.iter() {
-            if !peer_last_event.last_ancestors().contains_key(peer) {
-                if let Some(hash) = events.get(&0) {
+        for (peer_id, peer) in self.peer_list.iter() {
+            if !peer_last_event.last_ancestors().contains_key(peer_id) {
+                if let Some(hash) = peer.events.get(&0) {
                     let _ = last_ancestors_hashes.insert(hash);
                 }
             }
@@ -860,6 +895,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .iter()
             .skip_while(move |hash| !last_ancestors_hashes.contains(hash))
             .filter_map(move |hash| self.get_known_event(hash).ok()))
+    }
+
+    // Get the responsiveness threshold based on the current number of peers.
+    fn responsiveness_threshold(&self) -> usize {
+        (self.peer_list.num_peers() as f64).log2().ceil() as usize
     }
 }
 
