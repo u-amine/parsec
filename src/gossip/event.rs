@@ -155,6 +155,11 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         }
     }
 
+    #[cfg(feature = "dump-graphs")]
+    pub fn cause(&self) -> &Cause<T, P> {
+        &self.content.cause
+    }
+
     pub fn creator(&self) -> &P {
         &self.content.creator
     }
@@ -312,6 +317,33 @@ impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
         )?;
         write!(formatter, ", observations: {:?}", self.observations)?;
         write!(formatter, " }}")
+    }
+}
+
+#[cfg(test)]
+impl<T: NetworkEvent, P: PublicId> Event<T, P> {
+    // Creates a new event using the input parameters directly
+    pub(crate) fn new_from_input(
+        creator: P,
+        cause: Cause<T, P>,
+        index: u64,
+        signature: P::Signature,
+        last_ancestors: BTreeMap<P, u64>,
+        interesting_content: BTreeSet<Observation<T, P>>,
+        observations: BTreeSet<P>,
+    ) -> Self {
+        let content = Content { creator, cause };
+        let serialised_content = serialise(&content);
+
+        Self {
+            content,
+            signature,
+            hash: Hash::from(serialised_content.as_slice()),
+            index,
+            last_ancestors,
+            interesting_content,
+            observations,
+        }
     }
 }
 

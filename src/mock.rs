@@ -20,6 +20,12 @@ const NAMES: &[&str] = &[
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Debug)]
 pub struct Signature(String);
 
+impl Signature {
+    pub fn new(sig: &str) -> Self {
+        Signature(sig.to_string())
+    }
+}
+
 /// **NOT FOR PRODUCTION USE**: Mock type implementing `PublicId` and `SecretId` traits.  For
 /// non-mocks, these two traits must be implemented by two separate types; a public key and secret
 /// key respectively.
@@ -31,6 +37,20 @@ pub struct PeerId {
 impl PeerId {
     pub fn new(id: &str) -> Self {
         Self { id: id.to_string() }
+    }
+
+    // Only being used by the dot_parser.
+    #[cfg(test)]
+    pub fn from_initial(initial: char) -> Self {
+        for name in NAMES.iter() {
+            if name.starts_with(initial) {
+                return PeerId::new(name);
+            }
+        }
+        panic!(
+            "cannot find a name starts with {:?} within {:?}",
+            initial, NAMES
+        );
     }
 }
 

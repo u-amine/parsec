@@ -9,11 +9,12 @@
 use hash::Hash;
 use id::PublicId;
 use network_event::NetworkEvent;
+use std::fmt::{self, Display, Formatter};
 use vote::Vote;
 
 #[serde(bound = "")]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(super) enum Cause<T: NetworkEvent, P: PublicId> {
+pub(crate) enum Cause<T: NetworkEvent, P: PublicId> {
     // Hashes are the latest `Event` of own and the peer which sent the request.
     Request {
         self_parent: Hash,
@@ -31,4 +32,19 @@ pub(super) enum Cause<T: NetworkEvent, P: PublicId> {
     },
     // Initial empty `Event` of this peer.
     Initial,
+}
+
+impl<T: NetworkEvent, P: PublicId> Display for Cause<T, P> {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        write!(
+            formatter,
+            "{}",
+            match &self {
+                Cause::Request { .. } => "Request".to_string(),
+                Cause::Response { .. } => "Response".to_string(),
+                Cause::Observation { vote, .. } => format!("Observation({:?})", vote.payload()),
+                Cause::Initial => "Initial".to_string(),
+            }
+        )
+    }
 }

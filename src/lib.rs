@@ -92,6 +92,9 @@ mod peer_list;
 mod round_hash;
 mod vote;
 
+/// This is used to read a dumped dot file and rebuild the event graph and associated info.
+#[cfg(test)]
+mod dot_parser;
 #[doc(hidden)]
 /// **NOT FOR PRODUCTION USE**: Mock types which trivially implement the required Parsec traits.
 ///
