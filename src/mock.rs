@@ -20,12 +20,6 @@ const NAMES: &[&str] = &[
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Debug)]
 pub struct Signature(String);
 
-impl Signature {
-    pub fn new(sig: &str) -> Self {
-        Signature(sig.to_string())
-    }
-}
-
 /// **NOT FOR PRODUCTION USE**: Mock type implementing `PublicId` and `SecretId` traits.  For
 /// non-mocks, these two traits must be implemented by two separate types; a public key and secret
 /// key respectively.

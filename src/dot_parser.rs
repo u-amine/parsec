@@ -6,18 +6,18 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use gossip::{Cause, Event};
+use gossip::Event;
 use hash::Hash;
 use meta_vote::{BoolSet, MetaVote, Step};
-use mock::{PeerId, Signature, Transaction};
+use mock::{PeerId, Transaction};
 use observation::Observation;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{self, Read};
 use std::iter;
 use std::path::Path;
-use vote::Vote;
 
+// TODO - remove once tests are enabled.
 #[allow(unused)]
 /// The event graph and associated info that were parsed from the dumped dot file.
 pub struct ParsedContents {
@@ -103,13 +103,18 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
 
     while !parsing_events.is_empty() {
         let ordered_event = next_ordered_event(&parsing_events);
-        if ordered_event == String::default() {
+        if ordered_event.is_empty() {
             assert!(parsing_events.is_empty());
             break;
         }
         let event = unwrap!(parsing_events.remove(&ordered_event));
 
-        let cause = construct_cause(event.clone(), &name_hash_map);
+        let self_parent = event
+            .self_parent
+            .and_then(|name| Some(name_hash_map[&name]));
+        let other_parent = event
+            .other_parent
+            .and_then(|name| Some(name_hash_map[&name]));
 
         let interesting_content = event
             .interesting_content
@@ -117,14 +122,14 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
             .map(|transction| Observation::OpaquePayload(transction.clone()))
             .collect::<BTreeSet<_>>();
 
-        let parsed_event: Event<Transaction, PeerId> = Event::new_from_input(
-            PeerId::new(&event.creator),
-            cause,
+        let parsed_event: Event<Transaction, PeerId> = Event::new_from_dot_input(
+            &PeerId::new(&event.creator),
+            event.cause.as_ref(),
+            self_parent,
+            other_parent,
             event.index,
-            Signature::new(""),
             event.last_ancestors,
             interesting_content,
-            BTreeSet::new(),
         );
 
         let hash = *parsed_event.hash();
@@ -239,42 +244,6 @@ fn next_ordered_event(parsing_events: &BTreeMap<String, ParsingEvent>) -> String
         }
     }
     candidate
-}
-
-fn construct_cause(
-    event: ParsingEvent,
-    name_hash_map: &BTreeMap<String, Hash>,
-) -> Cause<Transaction, PeerId> {
-    let self_parent = event
-        .self_parent
-        .and_then(|name| Some(name_hash_map[&name]));
-    let other_parent = event
-        .other_parent
-        .and_then(|name| Some(name_hash_map[&name]));
-
-    match event.cause.as_ref() {
-        "cause: Initial" => Cause::Initial,
-        "cause: Request" => Cause::Request {
-            self_parent: unwrap!(self_parent),
-            other_parent: unwrap!(other_parent),
-        },
-        "cause: Response" => Cause::Request {
-            self_parent: unwrap!(self_parent),
-            other_parent: unwrap!(other_parent),
-        },
-        _ => {
-            let payload = Transaction::new(unwrap!(
-                unwrap!(event.cause.split('(').nth(2)).split(')').next()
-            ));
-            Cause::Observation {
-                self_parent: unwrap!(self_parent),
-                vote: Vote::new_from_input(
-                    Observation::OpaquePayload(payload),
-                    Signature::new(&format!("of {}", event.creator.to_string())),
-                ),
-            }
-        }
-    }
 }
 
 struct SplitEvents<'a> {
@@ -406,5 +375,4 @@ mod tests {
     fn dot_parser() {
         assert!(parse_dot_file(&Path::new("./input.dot")).is_ok());
     }
-
 }
