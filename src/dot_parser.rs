@@ -21,9 +21,9 @@ use std::path::Path;
 #[allow(unused)]
 /// The event graph and associated info that were parsed from the dumped dot file.
 pub struct ParsedContents {
-    events: BTreeMap<Hash, Event<Transaction, PeerId>>,
-    events_order: Vec<Hash>,
-    meta_votes: BTreeMap<Hash, BTreeMap<PeerId, Vec<MetaVote>>>,
+    pub(crate) events: BTreeMap<Hash, Event<Transaction, PeerId>>,
+    pub(crate) events_order: Vec<Hash>,
+    pub(crate) meta_votes: BTreeMap<Hash, BTreeMap<PeerId, Vec<MetaVote>>>,
 }
 
 /// Reading a dumped dot file and return with parsed event graph and associated info.

@@ -88,7 +88,7 @@ impl BoolSet {
 }
 
 // This holds the state of a (binary) meta vote about which we're trying to achieve consensus.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq)]
 pub(crate) struct MetaVote {
     pub round: usize,
     pub step: Step,
