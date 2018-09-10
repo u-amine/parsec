@@ -120,8 +120,18 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         section: &BTreeSet<S::PublicId>,
         is_interesting_event: IsInterestingEventFn<S::PublicId>,
     ) -> Self {
+        if section.is_empty() {
+            log_or_panic!("Section can't be empty");
+        }
+
+        if section.contains(our_id.public_id()) {
+            log_or_panic!("Section can't already contain us");
+        }
+
+        let our_public_id = our_id.public_id().clone();
         let mut parsec = Self::empty(our_id, is_interesting_event);
 
+        parsec.peer_list.add_inactive_peer(our_public_id);
         for peer_id in section {
             parsec.peer_list.add_inactive_peer(peer_id.clone());
         }
@@ -937,5 +947,55 @@ impl<T: NetworkEvent, S: SecretId> Drop for Parsec<T, S> {
         if ::std::thread::panicking() {
             dump_graph::to_file(self.our_pub_id(), &self.events, &self.meta_votes);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mock::{self, Transaction};
+
+    #[test]
+    fn from_existing() {
+        let mut peers = mock::create_ids(10);
+        let our_id = unwrap!(peers.pop());
+        let peers = peers.into_iter().collect();
+
+        let parsec =
+            Parsec::<Transaction, _>::from_existing(our_id.clone(), &peers, is_supermajority);
+
+        // Existing section + us
+        assert_eq!(parsec.peer_list.num_peers(), peers.len() + 1);
+
+        // Only the initial event should be in the gossip graph.
+        assert_eq!(parsec.events.len(), 1);
+        let event = unwrap!(parsec.events.values().next());
+        assert_eq!(*event.creator(), our_id);
+        assert!(event.is_initial());
+    }
+
+    // TODO: remove this `cfg` once https://github.com/maidsafe/maidsafe_utilities/pull/130
+    //       is merged and the crate published.
+    #[cfg(feature = "testing")]
+    #[test]
+    #[should_panic(expected = "Section can't be empty")]
+    fn from_existing_requires_non_empty_section() {
+        let mut peers = mock::create_ids(1);
+        let our_id = unwrap!(peers.pop());
+
+        let _ = Parsec::<Transaction, _>::from_existing(our_id, &BTreeSet::new(), is_supermajority);
+    }
+
+    // TODO: remove this `cfg` once https://github.com/maidsafe/maidsafe_utilities/pull/130
+    //       is merged and the crate published.
+    #[cfg(feature = "testing")]
+    #[test]
+    #[should_panic(expected = "Section can't already contain us")]
+    fn from_existing_requires_that_section_does_not_contain_us() {
+        let peers = mock::create_ids(8);
+        let our_id = unwrap!(peers.first()).clone();
+        let peers = peers.into_iter().collect();
+
+        let _ = Parsec::<Transaction, _>::from_existing(our_id, &peers, is_supermajority);
     }
 }
