@@ -8,12 +8,12 @@
 
 use maidsafe_utilities::SeededRng;
 use network::Network;
-use parsec::mock::Transaction;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fmt;
+use Observation;
 
 pub struct PeerCount(pub usize);
-pub struct TransactionCount(pub usize);
+pub struct ObservationCount(pub usize);
 
 pub trait RngDebug: Rng + fmt::Debug {}
 
@@ -22,7 +22,7 @@ impl RngDebug for XorShiftRng {}
 
 pub struct Environment {
     pub network: Network,
-    pub transactions: Vec<Transaction>,
+    pub observations: Vec<Observation>,
     pub rng: Box<RngDebug>,
 }
 
@@ -35,11 +35,11 @@ pub enum RngChoice {
 }
 
 impl Environment {
-    /// Initialise the test environment with the given number of peers and transactions.  The random
+    /// Initialise the test environment with the given number of peers and observations.  The random
     /// number generator will be seeded with `seed` or randomly if this is `SeededRandom`.
     pub fn new(
         peer_count: &PeerCount,
-        transaction_count: &TransactionCount,
+        observation_count: &ObservationCount,
         seed: RngChoice,
     ) -> Self {
         let mut rng: Box<RngDebug> = match seed {
@@ -53,13 +53,13 @@ impl Environment {
         };
 
         let network = Network::new(peer_count.0);
-        let transactions = (0..transaction_count.0)
-            .map(|_| rng.gen())
-            .collect::<Vec<Transaction>>();
+        let observations = (0..observation_count.0)
+            .map(|_| ::parsec::Observation::OpaquePayload(rng.gen()))
+            .collect::<Vec<Observation>>();
 
         Self {
             network,
-            transactions,
+            observations,
             rng,
         }
     }
@@ -69,9 +69,9 @@ impl fmt::Debug for Environment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Environment({} peers, {} transactions, {:?})",
+            "Environment({} peers, {} observations, {:?})",
             self.network.peers.len(),
-            self.transactions.len(),
+            self.observations.len(),
             self.rng
         )
     }

@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::Environment;
-use parsec::mock::{PeerId, Transaction};
+use parsec::mock::PeerId;
 #[cfg(feature = "dump-graphs")]
 use parsec::DIR;
 use rand::Rng;
@@ -18,6 +18,7 @@ use std::fs::File;
 #[cfg(feature = "dump-graphs")]
 use std::io::Write;
 use std::mem;
+use Observation;
 
 /// This struct holds the data necessary to make a simulated request when a node executes a local
 /// step.
@@ -59,8 +60,8 @@ pub enum ScheduleEvent {
     /// This event causes the node with the given ID to stop responding. All further events
     /// concerning that node will be ignored.
     Fail(PeerId),
-    /// This event makes a node vote on the given transaction.
-    VoteFor(PeerId, Transaction),
+    /// This event makes a node vote on the given observation.
+    VoteFor(PeerId, Observation),
 }
 
 // A function generating a Poisson-distributed random number.
@@ -124,19 +125,19 @@ impl ScheduleEvent {
 
     fn gen_votes<R: Rng>(
         rng: &mut R,
-        pending: &mut PendingTransactions,
+        pending: &mut PendingObservations,
         options: &ScheduleOptions,
     ) -> Vec<ScheduleEvent> {
         let mut result = vec![];
         for peer in pending.nonempty_peers() {
             if rng.gen::<f64>() < options.prob_recv_trans {
-                let transaction = if rng.gen::<f64>() < options.prob_vote_duplication {
+                let observation = if rng.gen::<f64>() < options.prob_vote_duplication {
                     pending.peek_next_for_peer(&peer)
                 } else {
                     pending.next_for_peer(&peer)
                 };
-                if let Some(transaction) = transaction {
-                    result.push(ScheduleEvent::VoteFor(peer, transaction));
+                if let Some(observation) = observation {
+                    result.push(ScheduleEvent::VoteFor(peer, observation));
                 }
             }
         }
@@ -149,7 +150,7 @@ impl ScheduleEvent {
         step: usize,
         peers: &[PeerId],
         // note: first &mut required below to enable reborrowing
-        pending: &mut Option<&mut PendingTransactions>,
+        pending: &mut Option<&mut PendingObservations>,
         options: &ScheduleOptions,
     ) -> Vec<ScheduleEvent> {
         let mut result = vec![];
@@ -188,35 +189,35 @@ impl ScheduleEvent {
     }
 }
 
-/// Stores pending transactions per node, so that nodes only vote for each transaction once.
-pub struct PendingTransactions(BTreeMap<PeerId, Vec<Transaction>>);
+/// Stores pending observations per node, so that nodes only vote for each observation once.
+pub struct PendingObservations(BTreeMap<PeerId, Vec<Observation>>);
 
-impl PendingTransactions {
+impl PendingObservations {
     pub fn new<R: Rng>(
         rng: &mut R,
         peers: &[PeerId],
-        transactions: &[Transaction],
-    ) -> PendingTransactions {
+        observations: &[Observation],
+    ) -> PendingObservations {
         let mut inner = BTreeMap::new();
         for peer in peers {
-            let mut trans = transactions.to_vec();
+            let mut trans = observations.to_vec();
             rng.shuffle(&mut trans);
             let _ = inner.insert(peer.clone(), trans);
         }
-        PendingTransactions(inner)
+        PendingObservations(inner)
     }
 
-    /// Gets the next transaction for a given node, and removes it from the cache
-    pub fn next_for_peer(&mut self, peer: &PeerId) -> Option<Transaction> {
+    /// Gets the next observation for a given node, and removes it from the cache
+    pub fn next_for_peer(&mut self, peer: &PeerId) -> Option<Observation> {
         self.0.get_mut(peer).and_then(|trans| trans.pop())
     }
 
-    /// Gets the next transaction for a given node without removing it
-    pub fn peek_next_for_peer(&mut self, peer: &PeerId) -> Option<Transaction> {
+    /// Gets the next observation for a given node without removing it
+    pub fn peek_next_for_peer(&mut self, peer: &PeerId) -> Option<Observation> {
         self.0.get_mut(peer).and_then(|trans| trans.last().cloned())
     }
 
-    /// Returns the list of names of peers that still have pending transactions
+    /// Returns the list of names of peers that still have pending observations
     pub fn nonempty_peers(&self) -> Vec<PeerId> {
         self.0
             .iter()
@@ -225,7 +226,7 @@ impl PendingTransactions {
             .collect()
     }
 
-    /// Returns true if no more peers have pending transactions
+    /// Returns true if no more peers have pending observations
     pub fn is_empty(&self) -> bool {
         self.0.values().all(|v| v.is_empty())
     }
@@ -237,9 +238,9 @@ impl PendingTransactions {
         }
     }
 
-    /// Returns an iterator of all (peer, transaction) pairs, clearing the transaction cache in the
+    /// Returns an iterator of all (peer, observation) pairs, clearing the observation cache in the
     /// process.
-    pub fn all_transactions(&mut self) -> impl Iterator<Item = (PeerId, Transaction)> {
+    pub fn all_observations(&mut self) -> impl Iterator<Item = (PeerId, Observation)> {
         let data = mem::replace(&mut self.0, BTreeMap::new());
         data.into_iter()
             .flat_map(|(peer, x)| x.into_iter().map(move |trans| (peer.clone(), trans)))
@@ -318,7 +319,7 @@ impl Default for ScheduleOptions {
 /// Stores the list of network events to be simulated.
 #[derive(Clone)]
 pub struct Schedule {
-    pub num_transactions: usize,
+    pub num_observations: usize,
     pub events: Vec<ScheduleEvent>,
 }
 
@@ -354,7 +355,7 @@ impl Schedule {
         step: usize,
         peers: &mut Vec<PeerId>,
         // note: mut required below for reborrowing in ScheduleEvent::gen_random
-        mut pending: Option<&mut PendingTransactions>,
+        mut pending: Option<&mut PendingObservations>,
         schedule: &mut Vec<ScheduleEvent>,
         num_peers: usize,
         options: &ScheduleOptions,
@@ -416,13 +417,13 @@ impl Schedule {
     pub fn new(env: &mut Environment, options: &ScheduleOptions) -> Schedule {
         let mut peers: Vec<_> = env.network.peers.iter().map(|p| p.id.clone()).collect();
         let num_peers = env.network.peers.len();
-        let mut pending = PendingTransactions::new(&mut env.rng, &peers, &env.transactions);
+        let mut pending = PendingObservations::new(&mut env.rng, &peers, &env.observations);
         let mut step = 0;
 
         // if votes before gossip enabled, insert all votes
         let mut schedule = if options.votes_before_gossip {
             pending
-                .all_transactions()
+                .all_observations()
                 .map(|(p, tx)| ScheduleEvent::VoteFor(p, tx))
                 .collect()
         } else {
@@ -462,7 +463,7 @@ impl Schedule {
             step += 1;
         }
         let result = Schedule {
-            num_transactions: env.transactions.len(),
+            num_observations: env.observations.len(),
             events: schedule,
         };
         #[cfg(feature = "dump-graphs")]

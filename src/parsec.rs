@@ -165,16 +165,16 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
     }
 
-    /// Adds a vote for `network_event`.  Returns an error if we have already voted for this.
-    pub fn vote_for(&mut self, network_event: T) -> Result<(), Error> {
-        debug!("{:?} voting for {:?}", self.our_pub_id(), network_event);
-        if self.have_voted_for(&network_event) {
+    /// Adds a vote for `observation`.  Returns an error if we have already voted for this.
+    pub fn vote_for(&mut self, observation: Observation<T, S::PublicId>) -> Result<(), Error> {
+        debug!("{:?} voting for {:?}", self.our_pub_id(), observation);
+        if self.have_voted_for(&observation) {
             return Err(Error::DuplicateVote);
         }
         let self_parent_hash = self.our_last_event_hash();
         let event = Event::new_from_observation(
             self_parent_hash,
-            Observation::OpaquePayload(network_event),
+            observation,
             &self.events,
             &self.peer_list,
         );
@@ -252,15 +252,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.consensused_blocks.pop_front()
     }
 
-    /// Checks if the given `network_event` has already been voted for by us.
-    pub fn have_voted_for(&self, network_event: &T) -> bool {
+    /// Checks if the given `observation` has already been voted for by us.
+    pub fn have_voted_for(&self, observation: &Observation<T, S::PublicId>) -> bool {
         self.events.values().any(|event| {
-            event.creator() == self.our_pub_id() && event.vote().map_or(false, |voted| match voted
-                .payload()
-            {
-                Observation::OpaquePayload(voted_for) => voted_for == network_event,
-                Observation::Add(_) | Observation::Remove(_) | Observation::Genesis(_) => false,
-            })
+            event.creator() == self.our_pub_id() && event
+                .vote()
+                .map_or(false, |voted| voted.payload() == observation)
         })
     }
 
