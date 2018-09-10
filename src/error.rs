@@ -12,43 +12,43 @@ quick_error! {
     pub enum Error {
         /// Payload of a `Vote` doesn't match the payload of a `Block`.
         MismatchedPayload {
-            description("Payload doesn't match")
             display("The payload of the vote doesn't match the payload of targeted block.")
         }
         /// Failed to verify signature.
         SignatureFailure {
-            description("Signature cannot be verified")
             display("The message or signature might be corrupted, or the signer is wrong.")
         }
         /// Serialisation Error.
         Serialisation(error: ::maidsafe_utilities::serialisation::SerialisationError) {
-            description(error.description())
             display("Serialisation error: {}", error)
             from()
         }
-        /// Peer is not known to this node.
+        /// Peer is not known to our node.
         UnknownPeer {
-            description("Peer is not known")
-            display("The peer_id is not known to this node's peer_list.")
+            display("The peer_id is not known to our node's peer_list.")
+        }
+        /// Peer was known to our node, but is now removed.
+        RemovedPeer {
+            display("The peer_id has been removed from our node's peer_list.")
+        }
+        /// Our node has been removed from Parsec.
+        SelfRemoved {
+            display("Our node has been removed from Parsec.")
         }
         /// The given event is invalid or malformed.
         InvalidEvent {
-            description("Invalid event")
             display("The given event is invalid or malformed.")
         }
-        /// This event's self-parent or other-parent is unknown to this node.
+        /// This event's self-parent or other-parent is unknown to our node.
         UnknownParent {
-            description("Parent event(s) not known")
             display("This event's self-parent or other-parent is unknown to this node.")
         }
-        /// This node has already voted for this network event.
+        /// Our node has already voted for this network event.
         DuplicateVote {
-            description("Duplicate vote")
-            display("This node has already voted for this network event.")
+            display("Our node has already voted for this network event.")
         }
         /// Logic error.
         Logic {
-            description("Logic error")
             display("This a logic error and represents a flaw in the code.")
         }
     }

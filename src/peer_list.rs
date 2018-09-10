@@ -56,35 +56,49 @@ impl<S: SecretId> PeerList<S> {
         self.peers.len()
     }
 
-    /// Returns the peer with the given id.
-    pub fn get_peer(&self, peer_id: &S::PublicId) -> Option<&Peer> {
-        self.peers.get(peer_id)
+    pub fn is_active(&self, peer_id: &S::PublicId) -> bool {
+        self.peers.get(peer_id).map_or(false, Peer::is_active)
     }
 
-    /// Adds an inactive peer.
-    pub fn add_inactive_peer(&mut self, peer_id: S::PublicId) {
+    pub fn is_removed(&self, peer_id: &S::PublicId) -> bool {
+        self.peers.get(peer_id).map_or(false, Peer::is_removed)
+    }
+
+    /// Adds a pending peer.
+    pub fn add_pending_peer(&mut self, peer_id: S::PublicId) {
         match self.peers.entry(peer_id.clone()) {
             Entry::Occupied(_) => return,
             Entry::Vacant(entry) => {
-                let _ = entry.insert(Peer::new_inactive());
+                let _ = entry.insert(Peer::new_pending());
                 self.peer_id_hashes
                     .push((Hash::from(serialise(&peer_id).as_slice()), peer_id));
             }
         }
     }
 
-    /// Adds a peer into the map. If the peer has already been added as inactive
-    /// before, activate it.
+    /// Adds a peer into the map. If the peer has already been added as pending, activate it.
     pub fn add_peer(&mut self, peer_id: S::PublicId) {
         match self.peers.entry(peer_id.clone()) {
             Entry::Occupied(mut entry) => {
-                entry.get_mut().active = true;
+                entry.get_mut().state = PeerState::Active;
             }
             Entry::Vacant(entry) => {
                 let _ = entry.insert(Peer::new_active());
                 self.peer_id_hashes
                     .push((Hash::from(serialise(&peer_id).as_slice()), peer_id));
             }
+        }
+    }
+
+    pub fn remove_peer(&mut self, peer_id: &S::PublicId) {
+        if let Some(peer) = self.peers.get_mut(peer_id) {
+            peer.state = PeerState::Removed;
+        } else {
+            debug!(
+                "{:?} tried to remove unknown peer {:?}",
+                self.our_id.public_id(),
+                peer_id
+            );
         }
     }
 
@@ -132,22 +146,42 @@ impl<S: SecretId> PeerList<S> {
     }
 }
 
+enum PeerState {
+    Pending,
+    Active,
+    Removed,
+}
+
 pub(crate) struct Peer {
-    pub active: bool,
+    state: PeerState,
     pub events: BTreeMap<u64, Hash>,
 }
 
 impl Peer {
+    pub fn is_active(&self) -> bool {
+        match self.state {
+            PeerState::Active => true,
+            PeerState::Pending | PeerState::Removed => false,
+        }
+    }
+
+    pub fn is_removed(&self) -> bool {
+        match self.state {
+            PeerState::Removed => true,
+            PeerState::Active | PeerState::Pending => false,
+        }
+    }
+
     fn new_active() -> Self {
         Self {
-            active: true,
+            state: PeerState::Active,
             events: BTreeMap::new(),
         }
     }
 
-    fn new_inactive() -> Self {
+    fn new_pending() -> Self {
         Self {
-            active: false,
+            state: PeerState::Pending,
             events: BTreeMap::new(),
         }
     }

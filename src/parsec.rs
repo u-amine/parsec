@@ -33,6 +33,9 @@ pub fn is_supermajority<P: Ord>(voters: &BTreeSet<&P>, current_peers: &BTreeSet<
 
 /// The main object which manages creating and receiving gossip about network events from peers, and
 /// which provides a sequence of consensused `Block`s by applying the PARSEC algorithm.
+///
+/// Most public functions return an error if called after the owning node has been removed, i.e.
+/// a block with payload `Observation::Remove(our_id)` has been made stable.
 pub struct Parsec<T: NetworkEvent, S: SecretId> {
     // The PeerInfo of other nodes.
     peer_list: PeerList<S>,
@@ -131,9 +134,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let our_public_id = our_id.public_id().clone();
         let mut parsec = Self::empty(our_id, is_interesting_event);
 
-        parsec.peer_list.add_inactive_peer(our_public_id);
+        parsec.peer_list.add_pending_peer(our_public_id);
         for peer_id in section {
-            parsec.peer_list.add_inactive_peer(peer_id.clone());
+            parsec.peer_list.add_pending_peer(peer_id.clone());
         }
 
         let initial_event = Event::new_initial(&parsec.peer_list);
@@ -168,6 +171,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// Adds a vote for `observation`.  Returns an error if we have already voted for this.
     pub fn vote_for(&mut self, observation: Observation<T, S::PublicId>) -> Result<(), Error> {
         debug!("{:?} voting for {:?}", self.our_pub_id(), observation);
+        self.confirm_self_not_removed()?;
         if self.have_voted_for(&observation) {
             return Err(Error::DuplicateVote);
         }
@@ -183,7 +187,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     /// Creates a new message to be gossiped to a peer containing all gossip events this node thinks
     /// that peer needs.  If `peer_id` is `None`, a message containing all known gossip events is
-    /// returned.  If `peer_id` is `Some` and the given peer is unknown to this node, an error is
+    /// returned.  If `peer_id` is `Some` and the given peer is not an active node, an error is
     /// returned.
     pub fn create_gossip(
         &self,
@@ -194,12 +198,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             self.our_pub_id(),
             peer_id
         );
+        self.confirm_self_not_removed()?;
         if let Some(recipient_id) = peer_id {
-            if !self
-                .peer_list
-                .get_peer(&recipient_id)
-                .map_or(false, |peer| peer.active)
-            {
+            self.confirm_peer_not_removed(&recipient_id)?;
+            if !self.peer_list.is_active(&recipient_id) {
+                trace!("{:?} doesn't know {:?}", self.our_pub_id(), recipient_id);
                 return Err(Error::UnknownPeer);
             }
             if self.peer_list.last_event_hash(&recipient_id).is_some() {
@@ -216,7 +219,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     /// Handles a received `Request` from `src` peer.  Returns a `Response` to be sent back to `src`
-    /// or `Err` if the request was not valid.
+    /// or `Err` if the request was not valid or if `src` has been removed already.
     pub fn handle_request(
         &mut self,
         src: &S::PublicId,
@@ -227,12 +230,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             self.our_pub_id(),
             src
         );
-        self.unpack_and_add_events(req.packed_events)?;
+        self.unpack_and_add_events(src, req.packed_events)?;
         self.create_sync_event(src, true)?;
         self.events_to_gossip_to_peer(src).map(Response::new)
     }
 
-    /// Handles a received `Response` from `src` peer.  Returns `Err` if the response was not valid.
+    /// Handles a received `Response` from `src` peer.  Returns `Err` if the response was not valid
+    /// or if `src` has been removed already.
     pub fn handle_response(
         &mut self,
         src: &S::PublicId,
@@ -243,11 +247,15 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             self.our_pub_id(),
             src
         );
-        self.unpack_and_add_events(resp.packed_events)?;
+        self.unpack_and_add_events(src, resp.packed_events)?;
         self.create_sync_event(src, false)
     }
 
     /// Steps the algorithm and returns the next stable block, if any.
+    ///
+    /// Once we have been removed (i.e. a block with payload `Observation::Remove(our_id)` has been
+    /// made stable), then no further blocks will be enqueued.  So, once `poll()` returns such a
+    /// block, it will continue to return `None` forever.
     pub fn poll(&mut self) -> Option<Block<T, S::PublicId>> {
         self.consensused_blocks.pop_front()
     }
@@ -289,6 +297,22 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.peer_list.our_id().public_id()
     }
 
+    fn confirm_self_not_removed(&self) -> Result<(), Error> {
+        if self.peer_list.is_removed(self.our_pub_id()) {
+            trace!("{:?} has been removed", self.our_pub_id());
+            return Err(Error::SelfRemoved);
+        }
+        Ok(())
+    }
+
+    fn confirm_peer_not_removed(&self, peer_id: &S::PublicId) -> Result<(), Error> {
+        if self.peer_list.is_removed(peer_id) {
+            trace!("{:?} has removed {:?}", self.our_pub_id(), peer_id);
+            return Err(Error::RemovedPeer);
+        }
+        Ok(())
+    }
+
     fn our_last_event_hash(&self) -> Hash {
         if let Some(hash) = self.peer_list.last_event_hash(self.our_pub_id()) {
             *hash
@@ -323,8 +347,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     fn unpack_and_add_events(
         &mut self,
+        src: &S::PublicId,
         packed_events: Vec<PackedEvent<T, S::PublicId>>,
     ) -> Result<(), Error> {
+        self.confirm_self_not_removed()?;
+        self.confirm_peer_not_removed(src)?;
         for packed_event in packed_events {
             if let Some(event) = Event::unpack(packed_event, &self.events, &self.peer_list)? {
                 self.add_event(event)?;
@@ -362,7 +389,18 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 payload_hash
             );
             self.consensus_history.push(payload_hash);
+            let observation = block.payload().clone();
             self.consensused_blocks.push_back(block);
+            match observation {
+                Observation::Remove(peer_id) => {
+                    self.peer_list.remove_peer(&peer_id);
+                    if peer_id == *self.our_pub_id() {
+                        return Ok(());
+                    }
+                }
+                Observation::Add(_peer_id) => {}
+                Observation::Genesis(_) | Observation::OpaquePayload(_) => {}
+            }
             self.restart_consensus(&payload_hash);
         }
         Ok(())
