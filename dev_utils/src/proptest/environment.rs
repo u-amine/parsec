@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use environment::{Environment, PeerCount, RngChoice, TransactionCount};
+use environment::{Environment, ObservationCount, PeerCount, RngChoice};
 use network::Network;
 use proptest::{Bounded, BoundedBoxedStrategy};
 use proptest_crate::prelude::RngCore;
@@ -17,14 +17,14 @@ use rand::{SeedableRng, XorShiftRng};
 #[derive(Debug)]
 pub struct EnvironmentStrategy {
     pub num_peers: BoundedBoxedStrategy<usize>,
-    pub num_transactions: BoundedBoxedStrategy<usize>,
+    pub num_observations: BoundedBoxedStrategy<usize>,
 }
 
 impl Default for EnvironmentStrategy {
     fn default() -> Self {
         EnvironmentStrategy {
             num_peers: (4..=10).into(),
-            num_transactions: (1..10).into(),
+            num_observations: (1..10).into(),
         }
     }
 }
@@ -46,16 +46,16 @@ impl EnvironmentValueTree {
             .take(n_peers)
             .map(|p| p.id.clone());
         let network = Network::with_peers(peer_ids);
-        let transactions = self
+        let observations = self
             .max_env
-            .transactions
+            .observations
             .iter()
             .take(n_trans)
             .cloned()
             .collect();
         Environment {
             network,
-            transactions,
+            observations,
             rng: Box::new(XorShiftRng::from_seed(self.seed)),
         }
     }
@@ -72,7 +72,7 @@ impl Bounded for EnvironmentValueTree {
     fn max(&self) -> Environment {
         let (n_peers, n_trans) = (
             self.max_env.network.peers.len(),
-            self.max_env.transactions.len(),
+            self.max_env.observations.len(),
         );
         self.filtered_environment(n_peers, n_trans)
     }
@@ -111,15 +111,15 @@ impl Strategy for EnvironmentStrategy {
         };
         let env = Environment::new(
             &PeerCount(self.num_peers.max()),
-            &TransactionCount(self.num_transactions.max()),
+            &ObservationCount(self.num_observations.max()),
             RngChoice::SeededXor(seed),
         );
-        (&self.num_peers, &self.num_transactions)
+        (&self.num_peers, &self.num_observations)
             .new_tree(runner)
             .map(|t| EnvironmentValueTree {
                 max_env: env,
                 peers_trans: Box::new(t),
-                min_peers_trans: (self.num_peers.min(), self.num_transactions.min()),
+                min_peers_trans: (self.num_peers.min(), self.num_observations.min()),
                 seed,
             })
     }

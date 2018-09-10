@@ -7,10 +7,11 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use parsec::mock::{self, PeerId, Transaction};
-use parsec::{Request, Response, Observation};
+use parsec::{Request, Response};
 use peer::Peer;
 use schedule::{self, RequestTiming, Schedule, ScheduleEvent};
 use std::collections::{BTreeMap, BTreeSet};
+use Observation;
 
 enum Message {
     Request(Request<Transaction, PeerId>, usize),
@@ -30,9 +31,9 @@ pub struct Network {
 
 type DifferingBlocksOrder<'a> = (
     &'a PeerId,
-    Vec<&'a Observation<Transaction, PeerId>>,
+    Vec<&'a Observation>,
     &'a PeerId,
-    Vec<&'a Observation<Transaction, PeerId>>,
+    Vec<&'a Observation>,
 );
 
 impl Network {
@@ -145,8 +146,8 @@ impl Network {
         false
     }
 
-    fn consensus_complete(&self, num_transactions: usize) -> bool {
-        self.peers[0].blocks_payloads().len() == num_transactions
+    fn consensus_complete(&self, num_observations: usize) -> bool {
+        self.peers[0].blocks_payloads().len() == num_observations
             && self.blocks_all_in_sequence().is_ok()
     }
 
@@ -154,7 +155,7 @@ impl Network {
     pub fn execute_schedule(&mut self, schedule: Schedule) {
         let mut started_up = BTreeSet::new();
         let Schedule {
-            num_transactions,
+            num_observations,
             events,
         } = schedule;
         for event in events {
@@ -192,14 +193,14 @@ impl Network {
                         RequestTiming::Later => (),
                     }
                 }
-                ScheduleEvent::VoteFor(peer, transaction) => {
-                    let _ = self.peer_mut(&peer).vote_for(&transaction);
+                ScheduleEvent::VoteFor(peer, observation) => {
+                    let _ = self.peer_mut(&peer).vote_for(&observation);
                 }
                 ScheduleEvent::Fail(peer) => {
                     self.peers.retain(|p| p.id != peer);
                 }
             }
-            if self.consensus_broken() || self.consensus_complete(num_transactions) {
+            if self.consensus_broken() || self.consensus_complete(num_observations) {
                 break;
             }
         }

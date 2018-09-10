@@ -7,9 +7,10 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use parsec::mock::{PeerId, Transaction};
-use parsec::{self, Block, Parsec, Observation};
+use parsec::{self, Block, Parsec};
 use std::collections::BTreeSet;
 use std::fmt::{self, Debug, Formatter};
+use Observation;
 
 pub struct Peer {
     pub id: PeerId,
@@ -27,9 +28,9 @@ impl Peer {
         }
     }
 
-    pub fn vote_for(&mut self, transaction: &Transaction) -> bool {
-        if !self.parsec.have_voted_for(transaction) {
-            unwrap!(self.parsec.vote_for(transaction.clone()));
+    pub fn vote_for(&mut self, observation: &Observation) -> bool {
+        if !self.parsec.have_voted_for(observation) {
+            unwrap!(self.parsec.vote_for(observation.clone()));
             true
         } else {
             false
@@ -43,7 +44,7 @@ impl Peer {
     }
 
     // Returns the payloads of `self.blocks` in the order in which they were returned by `poll()`.
-    pub fn blocks_payloads(&self) -> Vec<&Observation<Transaction, PeerId>> {
+    pub fn blocks_payloads(&self) -> Vec<&Observation> {
         self.blocks.iter().map(Block::payload).collect()
     }
 }

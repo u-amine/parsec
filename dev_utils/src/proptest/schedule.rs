@@ -199,7 +199,7 @@ impl ScheduleValueTree {
 impl ScheduleValueTree {
     fn filtered_schedule(&self, env: &Environment) -> Schedule {
         let peers_set: BTreeSet<_> = env.network.peers.iter().map(|p| p.id.clone()).collect();
-        let trans_set: BTreeSet<_> = env.transactions.iter().collect();
+        let trans_set: BTreeSet<_> = env.observations.iter().collect();
         let result = self
             .max_schedule
             .events
@@ -227,7 +227,7 @@ impl ScheduleValueTree {
             .collect();
         Schedule {
             events: result,
-            num_transactions: env.transactions.len(),
+            num_observations: env.observations.len(),
         }
     }
 }
@@ -239,9 +239,9 @@ impl ValueTree for ScheduleValueTree {
         trace!("Scheduling with options: {:?}", self.opts.current());
         let env = self.env.current();
         trace!(
-            "{} peers, {} transactions",
+            "{} peers, {} observations",
             env.network.peers.len(),
-            env.transactions.len()
+            env.observations.len()
         );
         let schedule = self.filtered_schedule(&env);
         trace!("{:?}", schedule);

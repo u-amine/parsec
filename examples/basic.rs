@@ -63,7 +63,7 @@ extern crate unwrap;
 use clap::{App, Arg};
 use maidsafe_utilities::{log, SeededRng};
 use parsec::mock::{self, PeerId, Transaction};
-use parsec::{Block, Observation, Parsec};
+use parsec::{Block, Parsec};
 use rand::Rng;
 use std::collections::BTreeSet;
 use std::process;
@@ -77,13 +77,14 @@ const MAX_ROUNDS_ARG_NAME: &str = "max-rounds";
 const SEED_ARG_NAME: &str = "seed";
 
 type Seed = [u32; 4];
+type Observation = parsec::Observation<Transaction, PeerId>;
 
 struct Peer {
     id: PeerId,
     parsec: Parsec<Transaction, PeerId>,
     // The random network events which this node has voted for, held in the order in which the votes
     // were made.
-    transactions: Vec<Transaction>,
+    observations: Vec<Observation>,
     // The blocks returned by `parsec.poll()`, held in the order in which they were returned.
     blocks: Vec<Block<Transaction, PeerId>>,
 }
@@ -93,16 +94,16 @@ impl Peer {
         Self {
             id: our_id.clone(),
             parsec: Parsec::new(our_id, genesis_group, parsec::is_supermajority),
-            transactions: vec![],
+            observations: vec![],
             blocks: vec![],
         }
     }
 
-    fn vote_for_first_not_already_voted_for(&mut self, transactions: &[Transaction]) {
-        for transaction in transactions {
-            if !self.transactions.iter().any(|t| t == transaction) {
-                unwrap!(self.parsec.vote_for(transaction.clone()));
-                self.transactions.push(transaction.clone());
+    fn vote_for_first_not_already_voted_for(&mut self, observations: &[Observation]) {
+        for observation in observations {
+            if !self.observations.iter().any(|o| o == observation) {
+                unwrap!(self.parsec.vote_for(observation.clone()));
+                self.observations.push(observation.clone());
                 break;
             }
         }
@@ -114,7 +115,7 @@ impl Peer {
         }
     }
 
-    fn blocks_payloads(&self) -> Vec<&Observation<Transaction, PeerId>> {
+    fn blocks_payloads(&self) -> Vec<&Observation> {
         self.blocks.iter().map(Block::payload).collect::<Vec<_>>()
     }
 
@@ -277,16 +278,16 @@ fn main() {
         .seed
         .map_or_else(SeededRng::new, SeededRng::from_seed);
     println!("Using {:?}", rng);
-    let mut transactions = (0..params.event_count)
-        .map(|_| rng.gen())
-        .collect::<Vec<Transaction>>();
+    let mut observations = (0..params.event_count)
+        .map(|_| parsec::Observation::OpaquePayload(rng.gen()))
+        .collect::<Vec<Observation>>();
 
     for round in 0..params.max_rounds {
         println!("\nGossip Round {:03}\n================", round);
 
         rng.shuffle(&mut peers);
         // Each peer will send a request and handle the corresponding response.  For each peer,
-        // there is also a chance that they will vote for one of the transactions if they haven't
+        // there is also a chance that they will vote for one of the observations if they haven't
         // already done so.
         for sender_index in 0..peers.len() {
             let receiver_index = (sender_index + 1) % peers.len();
@@ -309,9 +310,9 @@ fn main() {
             );
 
             let peer = &mut peers[sender_index];
-            if peer.transactions.len() < params.event_count && rng.gen_weighted_bool(3) {
-                rng.shuffle(&mut transactions);
-                peer.vote_for_first_not_already_voted_for(&transactions);
+            if peer.observations.len() < params.event_count && rng.gen_weighted_bool(3) {
+                rng.shuffle(&mut observations);
+                peer.vote_for_first_not_already_voted_for(&observations);
             }
 
             peer.poll();
@@ -324,7 +325,7 @@ fn main() {
             println!(
                 "  {:2$}{:?}",
                 peer.display_id(),
-                peer.transactions,
+                peer.observations,
                 max_width
             );
         }

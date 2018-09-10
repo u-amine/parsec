@@ -59,7 +59,7 @@ extern crate parsec_dev_utils;
 
 use criterion::Criterion;
 use parsec_dev_utils::{
-    Environment, PeerCount, RngChoice, Schedule, ScheduleOptions, TransactionCount,
+    Environment, ObservationCount, PeerCount, RngChoice, Schedule, ScheduleOptions,
 };
 
 fn bench(c: &mut Criterion) {
@@ -67,7 +67,7 @@ fn bench(c: &mut Criterion) {
         b.iter_with_setup(
             || {
                 let mut env =
-                    Environment::new(&PeerCount(4), &TransactionCount(1), RngChoice::SeededRandom);
+                    Environment::new(&PeerCount(4), &ObservationCount(1), RngChoice::SeededRandom);
                 let schedule = Schedule::new(&mut env, &ScheduleOptions::default());
 
                 (env, schedule)
