@@ -16,7 +16,7 @@ pub mod proptest;
 mod schedule;
 
 #[cfg(test)]
-pub use self::dot_parser::{parse_dot_file, ParsedContents};
+pub(crate) use self::dot_parser::{parse_test_dot_file, ParsedContents};
 pub use self::environment::{Environment, ObservationCount, PeerCount, RngChoice};
 pub use self::network::Network;
 pub use self::peer::Peer;
