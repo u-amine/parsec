@@ -264,8 +264,10 @@ fn parse_meta_votes(contents: &str) -> BTreeMap<String, BTreeMap<PeerId, Vec<Met
     let mut event_name = String::default();
     let mut peer_id = PeerId::new("");
     for line in mvs_lines {
-        if let Some(name) = line.split('\"').nth(1) {
-            event_name = name.to_string();
+        if line.contains("shape") {
+            if let Some(name) = line.split('\"').nth(1) {
+                event_name = name.to_string();
+            }
         } else if line.contains("aux") {
             let meta_vote = if line.contains(": [ ") {
                 let split_line = line.split(": [ ").collect::<Vec<_>>();
@@ -427,13 +429,74 @@ fn extract_between<'a>(input: &'a str, left: &str, right: &str) -> &'a str {
     unwrap!(unwrap!(input.split(left).nth(1)).split(right).next())
 }
 
+#[cfg(all(test, feature = "dump-graphs"))]
 mod tests {
     use super::*;
-    use std::path::Path;
+    use dev_utils::{
+        Environment, GossipStrategy, ObservationCount, PeerCount, RngChoice, Schedule,
+        ScheduleOptions,
+    };
+    use dump_graph::DIR;
+    use maidsafe_utilities::serialisation::deserialise;
+    use meta_vote::MetaVote;
+    use mock::{PeerId, Transaction};
+    use std::fs;
 
-    #[ignore]
+    type SerialisedGraph = (
+        BTreeMap<Hash, Event<Transaction, PeerId>>,
+        BTreeMap<Hash, BTreeMap<PeerId, Vec<MetaVote>>>,
+    );
+
+    // Alter the seed here to reproduce failures
+    static SEED: RngChoice = RngChoice::SeededRandom;
+
     #[test]
     fn dot_parser() {
-        assert!(parse_dot_file(&Path::new("./input.dot")).is_ok());
+        let mut env = Environment::new(&PeerCount(4), &ObservationCount(5), SEED);
+        let schedule = Schedule::new(
+            &mut env,
+            &ScheduleOptions {
+                gossip_strategy: GossipStrategy::Probabilistic(0.8),
+                ..Default::default()
+            },
+        );
+        env.network.execute_schedule(schedule);
+
+        let result = env.network.blocks_all_in_sequence();
+        assert!(result.is_ok(), "{:?}", result);
+
+        let mut num_of_files = 0u8;
+        let entries = DIR.with(|dir| unwrap!(fs::read_dir(dir)));
+        for entry in entries {
+            let entry = unwrap!(entry);
+
+            if !unwrap!(entry.file_name().to_str()).contains(".core") {
+                continue;
+            }
+            num_of_files += 1;
+            let mut core_file = unwrap!(File::open(entry.path()));
+            let mut core_info = Vec::new();
+            assert_ne!(unwrap!(core_file.read_to_end(&mut core_info)), 0);
+
+            let (mut gossip_graph, meta_votes): SerialisedGraph = unwrap!(deserialise(&core_info));
+
+            let mut dot_file_path = entry.path();
+            assert!(dot_file_path.set_extension("dot"));
+            let parsed_result = unwrap!(parse_dot_file(&dot_file_path));
+
+            assert_eq!(gossip_graph.len(), parsed_result.events_order.len());
+            for event in &mut gossip_graph.values_mut() {
+                event.observations.clear();
+            }
+            assert_eq!(gossip_graph, parsed_result.events);
+
+            // The dumped dot file doesn't contain all the meta_votes
+            assert!(meta_votes.len() >= parsed_result.meta_votes.len());
+            for (hash, meta_vote) in &parsed_result.meta_votes {
+                let ori_meta_vote = unwrap!(meta_votes.get(hash));
+                assert_eq!(ori_meta_vote, meta_vote);
+            }
+        }
+        assert_ne!(num_of_files, 0u8);
     }
 }

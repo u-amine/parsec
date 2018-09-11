@@ -48,6 +48,7 @@ mod detail {
     use meta_vote::MetaVote;
     use network_event::NetworkEvent;
     use rand::{self, Rng};
+    use serialise;
     use std::cell::RefCell;
     use std::cmp;
     use std::collections::BTreeMap;
@@ -93,6 +94,19 @@ mod detail {
     thread_local!(static DUMP_COUNTS: RefCell<BTreeMap<String, usize>> =
         RefCell::new(BTreeMap::new()));
 
+    fn catch_dump<T: NetworkEvent, P: PublicId>(
+        mut file_path: PathBuf,
+        gossip_graph: &BTreeMap<Hash, Event<T, P>>,
+        meta_votes: &BTreeMap<Hash, BTreeMap<P, Vec<MetaVote>>>,
+    ) {
+        if let Some("dev_utils::dot_parser::tests::dot_parser") = thread::current().name() {
+            let dumped_info = serialise(&(gossip_graph, meta_votes));
+            assert!(file_path.set_extension("core"));
+            let mut file = unwrap!(File::create(&file_path));
+            unwrap!(file.write_all(&dumped_info));
+        }
+    }
+
     pub(crate) fn init() {
         DIR.with(|_| ());
     }
@@ -110,6 +124,8 @@ mod detail {
             *count
         });
         let file_path = DIR.with(|dir| dir.join(format!("{}-{:03}.dot", id, call_count)));
+        catch_dump(file_path.clone(), gossip_graph, meta_votes);
+
         if let Ok(mut file) = File::create(&file_path) {
             let initial_events: Vec<Hash> = gossip_graph
                 .iter()

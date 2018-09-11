@@ -31,7 +31,8 @@ script:
   - if [[ ! $TRAVIS_RUST_VERSION =~ ^nightly.* ]]; then
       (
         set -x;
-        cargo test --verbose --release --features=testing
+        cargo test --verbose --release --features=testing &&
+        cargo test --verbose --release --features=dump-graphs dot_parser
       );
     elif [[ $TRAVIS_OS_NAME == linux ]]; then
       (

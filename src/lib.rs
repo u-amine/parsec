@@ -77,7 +77,7 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate tiny_keccak;
-#[cfg(any(test, feature = "testing"))]
+#[cfg(any(test, feature = "testing", feature = "dump-graphs"))]
 #[macro_use]
 extern crate unwrap;
 
@@ -98,6 +98,7 @@ mod vote;
 #[doc(hidden)]
 #[cfg(any(test, feature = "testing"))]
 pub mod dev_utils;
+
 #[doc(hidden)]
 /// **NOT FOR PRODUCTION USE**: Mock types which trivially implement the required Parsec traits.
 ///

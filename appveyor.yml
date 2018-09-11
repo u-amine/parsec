@@ -32,3 +32,4 @@ build_script:
 
 test_script:
   - cargo test --verbose --release --features=testing
+  - cargo test --verbose --release --features=dump-graphs dot_parser
