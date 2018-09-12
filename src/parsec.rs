@@ -391,16 +391,25 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             self.consensus_history.push(payload_hash);
             let observation = block.payload().clone();
             self.consensused_blocks.push_back(block);
+
             match observation {
+                Observation::Genesis(peer_ids) => {
+                    for peer_id in peer_ids {
+                        self.peer_list.add_peer(peer_id);
+                    }
+                }
+                Observation::Add(peer_id) => {
+                    self.peer_list.add_peer(peer_id);
+                }
                 Observation::Remove(peer_id) => {
                     self.peer_list.remove_peer(&peer_id);
                     if peer_id == *self.our_pub_id() {
                         return Ok(());
                     }
                 }
-                Observation::Add(_peer_id) => {}
-                Observation::Genesis(_) | Observation::OpaquePayload(_) => {}
+                Observation::OpaquePayload(_) => {}
             }
+
             self.restart_consensus(&payload_hash);
         }
         Ok(())
