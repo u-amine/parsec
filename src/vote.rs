@@ -21,12 +21,6 @@ pub struct Vote<T: NetworkEvent, P: PublicId> {
 }
 
 impl<T: NetworkEvent, P: PublicId> Vote<T, P> {
-    /// Creates a `Vote` with input parameters. Only being used by the dot_parser.
-    #[cfg(test)]
-    pub fn new_from_input(payload: Observation<T, P>, signature: P::Signature) -> Self {
-        Self { payload, signature }
-    }
-
     /// Creates a `Vote` for `payload`.
     pub fn new<S: SecretId<PublicId = P>>(secret_id: &S, payload: Observation<T, P>) -> Self {
         let signature = secret_id.sign_detached(&serialise(&payload));

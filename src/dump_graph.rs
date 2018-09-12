@@ -351,25 +351,6 @@ mod detail {
         }
     }
 
-    fn write_full<T: NetworkEvent, P: PublicId>(
-        writer: &mut Write,
-        gossip_graph: &BTreeMap<Hash, Event<T, P>>,
-    ) -> io::Result<()> {
-        for (hash, event) in gossip_graph.iter() {
-            writeln!(writer, "/// {{ {:?}", hash)?;
-            writeln!(writer, "/// cause: {}", event.cause())?;
-            writeln!(
-                writer,
-                "/// interesting_content: {:?}",
-                event.interesting_content
-            )?;
-            writeln!(writer, "/// last_ancestors: {:?}", event.last_ancestors())?;
-
-            writeln!(writer, "/// }}")?;
-        }
-        Ok(())
-    }
-
     fn write_gossip_graph_dot<T: NetworkEvent, P: PublicId>(
         writer: &mut Write,
         gossip_graph: &BTreeMap<Hash, Event<T, P>>,
@@ -393,7 +374,9 @@ mod detail {
         writeln!(writer, "  splines=false")?;
         writeln!(writer, "  rankdir=BT")?;
 
-        write_full(writer, gossip_graph)?;
+        for event in gossip_graph.values() {
+            event.write_to_dot_format(writer)?;
+        }
 
         for node in &nodes {
             let mut events: Vec<&Event<T, P>> = gossip_graph

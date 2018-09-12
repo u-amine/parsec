@@ -12,6 +12,8 @@ use gossip::content::Content;
 use gossip::packed_event::PackedEvent;
 use hash::Hash;
 use id::{PublicId, SecretId};
+#[cfg(test)]
+use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
 use observation::Observation;
 use peer_list::PeerList;
@@ -19,6 +21,8 @@ use serialise;
 use std::cmp;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
+#[cfg(feature = "dump-graphs")]
+use std::io::{self, Write};
 use vote::Vote;
 
 #[derive(PartialEq)]
@@ -155,11 +159,6 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         }
     }
 
-    #[cfg(feature = "dump-graphs")]
-    pub fn cause(&self) -> &Cause<T, P> {
-        &self.content.cause
-    }
-
     pub fn creator(&self) -> &P {
         &self.content.creator
     }
@@ -284,6 +283,19 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         let _ = last_ancestors.insert(content.creator.clone(), index);
         Ok((index, last_ancestors))
     }
+
+    #[cfg(feature = "dump-graphs")]
+    pub fn write_to_dot_format(&self, writer: &mut Write) -> io::Result<()> {
+        writeln!(writer, "/// {{ {:?}", self.hash)?;
+        writeln!(writer, "/// cause: {}", self.content.cause)?;
+        writeln!(
+            writer,
+            "/// interesting_content: {:?}",
+            self.interesting_content
+        )?;
+        writeln!(writer, "/// last_ancestors: {:?}", self.last_ancestors)?;
+        writeln!(writer, "/// }}")
+    }
 }
 
 impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
@@ -321,28 +333,50 @@ impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
 }
 
 #[cfg(test)]
-impl<T: NetworkEvent, P: PublicId> Event<T, P> {
+impl Event<Transaction, PeerId> {
     // Creates a new event using the input parameters directly
-    pub(crate) fn new_from_input(
-        creator: P,
-        cause: Cause<T, P>,
+    pub(crate) fn new_from_dot_input(
+        creator: &PeerId,
+        cause: &str,
+        self_parent: Option<Hash>,
+        other_parent: Option<Hash>,
         index: u64,
-        signature: P::Signature,
-        last_ancestors: BTreeMap<P, u64>,
-        interesting_content: BTreeSet<Observation<T, P>>,
-        observations: BTreeSet<P>,
+        last_ancestors: BTreeMap<PeerId, u64>,
+        interesting_content: BTreeSet<Observation<Transaction, PeerId>>,
     ) -> Self {
-        let content = Content { creator, cause };
+        let cause = match cause {
+            "cause: Initial" => Cause::Initial,
+            "cause: Request" => Cause::Request {
+                self_parent: unwrap!(self_parent),
+                other_parent: unwrap!(other_parent),
+            },
+            "cause: Response" => Cause::Response {
+                self_parent: unwrap!(self_parent),
+                other_parent: unwrap!(other_parent),
+            },
+            _ => {
+                let payload =
+                    Transaction::new(unwrap!(unwrap!(cause.split('(').nth(2)).split(')').next()));
+                Cause::Observation {
+                    self_parent: unwrap!(self_parent),
+                    vote: Vote::new(creator, Observation::OpaquePayload(payload)),
+                }
+            }
+        };
+        let content = Content {
+            creator: creator.clone(),
+            cause,
+        };
         let serialised_content = serialise(&content);
 
         Self {
             content,
-            signature,
+            signature: creator.sign_detached(&serialised_content),
             hash: Hash::from(serialised_content.as_slice()),
             index,
             last_ancestors,
             interesting_content,
-            observations,
+            observations: BTreeSet::new(),
         }
     }
 }

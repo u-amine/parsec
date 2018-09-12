@@ -14,7 +14,7 @@ use vote::Vote;
 
 #[serde(bound = "")]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub(crate) enum Cause<T: NetworkEvent, P: PublicId> {
+pub(super) enum Cause<T: NetworkEvent, P: PublicId> {
     // Hashes are the latest `Event` of own and the peer which sent the request.
     Request {
         self_parent: Hash,
