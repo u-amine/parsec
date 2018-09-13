@@ -13,7 +13,7 @@ use tiny_keccak;
 const HASH_LEN: usize = 32;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub(crate) struct Hash([u8; HASH_LEN]);
+pub struct Hash([u8; HASH_LEN]);
 
 impl Hash {
     // Compares the distance of the arguments to `self`.  Returns `Less` if `lhs` is closer,
