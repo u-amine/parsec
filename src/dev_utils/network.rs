@@ -168,11 +168,8 @@ impl Network {
                     let has_new_data = self.handle_messages(&peer, global_step);
                     self.peer_mut(&peer).poll();
                     let mut handle_req = |req: schedule::Request| {
-                        let request = unwrap!(
-                            self.peer(&peer)
-                                .parsec
-                                .create_gossip(Some(req.recipient.clone()))
-                        );
+                        let request =
+                            unwrap!(self.peer(&peer).parsec.create_gossip(Some(&req.recipient)));
                         self.send_message(
                             peer.clone(),
                             &req.recipient,

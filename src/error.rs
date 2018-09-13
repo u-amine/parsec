@@ -27,13 +27,13 @@ quick_error! {
         UnknownPeer {
             display("The peer_id is not known to our node's peer_list.")
         }
-        /// Peer was known to our node, but is now removed.
-        RemovedPeer {
-            display("The peer_id has been removed from our node's peer_list.")
+        /// Peer is known to us, but has unexpected state
+        UnexpectedPeerState {
+            display("The peer_id is in unexpected state.")
         }
-        /// Our node has been removed from Parsec.
-        SelfRemoved {
-            display("Our node has been removed from Parsec.")
+        /// Our node is in unexpected state
+        UnexpectedSelfState {
+            display("Our node is in unexpected state.")
         }
         /// The given event is invalid or malformed.
         InvalidEvent {

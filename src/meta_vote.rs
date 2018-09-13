@@ -290,16 +290,16 @@ impl MetaVote {
             {
                 Some(true)
             } else {
-                None
+                counts.decision
             },
             Step::ForcedFalse => if meta_vote.bin_values.contains(false)
                 && counts.is_super_majority(counts.aux_values_false)
             {
                 Some(false)
             } else {
-                None
+                counts.decision
             },
-            Step::GenuineFlip => None,
+            Step::GenuineFlip => counts.decision,
         };
         if let Some(decision) = opt_decision {
             meta_vote.estimates = BoolSet::from_bool(decision);
@@ -364,6 +364,7 @@ struct MetaVoteCounts {
     bin_values_false: usize,
     aux_values_true: usize,
     aux_values_false: usize,
+    decision: Option<bool>,
     total_peers: usize,
 }
 
@@ -399,6 +400,10 @@ impl MetaVoteCounts {
                 Some(true) => counts.aux_values_true += 1,
                 Some(false) => counts.aux_values_false += 1,
                 None => (),
+            }
+
+            if counts.decision.is_none() {
+                counts.decision = vote.decision;
             }
         }
         counts

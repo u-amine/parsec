@@ -429,7 +429,7 @@ mod tests {
     use id::SecretId;
     use mock::{PeerId, Transaction};
     use observation::Observation;
-    use peer_list::PeerList;
+    use peer_list::{PeerList, PeerState};
     use std::collections::BTreeMap;
 
     struct PeerListAndEvent {
@@ -469,8 +469,15 @@ mod tests {
     fn create_two_events(id0: &str, id1: &str) -> (PeerListAndEvent, PeerListAndEvent) {
         let (peer_id0, mut peer_id0_list) = create_peer_list(id0);
         let (peer_id1, mut peer_id1_list) = create_peer_list(id1);
-        peer_id0_list.add_peer(peer_id1);
-        peer_id1_list.add_peer(peer_id0);
+        peer_id0_list.add_peer(
+            peer_id1,
+            PeerState::VOTE | PeerState::SEND | PeerState::RECV,
+        );
+        peer_id1_list.add_peer(
+            peer_id0,
+            PeerState::VOTE | PeerState::SEND | PeerState::RECV,
+        );
+
         (
             PeerListAndEvent::new(peer_id0_list),
             PeerListAndEvent::new(peer_id1_list),
