@@ -227,7 +227,7 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
 
     assert_eq!(events.len(), length);
 
-    let our_id = PeerId::new(extract_between(&contents, "/// our_id: ", "\n"));
+    let our_id = PeerId::new(extract_between(&contents, "/// our_id: ", "\n").trim());
     let peer_list =
         PeerList::new_from_dot_input(our_id.clone(), &events, &parse_peer_states(&contents));
     Ok(ParsedContents {
@@ -240,7 +240,7 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
 }
 
 fn parse_peer_states(contents: &str) -> BTreeMap<PeerId, String> {
-    let states_string = extract_between(contents, "/// peer_states", "\n");
+    let states_string = extract_between(contents, "/// peer_states", "\n").trim();
     let mut peer_states = BTreeMap::new();
     for (peer, state_string) in parse_peer_entries(states_string) {
         let state = unwrap!(state_string.split('\"').nth(1));

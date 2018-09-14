@@ -93,7 +93,7 @@ impl Peer {
     fn new(our_id: PeerId, genesis_group: &BTreeSet<PeerId>) -> Self {
         Self {
             id: our_id.clone(),
-            parsec: Parsec::new(our_id, genesis_group, parsec::is_supermajority),
+            parsec: Parsec::from_genesis(our_id, genesis_group, parsec::is_supermajority),
             observations: vec![],
             blocks: vec![],
         }
@@ -353,9 +353,10 @@ fn main() {
             }
         }
 
+        // Expect `event_count` blocks + 1 for the genesis block.
         if peers
             .iter()
-            .all(|peer| peer.blocks.len() == params.event_count)
+            .all(|peer| peer.blocks.len() == params.event_count + 1)
         {
             break;
         } else if round == params.max_rounds - 1 {

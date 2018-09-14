@@ -325,7 +325,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         if let Some(hash) = self.peer_list.last_event_hash(self.our_pub_id()) {
             *hash
         } else {
-            log_or_panic!("{:?} has no last event hash.", self.our_pub_id());
+            log_or_panic!(
+                "{:?} has no last event hash.\n{:?}\n",
+                self.our_pub_id(),
+                self.peer_list
+            );
             Hash::from([].as_ref())
         }
     }
@@ -372,7 +376,24 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.peer_list.add_event(&event)?;
         let event_hash = *event.hash();
         let is_initial = event.is_initial();
-        self.events_order.push(event_hash);
+        if self.peer_list.is_pending(self.our_pub_id()) && event.creator() != self.our_pub_id() {
+            // We're handling an event before we've been made active.  If it's not one of our own
+            // events, it means we're in the process of handling our first incoming request.  Insert
+            // it immediately before our initial event, so that when we calculate the list of events
+            // to give in response to this request, we don't include the entire graph.
+            let index = self
+                .events_order
+                .iter()
+                .rev()
+                .skip_while(|&hash| {
+                    self.get_known_event(hash)
+                        .map(|event| event.creator() == self.our_pub_id())
+                        .unwrap_or(false)
+                }).count();
+            self.events_order.insert(index, event_hash);
+        } else {
+            self.events_order.push(event_hash);
+        }
         let _ = self.events.insert(event_hash, event);
         if is_initial {
             return Ok(());
@@ -1097,6 +1118,40 @@ mod functional_tests {
     use super::*;
     use dev_utils::parse_test_dot_file;
     use mock::{self, Transaction};
+    use peer_list::PeerState;
+    use std::collections::BTreeMap;
+
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct Snapshot {
+        peer_list: BTreeMap<PeerId, (PeerState, BTreeMap<u64, Hash>)>,
+        events: BTreeSet<Hash>,
+        events_order: Vec<Hash>,
+        consensused_blocks: VecDeque<Block<Transaction, PeerId>>,
+        consensus_history: Vec<Hash>,
+        meta_votes: BTreeMap<Hash, BTreeMap<PeerId, Vec<MetaVote>>>,
+        round_hashes: BTreeMap<PeerId, Vec<RoundHash>>,
+    }
+
+    impl Snapshot {
+        fn new(parsec: &Parsec<Transaction, PeerId>) -> Self {
+            let peer_list = parsec
+                .peer_list
+                .iter()
+                .map(|(peer_id, peer)| (peer_id.clone(), (peer.state(), peer.events.clone())))
+                .collect();
+            let events = parsec.events.keys().cloned().collect();
+
+            Snapshot {
+                peer_list,
+                events,
+                events_order: parsec.events_order.clone(),
+                consensused_blocks: parsec.consensused_blocks.clone(),
+                consensus_history: parsec.consensus_history.clone(),
+                meta_votes: parsec.meta_votes.clone(),
+                round_hashes: parsec.round_hashes.clone(),
+            }
+        }
+    }
 
     macro_rules! assert_err_eq {
         ($expected_error:tt, $result:expr) => {
@@ -1209,6 +1264,89 @@ mod functional_tests {
     }
 
     #[test]
+    fn add_peer() {
+        let mut parsed_contents = parse_test_dot_file("add_fred.dot");
+        // Split out the events Eric would send to Alice.  These are the last seven events listed in
+        // `parsed_contents.events_order`, i.e. B_14, C_14, D_14, D_15, B_15, C_15, E_14, and E_15.
+        //
+        // The final decision to add Fred is reached in E_15.
+        let e_15_hash = unwrap!(parsed_contents.events_order.pop());
+        let e_15 = unwrap!(parsed_contents.events.remove(&e_15_hash));
+        let final_hashes = parsed_contents.events_order.split_off(71);
+        let mut final_events = vec![];
+        for hash in &final_hashes {
+            final_events.push(unwrap!(parsed_contents.events.remove(hash)));
+        }
+
+        let mut alice = Parsec::from_parsed_contents(parsed_contents);
+        let genesis_group = alice.peer_list.all_ids().into_iter().cloned().collect();
+        let fred_id = PeerId::new("Fred");
+        assert!(!alice.peer_list.all_ids().contains(&&fred_id));
+
+        let alice_snapshot = Snapshot::new(&alice);
+
+        // Try calling `create_gossip()` for a peer which doesn't exist yet.
+        assert_err_eq!(UnknownPeer, alice.create_gossip(Some(fred_id.clone())));
+        assert_eq!(alice_snapshot, Snapshot::new(&alice));
+
+        // Keep a copy of a request which will be used later in the test.  This request will not
+        // include enough events to allow a joining peer to see "Fred" as a valid member.
+        let deficient_message = unwrap!(alice.create_gossip(None));
+
+        // Add events now as though Alice had received the request from Eric.  This should result in
+        // Alice adding Fred.
+        for event in final_events {
+            unwrap!(alice.add_event(event));
+            assert!(!alice.peer_list.all_ids().contains(&&fred_id));
+        }
+        unwrap!(alice.add_event(e_15));
+        unwrap!(alice.create_sync_event(&PeerId::new("Eric"), true));
+        assert!(alice.peer_list.all_ids().contains(&&fred_id));
+
+        // Construct Fred's Parsec instance.
+        let mut fred = Parsec::from_existing(fred_id, &genesis_group, is_supermajority);
+        let fred_snapshot = Snapshot::new(&fred);
+
+        // Create a "naughty Carol" instance where the graph only shows four peers existing before
+        // adding Fred.
+        parsed_contents = parse_test_dot_file("naughty_carol.dot");
+        let naughty_carol = Parsec::from_parsed_contents(parsed_contents);
+        let alice_id = PeerId::new("Alice");
+        let malicious_message = unwrap!(naughty_carol.create_gossip(None));
+        // TODO - re-enable once `handle_request` is fixed to match the expected behaviour by
+        //        MAID-3066/3067.
+        if false {
+            assert_err_eq!(
+                InvalidInitialRequest,
+                fred.handle_request(&alice_id, malicious_message)
+            );
+        }
+        assert_eq!(fred_snapshot, Snapshot::new(&fred));
+
+        // TODO - re-enable once `handle_request` is fixed to match the expected behaviour by
+        //        MAID-3066/3067.
+        if false {
+            // Pass the deficient message gathered earlier which will not be sufficient to allow
+            // Fred to see himself getting added to the section.
+            assert_err_eq!(
+                InvalidInitialRequest,
+                fred.handle_request(&alice_id, deficient_message)
+            );
+        }
+        // TODO - depending on the outcome of the discussion on how to handle such an invalid
+        //        request, the following check may be invalid.  This would be the case if we decide
+        //        to accept the events, expecting a good peer will soon augment our knowledge up to
+        //        at least the point where we see ourself being added.
+        assert_eq!(fred_snapshot, Snapshot::new(&fred));
+
+        // Now pass a valid initial request from Alice to Fred.  The generated response should only
+        // contain Fred's initial event, and the one recording receipt of Alice's request.
+        let message = unwrap!(alice.create_gossip(None));
+        let response = unwrap!(fred.handle_request(&alice_id, message));
+        assert_eq!(response.packed_events.len(), 2);
+    }
+
+    #[test]
     fn remove_peer() {
         let mut parsed_contents = parse_test_dot_file("remove_eric.dot");
         // The final decision to remove Eric is reached in the last event of Alice.
@@ -1231,8 +1369,7 @@ mod functional_tests {
         let mut section: BTreeSet<PeerId> =
             alice.peer_list.all_ids().into_iter().cloned().collect();
         let _ = section.remove(&eric_id);
-        let mut eric =
-            Parsec::<Transaction, _>::from_existing(eric_id.clone(), &section, is_supermajority);
+        let mut eric = Parsec::from_existing(eric_id.clone(), &section, is_supermajority);
         // Peer state is 'pending' when created from existing. Need to call 'add_peer' to update
         // the state to 'active'.
         for peer_id in section {

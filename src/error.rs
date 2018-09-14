@@ -39,6 +39,10 @@ quick_error! {
         InvalidEvent {
             display("The given event is invalid or malformed.")
         }
+        /// The initial request didn't yield an `Observation::Add(our_id)`.
+        InvalidInitialRequest {
+            display("The initial request didn't yield an `Observation::Add(our_id)`.")
+        }
         /// This event's self-parent or other-parent is unknown to our node.
         UnknownParent {
             display("This event's self-parent or other-parent is unknown to this node.")

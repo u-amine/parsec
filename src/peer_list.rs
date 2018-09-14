@@ -15,6 +15,7 @@ use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
 use serialise;
 use std::collections::btree_map::{self, BTreeMap, Entry};
+use std::fmt::{self, Debug, Formatter};
 
 pub(crate) struct PeerList<S: SecretId> {
     our_id: S,
@@ -56,6 +57,10 @@ impl<S: SecretId> PeerList<S> {
     /// Returns the number of peers.
     pub fn num_peers(&self) -> usize {
         self.peers.len()
+    }
+
+    pub fn is_pending(&self, peer_id: &S::PublicId) -> bool {
+        self.peers.get(peer_id).map_or(false, Peer::is_pending)
     }
 
     pub fn is_active(&self, peer_id: &S::PublicId) -> bool {
@@ -148,6 +153,21 @@ impl<S: SecretId> PeerList<S> {
     }
 }
 
+impl<S: SecretId> Debug for PeerList<S> {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        writeln!(
+            formatter,
+            "PeerList{{ our_id: {:?}",
+            self.our_id.public_id()
+        )?;
+        for peer in &self.peers {
+            writeln!(formatter, "    {:?},", peer)?;
+        }
+        writeln!(formatter, "    {:?}", self.peer_id_hashes)?;
+        write!(formatter, "}}")
+    }
+}
+
 #[cfg(test)]
 impl PeerList<PeerId> {
     // Creates a new PeerList using the input parameters directly
@@ -195,19 +215,27 @@ impl PeerList<PeerId> {
     }
 }
 
-#[derive(Debug)]
-enum PeerState {
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Debug)]
+pub(crate) enum PeerState {
     Pending,
     Active,
     Removed,
 }
 
+#[derive(Debug)]
 pub(crate) struct Peer {
     state: PeerState,
     pub events: BTreeMap<u64, Hash>,
 }
 
 impl Peer {
+    pub fn is_pending(&self) -> bool {
+        match self.state {
+            PeerState::Pending => true,
+            PeerState::Active | PeerState::Removed => false,
+        }
+    }
+
     pub fn is_active(&self) -> bool {
         match self.state {
             PeerState::Active => true,
@@ -222,6 +250,11 @@ impl Peer {
         }
     }
 
+    #[cfg(any(test, feature = "dump-graphs"))]
+    pub fn state(&self) -> PeerState {
+        self.state
+    }
+
     fn new_active() -> Self {
         Self {
             state: PeerState::Active,
@@ -234,10 +267,5 @@ impl Peer {
             state: PeerState::Pending,
             events: BTreeMap::new(),
         }
-    }
-
-    #[cfg(feature = "dump-graphs")]
-    pub fn print_state(&self) -> String {
-        format!("{:?}", self.state)
     }
 }
