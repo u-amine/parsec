@@ -67,6 +67,9 @@ extern crate lazy_static;
 extern crate log;
 #[macro_use]
 extern crate maidsafe_utilities;
+#[cfg(any(test, feature = "testing"))]
+#[macro_use]
+extern crate proptest as proptest_crate;
 #[macro_use]
 extern crate quick_error;
 extern crate rand;
@@ -74,7 +77,7 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate tiny_keccak;
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 #[macro_use]
 extern crate unwrap;
 
@@ -92,9 +95,9 @@ mod peer_list;
 mod round_hash;
 mod vote;
 
-/// This is used to read a dumped dot file and rebuild the event graph and associated info.
-#[cfg(test)]
-mod dot_parser;
+#[doc(hidden)]
+#[cfg(any(test, feature = "testing"))]
+pub mod dev_utils;
 #[doc(hidden)]
 /// **NOT FOR PRODUCTION USE**: Mock types which trivially implement the required Parsec traits.
 ///
