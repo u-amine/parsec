@@ -25,7 +25,8 @@ use std::fmt::{self, Debug, Formatter};
 use std::io::{self, Write};
 use vote::Vote;
 
-#[derive(PartialEq)]
+#[serde(bound = "")]
+#[derive(PartialEq, Serialize, Deserialize)]
 pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
     content: Content<T, P>,
     // Creator's signature of `content`.
