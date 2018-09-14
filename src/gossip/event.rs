@@ -200,6 +200,15 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         }
     }
 
+    /// Returns the first char of the creator's ID, followed by an underscore and the event's index.
+    pub fn short_name(&self) -> String {
+        format!(
+            "{:.1}_{}",
+            format!("{:?}", self.content.creator),
+            self.index
+        )
+    }
+
     fn new<S: SecretId<PublicId = P>>(
         cause: Cause<T, P>,
         events: &BTreeMap<Hash, Event<T, P>>,
@@ -300,11 +309,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
 
 impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
-        write!(
-            formatter,
-            "Event{{ {:?}[{}] {:?}",
-            self.content.creator, self.index, self.hash,
-        )?;
+        write!(formatter, "Event{{ {} {:?}", self.short_name(), self.hash,)?;
         write!(
             formatter,
             ", {}",
@@ -379,6 +384,24 @@ impl Event<Transaction, PeerId> {
             observations: BTreeSet::new(),
         }
     }
+}
+
+// TODO - remove once `find_event_by_short_name()` is used in tests.
+#[allow(unused)]
+/// Finds the first event which has the `short_name` provided.
+#[cfg(test)]
+pub(crate) fn find_event_by_short_name<'a, I, T, P>(
+    event_itr: I,
+    short_name: &str,
+) -> Option<&'a Event<T, P>>
+where
+    I: IntoIterator<Item = &'a Event<T, P>>,
+    T: NetworkEvent,
+    P: PublicId,
+{
+    event_itr
+        .into_iter()
+        .find(|event| event.short_name().to_uppercase() == short_name.to_uppercase())
 }
 
 #[cfg(test)]

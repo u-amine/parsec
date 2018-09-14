@@ -1000,7 +1000,6 @@ impl<T: NetworkEvent, S: SecretId> Drop for Parsec<T, S> {
 
 #[cfg(test)]
 impl Parsec<Transaction, PeerId> {
-    #[allow(unused)]
     pub(crate) fn from_parsed_contents(peer_id: PeerId, parsed_contents: ParsedContents) -> Self {
         let mut parsec = Parsec::empty(peer_id, is_supermajority);
         parsec.events = parsed_contents.events;
@@ -1013,9 +1012,8 @@ impl Parsec<Transaction, PeerId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dev_utils::parse_dot_file;
+    use dev_utils::parse_test_dot_file;
     use mock::{self, Transaction};
-    use std::path::Path;
 
     #[test]
     fn from_existing() {
@@ -1061,30 +1059,20 @@ mod tests {
         let _ = Parsec::<Transaction, _>::from_existing(our_id, &peers, is_supermajority);
     }
 
-    #[ignore]
     #[test]
     fn from_parsed_contents() {
-        let input_file = Path::new("./input-graphs/Alice-001.dot");
-        let parsed_contents = unwrap!(parse_dot_file(&input_file));
-        let parsed_contents_comparison = unwrap!(parse_dot_file(&input_file));
+        let input_file = "0.dot";
+        let parsed_contents = parse_test_dot_file(input_file);
+        let parsed_contents_comparison = parse_test_dot_file(input_file);
         let peer_id = PeerId::new("Alice");
-        let parsec = Parsec::<Transaction, _>::from_parsed_contents(peer_id, parsed_contents);
+        let parsec = Parsec::from_parsed_contents(peer_id, parsed_contents);
         assert_eq!(parsed_contents_comparison.events, parsec.events);
         assert_eq!(parsed_contents_comparison.events_order, parsec.events_order);
         assert_eq!(parsed_contents_comparison.meta_votes, parsec.meta_votes);
-    }
 
-    #[ignore]
-    #[test]
-    fn from_parsed_contents_and_fail() {
-        let input_file = Path::new("./input-graphs/Alice-001.dot");
-        let parsed_contents = unwrap!(parse_dot_file(&input_file));
-        let comparison_input_file = Path::new("./input-graphs/Bob-001.dot");
-        let parsed_contents_comparison = unwrap!(parse_dot_file(&comparison_input_file));
-        let peer_id = PeerId::new("Alice");
-        let parsec = Parsec::<Transaction, _>::from_parsed_contents(peer_id, parsed_contents);
-        assert_ne!(parsed_contents_comparison.events, parsec.events);
-        assert_ne!(parsed_contents_comparison.events_order, parsec.events_order);
-        assert_ne!(parsed_contents_comparison.meta_votes, parsec.meta_votes);
+        let parsed_contents_other = parse_test_dot_file("1.dot");
+        assert_ne!(parsed_contents_other.events, parsec.events);
+        assert_ne!(parsed_contents_other.events_order, parsec.events_order);
+        assert_ne!(parsed_contents_other.meta_votes, parsec.meta_votes);
     }
 }

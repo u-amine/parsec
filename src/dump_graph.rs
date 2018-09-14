@@ -74,12 +74,16 @@ mod detail {
     pub static DIR: PathBuf = {
         let dir = match thread::current().name() {
             Some(thread_name) if thread_name != "main" => {
-                ROOT_DIR.join(format!("test_{}", thread_name))
+                ROOT_DIR.join(thread_name.replace("::", "_"))
             }
             _ => ROOT_DIR.clone(),
         };
         if let Err(error) = fs::create_dir_all(&dir) {
-            println!("Failed to create folder for dot files: {:?}", error);
+            println!(
+                "Failed to create folder {} for dot files: {:?}",
+                dir.display(),
+                error
+            );
         } else {
             println!("Writing dot files in {}", dir.display());
         }
@@ -246,12 +250,7 @@ mod detail {
             if meta_votes.contains_key(event_hash) {
                 write!(writer, " shape=rectangle, ")?;
             }
-            write!(
-                writer,
-                "fillcolor=white, label=\"{}_{}",
-                first_char(event.creator()).unwrap_or('E'),
-                event.index()
-            )?;
+            write!(writer, "fillcolor=white, label=\"{}", event.short_name())?;
 
             if let Some(event_payload) = event.vote().map(|vote| vote.payload()) {
                 write!(writer, "\n{:?}", event_payload)?;
@@ -271,9 +270,9 @@ mod detail {
                     for peer in &peer_ids {
                         if let Some(votes) = event_meta_votes.get(peer) {
                             if votes.is_empty() {
-                                write!(writer, "\n{}: []", first_char(peer).unwrap_or('E'))?;
+                                write!(writer, "\n{}: []", first_char(peer).unwrap_or('?'))?;
                             } else {
-                                write!(writer, "\n{}: [ ", first_char(peer).unwrap_or('E'))?;
+                                write!(writer, "\n{}: [ ", first_char(peer).unwrap_or('?'))?;
                                 for i in 0..votes.len() {
                                     if i == votes.len() - 1 {
                                         write!(writer, "{:?}]", votes[i])?;
