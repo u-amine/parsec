@@ -96,7 +96,7 @@ struct ParsingEvent {
     cause: String,
     self_parent: Option<String>,
     other_parent: Option<String>,
-    interesting_content: BTreeSet<Transaction>,
+    interesting_content: BTreeSet<Observation<Transaction, PeerId>>,
     last_ancestors: BTreeMap<PeerId, u64>,
     observations: BTreeSet<PeerId>,
 }
@@ -119,8 +119,17 @@ impl ParsingEvent {
         } else {
             split_vbc
                 .split(',')
-                .map(|s| Transaction::new(extract_between(s, "(", ")")))
-                .collect::<BTreeSet<_>>()
+                .map(|s| s.trim())
+                .map(|s| {
+                    let content = extract_between(s, "(", ")");
+                    let category = unwrap!(s.split('(').next());
+                    match category {
+                        "Add" => Observation::Add(PeerId::new(content)),
+                        "Remove" => Observation::Remove(PeerId::new(content)),
+                        "OpaquePayload" => Observation::OpaquePayload(Transaction::new(content)),
+                        _ => panic!("wrong interesting_content string: {:?}", s),
+                    }
+                }).collect::<BTreeSet<_>>()
         };
 
         let mut last_ancestors = BTreeMap::new();
@@ -174,12 +183,6 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
             .other_parent
             .and_then(|name| Some(name_hash_map[&name]));
 
-        let interesting_content = event
-            .interesting_content
-            .iter()
-            .map(|transction| Observation::OpaquePayload(transction.clone()))
-            .collect::<BTreeSet<_>>();
-
         let parsed_event: Event<Transaction, PeerId> = Event::new_from_dot_input(
             &PeerId::new(&event.creator),
             event.cause.as_ref(),
@@ -187,7 +190,7 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
             other_parent,
             event.index,
             event.last_ancestors,
-            interesting_content,
+            event.interesting_content,
         );
 
         let hash = *parsed_event.hash();

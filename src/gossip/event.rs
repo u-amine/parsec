@@ -361,11 +361,19 @@ impl Event<Transaction, PeerId> {
                 other_parent: unwrap!(other_parent),
             },
             _ => {
-                let payload =
-                    Transaction::new(unwrap!(unwrap!(cause.split('(').nth(2)).split(')').next()));
+                let content = unwrap!(unwrap!(cause.split('(').nth(2)).split(')').next());
+                let observation = if cause.contains("OpaquePayload") {
+                    Observation::OpaquePayload(Transaction::new(content))
+                } else if cause.contains("Add") {
+                    Observation::Add(PeerId::new(content))
+                } else if cause.contains("Remove") {
+                    Observation::Remove(PeerId::new(content))
+                } else {
+                    panic!("wrong cause string: {:?}", cause);
+                };
                 Cause::Observation {
                     self_parent: unwrap!(self_parent),
-                    vote: Vote::new(creator, Observation::OpaquePayload(payload)),
+                    vote: Vote::new(creator, observation),
                 }
             }
         };
