@@ -6,6 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use hash::Hash;
 use id::PublicId;
 use network_event::NetworkEvent;
 use std::collections::BTreeSet;
@@ -20,6 +21,21 @@ pub enum Observation<T: NetworkEvent, P: PublicId> {
     Add(P),
     /// Vote to remove the indicated peer from the network.
     Remove(P),
+    /// Vote to accuse a peer of malicious behaviour.
+    Accusation {
+        /// Public id of the peer committing the malice.
+        offender: P,
+        /// Type of the malice committed.
+        malice: Malice,
+    },
     /// Vote for an event which is opaque to Parsec.
     OpaquePayload(T),
+}
+
+/// Type of malicious behaviour.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Debug)]
+pub enum Malice {
+    /// Event carries a vote for `Observation::Genesis`, but shouldn't.
+    UnexpectedGenesis(Hash),
+    // TODO: add other malice variants
 }

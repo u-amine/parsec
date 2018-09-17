@@ -18,7 +18,7 @@ use meta_vote::{MetaVote, Step};
 #[cfg(test)]
 use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
-use observation::Observation;
+use observation::{Malice, Observation};
 use peer_list::PeerList;
 use round_hash::RoundHash;
 use serialise;
@@ -374,7 +374,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             return Ok(());
         }
         self.set_interesting_content(&event_hash)?;
-        self.process_event(&event_hash)
+        self.process_event(&event_hash)?;
+        self.handle_malice(&event_hash)?;
+
+        Ok(())
     }
 
     fn process_event(&mut self, event_hash: &Hash) -> Result<(), Error> {
@@ -410,6 +413,15 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     if peer_id == *self.our_pub_id() {
                         return Ok(());
                     }
+                }
+                Observation::Accusation { offender, malice } => {
+                    info!(
+                        "{:?} removing {:?} due to consensus on accusation of malice {:?}",
+                        self.our_pub_id(),
+                        offender,
+                        malice
+                    );
+                    self.peer_list.remove_peer(&offender);
                 }
                 Observation::OpaquePayload(_) => {}
             }
@@ -987,6 +999,62 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     // Get the responsiveness threshold based on the current number of peers.
     fn responsiveness_threshold(&self) -> usize {
         (self.peer_list.num_peers() as f64).log2().ceil() as usize
+    }
+
+    fn handle_malice(&mut self, event_hash: &Hash) -> Result<(), Error> {
+        let accusations: Vec<_> = {
+            let event = self.get_known_event(event_hash)?;
+            self.detect_malice(event)
+                .into_iter()
+                .map(|malice| (event.creator().clone(), malice))
+                .collect()
+        };
+
+        for (offender, malice) in accusations {
+            trace!(
+                "{:?} detected malice {:?} by {:?}",
+                self.our_pub_id(),
+                malice,
+                offender
+            );
+
+            self.vote_for(Observation::Accusation { offender, malice })?;
+        }
+
+        Ok(())
+    }
+
+    fn detect_malice(&self, event: &Event<T, S::PublicId>) -> Vec<Malice> {
+        let mut malices = Vec::new();
+
+        if self.detect_unexpected_genesis(event) {
+            malices.push(Malice::UnexpectedGenesis(*event.hash()));
+        }
+
+        // TODO: detect other forms of malice here
+
+        malices
+    }
+
+    // Detect whether the event carries unexpected `Observation::Genesis`.
+    fn detect_unexpected_genesis(&self, event: &Event<T, S::PublicId>) -> bool {
+        let payload = if let Some(payload) = event.vote().map(|v| v.payload()) {
+            payload
+        } else {
+            return false;
+        };
+
+        let genesis_group = if let Observation::Genesis(ref group) = *payload {
+            group
+        } else {
+            return false;
+        };
+
+        // - the creator is not member of the genesis group, or
+        // - the self-parent of the event is not initial event
+        !genesis_group.contains(event.creator()) || self
+            .self_parent(event)
+            .map_or(true, |self_parent| !self_parent.is_initial())
     }
 }
 
