@@ -414,7 +414,15 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                         return Ok(());
                     }
                 }
-                Observation::Accusation { .. } => {} // TODO: kick the offender out
+                Observation::Accusation { offender, malice } => {
+                    info!(
+                        "{:?} removing {:?} due to consensus on accusation of malice {:?}",
+                        self.our_pub_id(),
+                        offender,
+                        malice
+                    );
+                    self.peer_list.remove_peer(&offender);
+                }
                 Observation::OpaquePayload(_) => {}
             }
 
@@ -1020,7 +1028,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let mut malices = Vec::new();
 
         if self.detect_unexpected_genesis(event) {
-            malices.push(Malice::UnexpectedGenesis(event.hash().clone()));
+            malices.push(Malice::UnexpectedGenesis(*event.hash()));
         }
 
         // TODO: detect other forms of malice here
