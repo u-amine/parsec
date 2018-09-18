@@ -1,6 +1,8 @@
 digraph GossipGraph {
   splines=false
   rankdir=BT
+/// our_id: Alice
+/// peer_states: {Alice: "Active", Bob: "Active", Carol: "Active", Dave: "Active"}
 /// { 0979c6..
 /// cause: Request
 /// interesting_content: {}

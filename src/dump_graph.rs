@@ -8,9 +8,10 @@
 
 use gossip::Event;
 use hash::Hash;
-use id::PublicId;
+use id::SecretId;
 use meta_vote::MetaVote;
 use network_event::NetworkEvent;
+use peer_list::PeerList;
 use std::collections::BTreeMap;
 
 /// Use this to initialise the folder into which the dot files will be dumped.  This allows the
@@ -28,13 +29,22 @@ pub(crate) fn init() {
 /// printed to stdout.  The function will never panic, and hence is suitable for use in creating
 /// these files after a thread has already panicked, e.g. in the case of a test failure.  No-op for
 /// case where `dump-graphs` feature not enabled.
-pub(crate) fn to_file<T: NetworkEvent, P: PublicId>(
-    _owner_id: &P,
-    _gossip_graph: &BTreeMap<Hash, Event<T, P>>,
-    _meta_votes: &BTreeMap<Hash, BTreeMap<P, Vec<MetaVote>>>,
+#[cfg(feature = "dump-graphs")]
+pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
+    owner_id: &S::PublicId,
+    gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
+    meta_votes: &BTreeMap<Hash, BTreeMap<S::PublicId, Vec<MetaVote>>>,
+    peer_list: &PeerList<S>,
 ) {
-    #[cfg(feature = "dump-graphs")]
-    detail::to_file(_owner_id, _gossip_graph, _meta_votes)
+    detail::to_file(owner_id, gossip_graph, meta_votes, peer_list)
+}
+#[cfg(not(feature = "dump-graphs"))]
+pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
+    _: &S::PublicId,
+    _: &BTreeMap<Hash, Event<T, S::PublicId>>,
+    _: &BTreeMap<Hash, BTreeMap<S::PublicId, Vec<MetaVote>>>,
+    _: &PeerList<S>,
+) {
 }
 
 #[cfg(feature = "dump-graphs")]
@@ -44,9 +54,10 @@ pub use self::detail::DIR;
 mod detail {
     use gossip::Event;
     use hash::Hash;
-    use id::PublicId;
+    use id::{PublicId, SecretId};
     use meta_vote::MetaVote;
     use network_event::NetworkEvent;
+    use peer_list::PeerList;
     use rand::{self, Rng};
     use serialise;
     use std::cell::RefCell;
@@ -111,10 +122,11 @@ mod detail {
         DIR.with(|_| ());
     }
 
-    pub(crate) fn to_file<T: NetworkEvent, P: PublicId>(
-        owner_id: &P,
-        gossip_graph: &BTreeMap<Hash, Event<T, P>>,
-        meta_votes: &BTreeMap<Hash, BTreeMap<P, Vec<MetaVote>>>,
+    pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
+        owner_id: &S::PublicId,
+        gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
+        meta_votes: &BTreeMap<Hash, BTreeMap<S::PublicId, Vec<MetaVote>>>,
+        peer_list: &PeerList<S>,
     ) {
         let id = format!("{:?}", owner_id);
         let call_count = DUMP_COUNTS.with(|counts| {
@@ -136,9 +148,13 @@ mod detail {
                         None
                     }
                 }).collect();
-            if let Err(error) =
-                write_gossip_graph_dot(&mut file, gossip_graph, meta_votes, &initial_events)
-            {
+            if let Err(error) = write_gossip_graph_dot(
+                &mut file,
+                gossip_graph,
+                meta_votes,
+                peer_list,
+                &initial_events,
+            ) {
                 println!("Error writing to {:?}: {:?}", file_path, error);
             }
         } else {
@@ -366,10 +382,11 @@ mod detail {
         }
     }
 
-    fn write_gossip_graph_dot<T: NetworkEvent, P: PublicId>(
+    fn write_gossip_graph_dot<T: NetworkEvent, S: SecretId>(
         writer: &mut Write,
-        gossip_graph: &BTreeMap<Hash, Event<T, P>>,
-        meta_votes: &BTreeMap<Hash, BTreeMap<P, Vec<MetaVote>>>,
+        gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
+        meta_votes: &BTreeMap<Hash, BTreeMap<S::PublicId, Vec<MetaVote>>>,
+        peer_list: &PeerList<S>,
         initial_events: &[Hash],
     ) -> io::Result<()> {
         let mut nodes = Vec::new();
@@ -389,12 +406,14 @@ mod detail {
         writeln!(writer, "  splines=false")?;
         writeln!(writer, "  rankdir=BT")?;
 
+        write_peerlist_to_dot(writer, peer_list)?;
+
         for event in gossip_graph.values() {
             event.write_to_dot_format(writer)?;
         }
 
         for node in &nodes {
-            let mut events: Vec<&Event<T, P>> = gossip_graph
+            let mut events: Vec<&Event<T, S::PublicId>> = gossip_graph
                 .values()
                 .filter_map(|event| {
                     if event.creator() == node {
@@ -413,4 +432,17 @@ mod detail {
         write_nodes(writer, &nodes)?;
         writeln!(writer, "}}")
     }
+
+    fn write_peerlist_to_dot<S: SecretId>(
+        writer: &mut Write,
+        peer_list: &PeerList<S>,
+    ) -> io::Result<()> {
+        writeln!(writer, "/// our_id: {:?}", peer_list.our_id().public_id())?;
+        let mut peer_states = BTreeMap::new();
+        for (name, state) in peer_list.iter() {
+            let _ = peer_states.insert(name, state.print_state());
+        }
+        writeln!(writer, "/// peer_states: {:?}", peer_states)
+    }
+
 }
