@@ -1106,8 +1106,7 @@ mod tests {
         assert!(event.is_initial());
     }
 
-    // TODO: remove this `cfg` once https://github.com/maidsafe/maidsafe_utilities/pull/130
-    //       is merged and the crate published.
+    // TODO: remove this `cfg` once the `maidsafe_utilities` crate with PR 130 is published.
     #[cfg(feature = "testing")]
     #[test]
     #[should_panic(expected = "Section can't be empty")]
@@ -1118,8 +1117,7 @@ mod tests {
         let _ = Parsec::<Transaction, _>::from_existing(our_id, &BTreeSet::new(), is_supermajority);
     }
 
-    // TODO: remove this `cfg` once https://github.com/maidsafe/maidsafe_utilities/pull/130
-    //       is merged and the crate published.
+    // TODO: remove this `cfg` once the `maidsafe_utilities` crate with PR 130 is published.
     #[cfg(feature = "testing")]
     #[test]
     #[should_panic(expected = "Section can't already contain us")]
@@ -1129,6 +1127,45 @@ mod tests {
         let peers = peers.into_iter().collect();
 
         let _ = Parsec::<Transaction, _>::from_existing(our_id, &peers, is_supermajority);
+    }
+
+    #[test]
+    fn from_genesis() {
+        let peers = mock::create_ids(10);
+        let our_id = unwrap!(peers.first()).clone();
+        let peers = peers.into_iter().collect();
+
+        let parsec =
+            Parsec::<Transaction, _>::from_genesis(our_id.clone(), &peers, is_supermajority);
+        // the peer_list should contain the entire genesis group
+        assert_eq!(parsec.peer_list.num_peers(), peers.len());
+        // initial event + genesis_observation
+        assert_eq!(parsec.events.len(), 2);
+        let initial_hash = parsec.events_order[0];
+        let initial_event = unwrap!(parsec.events.get(&initial_hash));
+        assert_eq!(*initial_event.creator(), our_id);
+        assert!(initial_event.is_initial());
+        let genesis_observation_hash = parsec.events_order[1];
+        let genesis_observation = unwrap!(parsec.events.get(&genesis_observation_hash));
+        assert_eq!(*genesis_observation.creator(), our_id);
+        match &genesis_observation.vote() {
+            Some(vote) => {
+                assert_eq!(*vote.payload(), Observation::Genesis(peers));
+            }
+            None => panic!("Expected observation, but event carried no vote"),
+        }
+    }
+
+    // TODO: remove this `cfg` once the `maidsafe_utilities` crate with PR 130 is published.
+    #[cfg(feature = "testing")]
+    #[test]
+    #[should_panic(expected = "Genesis group must contain us")]
+    fn from_genesis_requires_the_genesis_group_contains_us() {
+        let mut peers = mock::create_ids(10);
+        let our_id = unwrap!(peers.pop());
+        let peers = peers.into_iter().collect();
+
+        let _ = Parsec::<Transaction, _>::from_genesis(our_id.clone(), &peers, is_supermajority);
     }
 
     #[test]
