@@ -99,6 +99,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         genesis_group: &BTreeSet<S::PublicId>,
         is_interesting_event: IsInterestingEventFn<S::PublicId>,
     ) -> Self {
+        if !genesis_group.contains(our_id.public_id()) {
+            log_or_panic!("Genesis group must contain us");
+        }
+
         let mut parsec = Self::new(our_id, genesis_group, is_interesting_event);
 
         let genesis_observation = Observation::Genesis(genesis_group.clone());
