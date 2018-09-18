@@ -416,7 +416,7 @@ impl Schedule {
     /// `result` variable so the result can be saved when the `dump-graphs` feature is used.
     #[cfg_attr(feature = "cargo-clippy", allow(let_and_return))]
     pub fn new(env: &mut Environment, options: &ScheduleOptions) -> Schedule {
-        let mut peers: Vec<_> = env.network.peers.iter().map(|p| p.id.clone()).collect();
+        let mut peers: Vec<_> = env.network.peers.iter().map(|(id, _)| id.clone()).collect();
         let num_peers = env.network.peers.len();
         let mut pending = PendingObservations::new(&mut env.rng, &peers, &env.observations);
         let mut step = 0;

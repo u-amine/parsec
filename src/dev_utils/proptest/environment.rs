@@ -38,13 +38,7 @@ pub struct EnvironmentValueTree {
 
 impl EnvironmentValueTree {
     fn filtered_environment(&self, n_peers: usize, n_trans: usize) -> Environment {
-        let peer_ids = self
-            .max_env
-            .network
-            .peers
-            .iter()
-            .take(n_peers)
-            .map(|p| p.id.clone());
+        let peer_ids = self.max_env.network.peers.keys().take(n_peers).cloned();
         let network = Network::with_peers(peer_ids);
         let observations = self
             .max_env

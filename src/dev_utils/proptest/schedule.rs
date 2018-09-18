@@ -198,7 +198,7 @@ impl ScheduleValueTree {
 
 impl ScheduleValueTree {
     fn filtered_schedule(&self, env: &Environment) -> Schedule {
-        let peers_set: BTreeSet<_> = env.network.peers.iter().map(|p| p.id.clone()).collect();
+        let peers_set: BTreeSet<_> = env.network.peers.keys().cloned().collect();
         let trans_set: BTreeSet<_> = env.observations.iter().collect();
         let result = self
             .max_schedule

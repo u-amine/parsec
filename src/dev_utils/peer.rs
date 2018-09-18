@@ -13,19 +13,29 @@ use parsec::{self, Parsec};
 use std::collections::BTreeSet;
 use std::fmt::{self, Debug, Formatter};
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum PeerStatus {
+    Active,
+    Pending,
+    Removed,
+    Failed,
+}
+
 pub struct Peer {
     pub id: PeerId,
     pub parsec: Parsec<Transaction, PeerId>,
     /// The blocks returned by `parsec.poll()`, held in the order in which they were returned.
     pub blocks: Vec<Block<Transaction, PeerId>>,
+    pub status: PeerStatus,
 }
 
 impl Peer {
-    pub fn new(id: PeerId, genesis_group: &BTreeSet<PeerId>) -> Self {
+    pub fn new(id: PeerId, genesis_group: &BTreeSet<PeerId>, status: PeerStatus) -> Self {
         Self {
             id: id.clone(),
             parsec: Parsec::from_genesis(id, genesis_group, parsec::is_supermajority),
             blocks: vec![],
+            status: status,
         }
     }
 

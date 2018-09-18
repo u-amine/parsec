@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::peer::Peer;
+use super::peer::{Peer, PeerStatus};
 use super::schedule::{self, RequestTiming, Schedule, ScheduleEvent};
 use super::Observation;
 use gossip::{Request, Response};
@@ -25,7 +25,7 @@ struct QueueEntry {
 }
 
 pub struct Network {
-    pub peers: Vec<Peer>,
+    pub peers: BTreeMap<PeerId, Peer>,
     msg_queue: BTreeMap<PeerId, Vec<QueueEntry>>,
 }
 
@@ -48,8 +48,12 @@ impl Network {
         let genesis_group = all_ids.into_iter().collect::<BTreeSet<_>>();
         let peers = genesis_group
             .iter()
-            .map(|id| Peer::new(id.clone(), &genesis_group))
-            .collect();
+            .map(|id| {
+                (
+                    id.clone(),
+                    Peer::new(id.clone(), &genesis_group, PeerStatus::Active),
+                )
+            }).collect();
         Network {
             peers,
             msg_queue: BTreeMap::new(),
@@ -58,29 +62,25 @@ impl Network {
 
     /// Returns true if all peers hold the same sequence of stable blocks.
     pub fn blocks_all_in_sequence(&self) -> Result<(), DifferingBlocksOrder> {
-        let payloads = self.peers[0].blocks_payloads();
+        let first_peer = unwrap!(self.peers.iter().next()).1;
+        let payloads = first_peer.blocks_payloads();
         if let Some(peer) = self
             .peers
-            .iter()
+            .values()
             .find(|peer| peer.blocks_payloads() != payloads)
         {
-            Err((
-                &self.peers[0].id,
-                payloads,
-                &peer.id,
-                peer.blocks_payloads(),
-            ))
+            Err((&first_peer.id, payloads, &peer.id, peer.blocks_payloads()))
         } else {
             Ok(())
         }
     }
 
     fn peer(&mut self, id: &PeerId) -> &Peer {
-        unwrap!(self.peers.iter().find(|peer| peer.id == *id))
+        unwrap!(self.peers.get(id))
     }
 
     fn peer_mut(&mut self, id: &PeerId) -> &mut Peer {
-        unwrap!(self.peers.iter_mut().find(|peer| peer.id == *id))
+        unwrap!(self.peers.get_mut(id))
     }
 
     fn send_message(&mut self, src: PeerId, dst: &PeerId, message: Message, deliver_after: usize) {
@@ -134,7 +134,7 @@ impl Network {
 
     fn consensus_broken(&self) -> bool {
         let mut block_order = BTreeMap::new();
-        for peer in &self.peers {
+        for peer in self.peers.values() {
             for (index, block) in peer.blocks_payloads().into_iter().enumerate() {
                 let old_index = block_order.insert(block, index);
                 if old_index.map(|idx| idx != index).unwrap_or(false) {
@@ -147,7 +147,7 @@ impl Network {
     }
 
     fn consensus_complete(&self, num_observations: usize) -> bool {
-        self.peers[0].blocks_payloads().len() == num_observations
+        self.peers.iter().next().unwrap().1.blocks_payloads().len() == num_observations
             && self.blocks_all_in_sequence().is_ok()
     }
 
@@ -194,7 +194,7 @@ impl Network {
                     let _ = self.peer_mut(&peer).vote_for(&observation);
                 }
                 ScheduleEvent::Fail(peer) => {
-                    self.peers.retain(|p| p.id != peer);
+                    (*self.peer_mut(&peer)).status = PeerStatus::Failed;
                 }
             }
             if self.consensus_broken() || self.consensus_complete(num_observations) {
