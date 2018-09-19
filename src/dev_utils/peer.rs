@@ -107,6 +107,22 @@ impl Peers {
             .count()
     }
 
+    /// Returns an iterator through the list of the active peers
+    pub fn active_peers(&self) -> impl Iterator<Item = &PeerId> {
+        self.0
+            .iter()
+            .filter(|&(_, status)| *status == PeerStatus::Active)
+            .map(|(id, _)| id)
+    }
+
+    /// Returns an iterator through the list of the active peers
+    pub fn present_peers(&self) -> impl Iterator<Item = &PeerId> {
+        self.0
+            .iter()
+            .filter(|&(_, status)| *status == PeerStatus::Active || *status == PeerStatus::Failed)
+            .map(|(id, _)| id)
+    }
+
     fn num_failed_peers(&self) -> usize {
         self.0
             .values()
