@@ -241,14 +241,13 @@ impl PendingObservations {
     }
 
     /// Pops all the observations that should be made at `step` at the latest
-    pub fn pop_at_step(&mut self, step: usize) -> Vec<(PeerId, Observation)> {
+    pub fn pop_at_step(&mut self, peer: &PeerId, step: usize) -> Vec<Observation> {
         let mut result = vec![];
-        for (peer, queue) in &mut self.queues {
-            let to_leave = queue.split_off(&(step + 1));
-            let popped = mem::replace(queue, to_leave);
-            for (_, observations) in popped {
-                result.extend(observations.into_iter().map(|o| (peer.clone(), o)));
-            }
+        let queue = self.queues.get_mut(peer).unwrap();
+        let to_leave = queue.split_off(&(step + 1));
+        let popped = mem::replace(queue, to_leave);
+        for (_, observations) in popped {
+            result.extend(observations.into_iter());
         }
         result
     }
