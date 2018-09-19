@@ -81,7 +81,7 @@ impl Strategy for ScheduleOptionsStrategy {
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let max_sched = ScheduleOptions {
             prob_local_step: self.local_step.min(),
-            prob_recv_trans: self.recv_trans.max(),
+            prob_opaque: self.recv_trans.max(),
             prob_failure: self.failure.max(),
             prob_vote_duplication: self.vote_duplication.max(),
             delay_distr: self.delay_distr.max(),
@@ -89,7 +89,7 @@ impl Strategy for ScheduleOptionsStrategy {
         };
         let min_sched = ScheduleOptions {
             prob_local_step: self.local_step.max(),
-            prob_recv_trans: self.recv_trans.min(),
+            prob_opaque: self.recv_trans.min(),
             prob_failure: self.failure.min(),
             prob_vote_duplication: self.vote_duplication.min(),
             delay_distr: self.delay_distr.min(),
@@ -109,7 +109,7 @@ impl Strategy for ScheduleOptionsStrategy {
             .prop_map(|(f, v, r, l, d)| ScheduleOptions {
                 prob_failure: f,
                 prob_vote_duplication: v,
-                prob_recv_trans: r,
+                prob_opaque: r,
                 prob_local_step: l,
                 delay_distr: d,
                 ..Default::default()
