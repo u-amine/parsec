@@ -12,6 +12,7 @@ use super::Peers;
 #[cfg(feature = "dump-graphs")]
 use dump_graph::DIR;
 use mock::{PeerId, Transaction, NAMES};
+use observation::Observation as ParsecObservation;
 use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -375,56 +376,106 @@ enum ObservationEvent {
     Fail(PeerId),
 }
 
-type ObservationSchedule = Vec<(usize, ObservationEvent)>;
-
-fn gen_observation_schedule<R: Rng>(rng: &mut R, options: &ScheduleOptions) -> ObservationSchedule {
-    let mut schedule = vec![];
-    let mut names_iter = NAMES.iter();
-
-    // a counter for peer adds/removes and opaque transactions
-    // (so not counting genesis and failures)
-    let mut num_observations: usize = 0;
-    let mut added_peers: usize = 0;
-    let mut removed_peers: usize = 0;
-    // schedule genesis first
-    let genesis_names = names_iter
-        .by_ref()
-        .take(options.genesis_size)
-        .map(|s| PeerId::new(*s))
-        .collect();
-    let mut peers = Peers::new(&genesis_names);
-    schedule.push((0, ObservationEvent::Genesis(genesis_names)));
-
-    let mut step: usize = 1;
-    while num_observations < options.opaque_to_add + options.peers_to_add + options.peers_to_remove
-    {
-        if rng.gen::<f64>() < options.prob_opaque {
-            schedule.push((step, ObservationEvent::Opaque(rng.gen())));
-            num_observations += 1;
+impl ObservationEvent {
+    pub fn is_opaque(&self) -> bool {
+        match *self {
+            ObservationEvent::Opaque(_) => true,
+            _ => false,
         }
-        if added_peers < options.peers_to_add && rng.gen::<f64>() < options.prob_add {
-            let next_id = PeerId::new(names_iter.next().unwrap());
-            peers.add_peer(next_id.clone());
-            schedule.push((step, ObservationEvent::AddPeer(next_id)));
-            num_observations += 1;
-            added_peers += 1;
-        }
-        if removed_peers < options.peers_to_remove && rng.gen::<f64>() < options.prob_remove {
-            if let Some(id) = peers.remove_peer(rng, options.min_peers) {
-                schedule.push((step, ObservationEvent::RemovePeer(id)));
-                num_observations += 1;
-                removed_peers += 1;
-            }
-        }
-        if rng.gen::<f64>() < options.prob_failure {
-            if let Some(id) = peers.fail_peer(rng, options.min_peers) {
-                schedule.push((step, ObservationEvent::Fail(id)));
-            }
-        }
-        step += 1;
     }
 
-    schedule
+    pub fn get_opaque(self) -> Option<Observation> {
+        match self {
+            ObservationEvent::Opaque(t) => Some(ParsecObservation::OpaquePayload(t)),
+            _ => None,
+        }
+    }
+}
+
+struct ObservationSchedule {
+    pub genesis: BTreeSet<PeerId>,
+    /// A `Vec` of pairs (step number, event), carrying information about what events happen at
+    /// which steps
+    pub schedule: Vec<(usize, ObservationEvent)>,
+}
+
+impl ObservationSchedule {
+    fn gen<R: Rng>(rng: &mut R, options: &ScheduleOptions) -> ObservationSchedule {
+        let mut schedule = vec![];
+        let mut names_iter = NAMES.iter();
+
+        // a counter for peer adds/removes and opaque transactions
+        // (so not counting genesis and failures)
+        let mut num_observations: usize = 0;
+        let mut added_peers: usize = 0;
+        let mut removed_peers: usize = 0;
+        // schedule genesis first
+        let genesis_names = names_iter
+            .by_ref()
+            .take(options.genesis_size)
+            .map(|s| PeerId::new(*s))
+            .collect();
+        let mut peers = Peers::new(&genesis_names);
+
+        let mut step: usize = 1;
+        while num_observations
+            < options.opaque_to_add + options.peers_to_add + options.peers_to_remove
+        {
+            if rng.gen::<f64>() < options.prob_opaque {
+                schedule.push((step, ObservationEvent::Opaque(rng.gen())));
+                num_observations += 1;
+            }
+            if added_peers < options.peers_to_add && rng.gen::<f64>() < options.prob_add {
+                let next_id = PeerId::new(names_iter.next().unwrap());
+                peers.add_peer(next_id.clone());
+                schedule.push((step, ObservationEvent::AddPeer(next_id)));
+                num_observations += 1;
+                added_peers += 1;
+            }
+            if removed_peers < options.peers_to_remove && rng.gen::<f64>() < options.prob_remove {
+                if let Some(id) = peers.remove_peer(rng, options.min_peers) {
+                    schedule.push((step, ObservationEvent::RemovePeer(id)));
+                    num_observations += 1;
+                    removed_peers += 1;
+                }
+            }
+            if rng.gen::<f64>() < options.prob_failure {
+                if let Some(id) = peers.fail_peer(rng, options.min_peers) {
+                    schedule.push((step, ObservationEvent::Fail(id)));
+                }
+            }
+            step += 1;
+        }
+
+        ObservationSchedule {
+            genesis: genesis_names,
+            schedule,
+        }
+    }
+
+    fn extract_opaque(&mut self) -> Vec<Observation> {
+        let schedule = mem::replace(&mut self.schedule, vec![]);
+        let (opaque, rest): (Vec<_>, _) = schedule
+            .into_iter()
+            .partition(|&(_, ref observation)| observation.is_opaque());
+        self.schedule = rest;
+        opaque
+            .into_iter()
+            .filter_map(|(_, o)| o.get_opaque())
+            .collect()
+    }
+
+    fn for_step(&mut self, step: usize) -> Vec<ObservationEvent> {
+        let schedule = mem::replace(&mut self.schedule, vec![]);
+        let schedule_iter = schedule.into_iter();
+        let current = schedule_iter
+            .by_ref()
+            .take_while(|&(scheduled_step, _)| scheduled_step <= step)
+            .map(|(_, obs)| obs)
+            .collect();
+        self.schedule = schedule_iter.collect();
+        current
+    }
 }
 
 /// Stores the list of network events to be simulated.
