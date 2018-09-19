@@ -60,7 +60,6 @@
     variant_size_differences
 )]
 
-#[cfg(feature = "dump-graphs")]
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]

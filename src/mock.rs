@@ -20,6 +20,13 @@ const NAMES: &[&str] = &[
     "Lucy", "Mike", "Nina", "Oran", "Paul", "Quin", "Rose", "Stan", "Tina",
 ];
 
+lazy_static! {
+    static ref PEERS: Vec<PeerId> = NAMES
+        .iter()
+        .map(|name| PeerId::new_with_random_keypair(name))
+        .collect();
+}
+
 /// **NOT FOR PRODUCTION USE**: Mock signature type.
 #[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Signature(SafeSignature);
@@ -42,6 +49,14 @@ pub struct PeerId {
 
 impl PeerId {
     pub fn new(id: &str) -> Self {
+        PEERS
+            .iter()
+            .find(|peer| peer.id == id)
+            .unwrap_or(&PeerId::new_with_random_keypair(id))
+            .clone()
+    }
+
+    fn new_with_random_keypair(id: &str) -> Self {
         let (pub_sign, sec_sign) = gen_sign_keypair();
         Self {
             id: id.to_string(),
