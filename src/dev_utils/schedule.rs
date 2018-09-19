@@ -190,61 +190,78 @@ impl ScheduleEvent {
     }
 }
 
+fn binomial<R: Rng>(rng: &mut R, n: usize, p: f64) -> usize {
+    let mut successes = 0;
+    for _ in 0..n {
+        if rng.gen::<f64>() < p {
+            successes += 1;
+        }
+    }
+    successes
+}
+
 /// Stores pending observations per node, so that nodes only vote for each observation once.
-pub struct PendingObservations(BTreeMap<PeerId, Vec<Observation>>);
+pub struct PendingObservations {
+    min_delay: usize,
+    max_delay: usize,
+    p_delay: f64,
+    queues: BTreeMap<PeerId, BTreeMap<usize, Vec<Observation>>>,
+}
 
 impl PendingObservations {
-    pub fn new<R: Rng>(
-        rng: &mut R,
-        peers: &[PeerId],
-        observations: &[Observation],
-    ) -> PendingObservations {
-        let mut inner = BTreeMap::new();
-        for peer in peers {
-            let mut trans = observations.to_vec();
-            rng.shuffle(&mut trans);
-            let _ = inner.insert(peer.clone(), trans);
+    pub fn new() -> PendingObservations {
+        PendingObservations {
+            min_delay: 1,
+            max_delay: 21,
+            p_delay: 0.4,
+            queues: BTreeMap::new(),
         }
-        PendingObservations(inner)
     }
 
-    /// Gets the next observation for a given node, and removes it from the cache
-    pub fn next_for_peer(&mut self, peer: &PeerId) -> Option<Observation> {
-        self.0.get_mut(peer).and_then(|trans| trans.pop())
+    /// Add the observation to peers' queues at a random step after the event happened
+    pub fn peers_make_observation<'a, R: Rng, I: Iterator<Item = &'a PeerId>>(
+        &mut self,
+        rng: &mut R,
+        peers: I,
+        step: usize,
+        observation: Observation,
+    ) {
+        for peer in peers {
+            let observations = self
+                .queues
+                .entry(peer.clone())
+                .or_insert_with(BTreeMap::new);
+            let tgt_step = step
+                + self.min_delay
+                + binomial(rng, self.max_delay - self.min_delay, self.p_delay);
+            let step_observations = observations.entry(tgt_step).or_insert_with(Vec::new);
+            step_observations.push(observation);
+        }
     }
 
-    /// Gets the next observation for a given node without removing it
-    pub fn peek_next_for_peer(&mut self, peer: &PeerId) -> Option<Observation> {
-        self.0.get_mut(peer).and_then(|trans| trans.last().cloned())
-    }
-
-    /// Returns the list of names of peers that still have pending observations
-    pub fn nonempty_peers(&self) -> Vec<PeerId> {
-        self.0
-            .iter()
-            .filter(|&(_, v)| !v.is_empty())
-            .map(|(k, _)| k.clone())
-            .collect()
+    /// Pops all the observations that should be made at `step` at the latest
+    pub fn pop_at_step(&mut self, step: usize) -> Vec<(PeerId, Observation)> {
+        let mut result = vec![];
+        for (peer, queue) in &mut self.queues {
+            let to_leave = queue.split_off(&(step + 1));
+            let popped = mem::replace(queue, to_leave);
+            for (_, observations) in popped {
+                result.extend(observations.into_iter().map(|o| (peer.clone(), o)));
+            }
+        }
+        result
     }
 
     /// Returns true if no more peers have pending observations
     pub fn is_empty(&self) -> bool {
-        self.0.values().all(|v| v.is_empty())
+        self.queues.values().all(|v| v.is_empty())
     }
 
     /// Removes peers that failed
     pub fn remove_peers<I: IntoIterator<Item = PeerId>>(&mut self, peers: I) {
         for peer in peers {
-            let _ = self.0.remove(&peer);
+            let _ = self.queues.remove(&peer);
         }
-    }
-
-    /// Returns an iterator of all (peer, observation) pairs, clearing the observation cache in the
-    /// process.
-    pub fn all_observations(&mut self) -> impl Iterator<Item = (PeerId, Observation)> {
-        let data = mem::replace(&mut self.0, BTreeMap::new());
-        data.into_iter()
-            .flat_map(|(peer, x)| x.into_iter().map(move |trans| (peer.clone(), trans)))
     }
 }
 
