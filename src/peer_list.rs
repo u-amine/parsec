@@ -10,6 +10,8 @@ use error::Error;
 use gossip::Event;
 use hash::Hash;
 use id::SecretId;
+#[cfg(test)]
+use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
 use serialise;
 use std::collections::btree_map::{self, BTreeMap, Entry};
@@ -146,6 +148,54 @@ impl<S: SecretId> PeerList<S> {
     }
 }
 
+#[cfg(test)]
+impl PeerList<PeerId> {
+    // Creates a new PeerList using the input parameters directly
+    pub(super) fn new_from_dot_input(
+        our_id: PeerId,
+        events_graph: &BTreeMap<Hash, Event<Transaction, PeerId>>,
+        peer_states: &BTreeMap<PeerId, String>,
+    ) -> Self {
+        let mut peers = BTreeMap::new();
+        let mut peer_id_hashes = Vec::new();
+        for (peer_id, state_str) in peer_states {
+            let mut events = BTreeMap::new();
+            for event in events_graph.values() {
+                if event.creator() == peer_id {
+                    if let Some(prev_hash) = events.insert(event.index(), *event.hash()) {
+                        debug!(
+                            "index of {:?} updated from {:?} to {:?}",
+                            event.index(),
+                            prev_hash,
+                            event.hash()
+                        );
+                    }
+                } else if !peer_states.contains_key(event.creator()) {
+                    debug!(
+                        "peer_states list doesn't contain the creator of event {:?}",
+                        event
+                    );
+                }
+            }
+            let state = match state_str.as_ref() {
+                "Pending" => PeerState::Pending,
+                "Active" => PeerState::Active,
+                "Removed" => PeerState::Removed,
+                _ => panic!("wrong state string: {:?}", state_str),
+            };
+            let _ = peers.insert(peer_id.clone(), Peer { state, events });
+            peer_id_hashes.push((Hash::from(serialise(&peer_id).as_slice()), peer_id.clone()))
+        }
+
+        PeerList {
+            our_id,
+            peers,
+            peer_id_hashes,
+        }
+    }
+}
+
+#[derive(Debug)]
 enum PeerState {
     Pending,
     Active,
@@ -184,5 +234,10 @@ impl Peer {
             state: PeerState::Pending,
             events: BTreeMap::new(),
         }
+    }
+
+    #[cfg(feature = "dump-graphs")]
+    pub fn print_state(&self) -> String {
+        format!("{:?}", self.state)
     }
 }

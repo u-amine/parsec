@@ -11,6 +11,7 @@ use hash::Hash;
 use meta_vote::{BoolSet, MetaVote, Step};
 use mock::{PeerId, Transaction};
 use observation::Observation;
+use peer_list::PeerList;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{self, Read};
@@ -21,9 +22,11 @@ use std::thread;
 
 /// The event graph and associated info that were parsed from the dumped dot file.
 pub(crate) struct ParsedContents {
+    pub our_id: PeerId,
     pub events: BTreeMap<Hash, Event<Transaction, PeerId>>,
     pub events_order: Vec<Hash>,
     pub meta_votes: BTreeMap<Hash, BTreeMap<PeerId, Vec<MetaVote>>>,
+    pub peer_list: PeerList<PeerId>,
 }
 
 /// Read a dumped dot file and return with parsed event graph and associated info.
@@ -109,17 +112,16 @@ impl ParsingEvent {
         cause: String,
         self_parent: Option<String>,
         other_parent: Option<String>,
-        blocks_carried_string: &str,
+        interesting_content_string: &str,
         last_ancestors_string: &str,
         observations: BTreeSet<PeerId>,
     ) -> Self {
-        let split_vbc = extract_between(blocks_carried_string, "{", "}");
+        let split_vbc = parse_entries(interesting_content_string);
         let interesting_content = if split_vbc.is_empty() {
             BTreeSet::new()
         } else {
             split_vbc
-                .split(',')
-                .map(|s| s.trim())
+                .iter()
                 .map(|s| {
                     let content = extract_between(s, "(", ")");
                     let category = unwrap!(s.split('(').next());
@@ -133,13 +135,8 @@ impl ParsingEvent {
         };
 
         let mut last_ancestors = BTreeMap::new();
-        let split_la = extract_between(last_ancestors_string, "{", "}");
-        if !split_la.is_empty() {
-            for entry in split_la.split(',').map(|s| s.trim()) {
-                let split_entry = entry.split(": ").collect::<Vec<_>>();
-                let _ = last_ancestors
-                    .insert(PeerId::new(split_entry[0]), unwrap!(split_entry[1].parse()));
-            }
+        for (peer, index) in parse_peer_entries(last_ancestors_string) {
+            let _ = last_ancestors.insert(peer, unwrap!(index.parse()));
         }
 
         ParsingEvent {
@@ -152,6 +149,24 @@ impl ParsingEvent {
             last_ancestors,
             observations,
         }
+    }
+}
+
+fn parse_peer_entries<'a>(input: &'a str) -> BTreeMap<PeerId, &'a str> {
+    let mut result = BTreeMap::new();
+    for entry in &parse_entries(input) {
+        let split_entry = entry.split(": ").collect::<Vec<_>>();
+        let _ = result.insert(PeerId::new(split_entry[0]), split_entry[1]);
+    }
+    result
+}
+
+fn parse_entries<'a>(input: &'a str) -> Vec<&'a str> {
+    let split = extract_between(input, "{", "}");
+    if split.is_empty() {
+        Vec::new()
+    } else {
+        split.split(',').map(|s| s.trim()).collect()
     }
 }
 
@@ -212,11 +227,26 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
 
     assert_eq!(events.len(), length);
 
+    let our_id = PeerId::new(extract_between(&contents, "/// our_id: ", "\n"));
+    let peer_list =
+        PeerList::new_from_dot_input(our_id.clone(), &events, &parse_peer_states(&contents));
     Ok(ParsedContents {
+        our_id,
         events,
         events_order,
         meta_votes,
+        peer_list,
     })
+}
+
+fn parse_peer_states(contents: &str) -> BTreeMap<PeerId, String> {
+    let states_string = extract_between(contents, "/// peer_states", "\n");
+    let mut peer_states = BTreeMap::new();
+    for (peer, state_string) in parse_peer_entries(states_string) {
+        let state = unwrap!(state_string.split('\"').nth(1));
+        let _ = peer_states.insert(peer, state.to_string());
+    }
+    peer_states
 }
 
 fn parse_event_graph(contents: &str) -> BTreeMap<String, ParsingEvent> {

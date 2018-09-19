@@ -389,7 +389,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.set_meta_votes(event_hash)?;
         self.update_round_hashes(event_hash);
         if let Some(block) = self.next_stable_block() {
-            dump_graph::to_file(self.our_pub_id(), &self.events, &self.meta_votes);
+            dump_graph::to_file(
+                self.our_pub_id(),
+                &self.events,
+                &self.meta_votes,
+                &self.peer_list,
+            );
             self.clear_consensus_data(block.payload());
             let payload_hash = Hash::from(serialise(block.payload()).as_slice());
             info!(
@@ -1065,18 +1070,24 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 impl<T: NetworkEvent, S: SecretId> Drop for Parsec<T, S> {
     fn drop(&mut self) {
         if ::std::thread::panicking() {
-            dump_graph::to_file(self.our_pub_id(), &self.events, &self.meta_votes);
+            dump_graph::to_file(
+                self.our_pub_id(),
+                &self.events,
+                &self.meta_votes,
+                &self.peer_list,
+            );
         }
     }
 }
 
 #[cfg(test)]
 impl Parsec<Transaction, PeerId> {
-    pub(crate) fn from_parsed_contents(peer_id: PeerId, parsed_contents: ParsedContents) -> Self {
-        let mut parsec = Parsec::empty(peer_id, is_supermajority);
+    pub(crate) fn from_parsed_contents(parsed_contents: ParsedContents) -> Self {
+        let mut parsec = Parsec::empty(parsed_contents.our_id, is_supermajority);
         parsec.events = parsed_contents.events;
         parsec.events_order = parsed_contents.events_order;
         parsec.meta_votes = parsed_contents.meta_votes;
+        parsec.peer_list = parsed_contents.peer_list;
         parsec
     }
 }
@@ -1173,8 +1184,7 @@ mod tests {
         let input_file = "0.dot";
         let parsed_contents = parse_test_dot_file(input_file);
         let parsed_contents_comparison = parse_test_dot_file(input_file);
-        let peer_id = PeerId::new("Alice");
-        let parsec = Parsec::from_parsed_contents(peer_id, parsed_contents);
+        let parsec = Parsec::from_parsed_contents(parsed_contents);
         assert_eq!(parsed_contents_comparison.events, parsec.events);
         assert_eq!(parsed_contents_comparison.events_order, parsec.events_order);
         assert_eq!(parsed_contents_comparison.meta_votes, parsec.meta_votes);
