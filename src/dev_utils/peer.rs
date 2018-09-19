@@ -138,7 +138,7 @@ impl Peers {
     // Randomly chooses a peer to remove. Only actually removes if removing won't cause the failed
     // peers to go over N/3.
     // Returns the removed peer's name if removing occurred.
-    pub fn remove_peer<R: Rng>(&mut self, rng: &mut R, min_active: usize) -> Option<PeerId> {
+    pub fn remove_random_peer<R: Rng>(&mut self, rng: &mut R, min_active: usize) -> Option<PeerId> {
         let mut active_peers = self.num_active_peers();
         let mut failed_peers = self.num_failed_peers();
         let name = self.choose_name_to_remove(rng);
@@ -161,10 +161,16 @@ impl Peers {
         }
     }
 
+    /// Remove the given peer
+    pub fn remove_peer(&mut self, peer: &PeerId) {
+        let status = self.0.get_mut(peer).unwrap();
+        *status = PeerStatus::Removed;
+    }
+
     /// Randomly chooses a peer to fail. Only actually fails if it won't cause the failed peers to
     /// go over N/3.
     /// Returns the failed peer's name if failing occurred.
-    pub fn fail_peer<R: Rng>(&mut self, rng: &mut R, min_active: usize) -> Option<PeerId> {
+    pub fn fail_random_peer<R: Rng>(&mut self, rng: &mut R, min_active: usize) -> Option<PeerId> {
         let active_peers = self.num_active_peers() - 1;
         let failed_peers = self.num_failed_peers() + 1;
         if 2 * failed_peers < active_peers && active_peers >= min_active {
@@ -175,5 +181,10 @@ impl Peers {
         } else {
             None
         }
+    }
+
+    pub fn fail_peer(&mut self, peer: &PeerId) {
+        let status = self.0.get_mut(peer).unwrap();
+        *status = PeerStatus::Failed;
     }
 }
