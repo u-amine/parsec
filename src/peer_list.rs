@@ -46,8 +46,8 @@ impl<S: SecretId> PeerList<S> {
     }
 
     /// Returns ids of all peers that can vote.
-    pub fn ids_that_can_vote(&self) -> impl Iterator<Item = &S::PublicId> {
-        self.peers_that_can_vote().map(|(id, _)| id)
+    pub fn voter_ids(&self) -> impl Iterator<Item = &S::PublicId> {
+        self.voters().map(|(id, _)| id)
     }
 
     /// Returns an unsorted map of Hash(peer_id) => peer_id
@@ -61,7 +61,7 @@ impl<S: SecretId> PeerList<S> {
     }
 
     /// Returns an iterator of peers that can vote
-    pub fn peers_that_can_vote(&self) -> impl Iterator<Item = (&S::PublicId, &Peer)> {
+    pub fn voters(&self) -> impl Iterator<Item = (&S::PublicId, &Peer)> {
         self.peers.iter().filter(|(_, peer)| peer.state.can_vote())
     }
 
@@ -69,7 +69,7 @@ impl<S: SecretId> PeerList<S> {
         self.peers
             .get(peer_id)
             .map(|peer| peer.state)
-            .unwrap_or_default()
+            .unwrap_or_else(PeerState::inactive)
     }
 
     pub fn our_state(&self) -> PeerState {
@@ -93,7 +93,7 @@ impl<S: SecretId> PeerList<S> {
 
     pub fn remove_peer(&mut self, peer_id: &S::PublicId) {
         if let Some(peer) = self.peers.get_mut(peer_id) {
-            peer.state = PeerState::default();
+            peer.state = PeerState::inactive();
         } else {
             debug!(
                 "{:?} tried to remove unknown peer {:?}",
@@ -105,7 +105,7 @@ impl<S: SecretId> PeerList<S> {
 
     /// Checks whether the input count becomes the super majority of the network.
     pub fn is_super_majority(&self, count: usize) -> bool {
-        3 * count > 2 * self.peers_that_can_vote().count()
+        3 * count > 2 * self.voters().count()
     }
 
     /// Returns the hash of the last event created by this peer. Returns `None` if cannot find.
@@ -221,7 +221,7 @@ impl PeerList<PeerId> {
 /// | false | false | true    | Us, when joining
 /// | false | false | false   | Inactive / Removed
 ///
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct PeerState(u8);
 
 impl PeerState {
@@ -231,6 +231,10 @@ impl PeerState {
     pub const SEND: Self = PeerState(0b0000_0010);
     /// The peer can receive gossips.
     pub const RECV: Self = PeerState(0b0000_0100);
+
+    pub fn inactive() -> Self {
+        PeerState(0)
+    }
 
     pub fn contains(self, other: Self) -> bool {
         self.0 & other.0 == other.0

@@ -313,7 +313,7 @@ fn parse_peer_state(input: &mut &str) -> PeerState {
     skip_whitespace(input);
     assert!(skip_string(input, "\"PeerState("));
 
-    let mut result = PeerState::default();
+    let mut result = PeerState::inactive();
 
     skip_whitespace(input);
     while !skip_string(input, ")") {

@@ -69,10 +69,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         genesis_group: &BTreeSet<S::PublicId>,
         is_interesting_event: IsInterestingEventFn<S::PublicId>,
     ) -> Self {
-        if genesis_group.is_empty() {
-            log_or_panic!("Genesis group can't be empty");
-        }
-
         if !genesis_group.contains(our_id.public_id()) {
             log_or_panic!("Genesis group must contain us");
         }
@@ -490,60 +486,63 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             let observation = block.payload().clone();
             self.consensused_blocks.push_back(block);
 
-            match observation {
-                Observation::Genesis(peer_ids) => {
-                    // TODO: this is probably useless, as we already have genesis
-                    // members in the peer list.
-                    for peer_id in peer_ids {
-                        self.peer_list
-                            .add_peer(peer_id, PeerState::VOTE | PeerState::SEND);
-                    }
-                }
-                Observation::Add(peer_id) => {
-                    // - If we are already full member of the section, we can start
-                    //   sending gossips to the new peer from this moment.
-                    // - If we are the new peer, we must wait for the other members
-                    //   to send gossips to us first.
-                    //
-                    // To distinguish between the two, we check whether we can contact
-                    // all the peers we know that can vote.
-                    let recv = self
-                        .peer_list
-                        .iter()
-                        .filter(|&(id, peer)| {
-                            peer.state.can_vote() && *id != peer_id && *id != *self.our_pub_id()
-                        }).all(|(_, peer)| peer.state.can_recv());
-
-                    self.peer_list.add_peer(
-                        peer_id,
-                        if recv {
-                            PeerState::VOTE | PeerState::SEND | PeerState::RECV
-                        } else {
-                            PeerState::VOTE | PeerState::SEND
-                        },
-                    );
-                }
-                Observation::Remove(peer_id) => {
-                    self.peer_list.remove_peer(&peer_id);
-                    if peer_id == *self.our_pub_id() {
-                        return Ok(());
-                    }
-                }
-                Observation::Accusation { offender, malice } => {
-                    info!(
-                        "{:?} removing {:?} due to consensus on accusation of malice {:?}",
-                        self.our_pub_id(),
-                        offender,
-                        malice
-                    );
-                    self.peer_list.remove_peer(&offender);
-                }
-                Observation::OpaquePayload(_) => {}
+            if !self.handle_consensus(observation) {
+                return Ok(());
             }
 
             self.restart_consensus(&payload_hash);
         }
         Ok(())
+    }
+
+    fn handle_consensus(&mut self, observation: Observation<T, S::PublicId>) -> bool {
+        match observation {
+            Observation::Genesis(_) => {
+                // TODO: handle malice
+            }
+            Observation::Add(peer_id) => {
+                // - If we are already full member of the section, we can start
+                //   sending gossips to the new peer from this moment.
+                // - If we are the new peer, we must wait for the other members
+                //   to send gossips to us first.
+                //
+                // To distinguish between the two, we check whether we can contact
+                // all the peers we know that can vote.
+                let recv = self
+                    .peer_list
+                    .iter()
+                    .filter(|&(id, peer)| {
+                        peer.state.can_vote() && *id != peer_id && *id != *self.our_pub_id()
+                    }).all(|(_, peer)| peer.state.can_recv());
+
+                self.peer_list.add_peer(
+                    peer_id,
+                    if recv {
+                        PeerState::VOTE | PeerState::SEND | PeerState::RECV
+                    } else {
+                        PeerState::VOTE | PeerState::SEND
+                    },
+                );
+            }
+            Observation::Remove(peer_id) => {
+                self.peer_list.remove_peer(&peer_id);
+                if peer_id == *self.our_pub_id() {
+                    return false;
+                }
+            }
+            Observation::Accusation { offender, malice } => {
+                info!(
+                    "{:?} removing {:?} due to consensus on accusation of malice {:?}",
+                    self.our_pub_id(),
+                    offender,
+                    malice
+                );
+                self.peer_list.remove_peer(&offender);
+            }
+            Observation::OpaquePayload(_) => {}
+        }
+
+        true
     }
 
     fn set_interesting_content(&mut self, event_hash: &Hash) -> Result<(), Error> {
@@ -580,7 +579,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             }).filter(|&this_payload| !self.payload_is_already_carried(event, this_payload))
             .filter(|&this_payload| {
                 let voters = self.ancestors_carrying_payload(event, this_payload);
-                let all_peers = self.peer_list.ids_that_can_vote().collect();
+                let all_peers = self.peer_list.voter_ids().collect();
                 (self.is_interesting_event)(&voters, &all_peers)
             }).cloned()
             .collect())
@@ -675,7 +674,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 }
             } else if self.is_observer(event) {
                 // Start meta votes for this event.
-                for peer_id in self.peer_list.ids_that_can_vote() {
+                for peer_id in self.peer_list.voter_ids() {
                     let other_votes = self.collect_other_meta_votes(peer_id, event);
                     let initial_estimate = event.observations.contains(peer_id);
                     let _ = meta_votes.insert(
@@ -925,7 +924,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     }
                 })
             });
-            if decided_meta_votes.clone().count() < self.peer_list.peers_that_can_vote().count() {
+            if decided_meta_votes.clone().count() < self.peer_list.voters().count() {
                 None
             } else {
                 let elected_valid_blocks = decided_meta_votes
@@ -1122,9 +1121,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     // Get the responsiveness threshold based on the current number of peers.
     fn responsiveness_threshold(&self) -> usize {
-        (self.peer_list.peers_that_can_vote().count() as f64)
-            .log2()
-            .ceil() as usize
+        (self.peer_list.voters().count() as f64).log2().ceil() as usize
     }
 
     fn handle_malice(&mut self, event_hash: &Hash) -> Result<(), Error> {
@@ -1288,8 +1285,8 @@ mod functional_tests {
     // TODO: remove this `cfg` once the `maidsafe_utilities` crate with PR 130 is published.
     #[cfg(feature = "testing")]
     #[test]
-    #[should_panic(expected = "Section can't be empty")]
-    fn from_existing_requires_non_empty_section() {
+    #[should_panic(expected = "Genesis group can't be empty")]
+    fn from_existing_requires_non_empty_genesis_group() {
         use mock;
 
         let mut peers = mock::create_ids(10);
@@ -1298,7 +1295,46 @@ mod functional_tests {
 
         let _ = Parsec::<Transaction, _>::from_existing(
             our_id,
+            &BTreeSet::new(),
             &peers,
+            is_supermajority,
+        );
+    }
+
+    // TODO: remove this `cfg` once the `maidsafe_utilities` crate with PR 130 is published.
+    #[cfg(feature = "testing")]
+    #[test]
+    #[should_panic(expected = "Genesis group can't already contain us")]
+    fn from_existing_requires_that_genesis_group_does_not_contain_us() {
+        use mock;
+
+        let peers = mock::create_ids(10);
+        let our_id = unwrap!(peers.first()).clone();
+        let genesis_group = peers.iter().cloned().collect();
+        let section = peers.into_iter().skip(1).collect();
+
+        let _ = Parsec::<Transaction, _>::from_existing(
+            our_id,
+            &genesis_group,
+            &section,
+            is_supermajority,
+        );
+    }
+
+    // TODO: remove this `cfg` once the `maidsafe_utilities` crate with PR 130 is published.
+    #[cfg(feature = "testing")]
+    #[test]
+    #[should_panic(expected = "Section can't be empty")]
+    fn from_existing_requires_non_empty_section() {
+        use mock;
+
+        let mut peers = mock::create_ids(10);
+        let our_id = unwrap!(peers.pop());
+        let genesis_group = peers.into_iter().collect();
+
+        let _ = Parsec::<Transaction, _>::from_existing(
+            our_id,
+            &genesis_group,
             &BTreeSet::new(),
             is_supermajority,
         );
