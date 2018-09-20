@@ -1093,10 +1093,23 @@ impl Parsec<Transaction, PeerId> {
 }
 
 #[cfg(test)]
-mod tests {
+mod functional_tests {
     use super::*;
     use dev_utils::parse_test_dot_file;
     use mock::{self, Transaction};
+
+    macro_rules! assert_err_eq {
+        ($expected_error:tt, $result:expr) => {
+            match $result {
+                Err(Error::$expected_error) => (),
+                unexpected => panic!(
+                    "Expected {}, but got {:?}",
+                    stringify!($expected_error),
+                    unexpected
+                ),
+            }
+        };
+    }
 
     #[test]
     fn from_existing() {
@@ -1193,5 +1206,40 @@ mod tests {
         assert_ne!(parsed_contents_other.events, parsec.events);
         assert_ne!(parsed_contents_other.events_order, parsec.events_order);
         assert_ne!(parsed_contents_other.meta_votes, parsec.meta_votes);
+    }
+
+    #[test]
+    fn remove_peer() {
+        let mut parsed_contents = parse_test_dot_file("remove_eric.dot");
+        // The final decision to remove Eric is reached in the last event of Alice.
+        let a_last_hash = unwrap!(parsed_contents.events_order.pop());
+        let a_last = unwrap!(parsed_contents.events.remove(&a_last_hash));
+
+        let mut alice = Parsec::from_parsed_contents(parsed_contents);
+        let eric_id = PeerId::new("Eric");
+        assert!(alice.peer_list.all_ids().contains(&&eric_id));
+        assert!(!alice.peer_list.is_removed(&&eric_id));
+
+        // Add event now which shall result in Alice removing Eric.
+        unwrap!(alice.add_event(a_last));
+        assert!(alice.peer_list.is_removed(&&eric_id));
+
+        // Try calling `create_gossip()` for Eric shall result in error.
+        assert_err_eq!(RemovedPeer, alice.create_gossip(Some(eric_id.clone())));
+
+        // Construct Eric's parsec instance.
+        let mut section: BTreeSet<PeerId> =
+            alice.peer_list.all_ids().into_iter().cloned().collect();
+        let _ = section.remove(&eric_id);
+        let mut eric =
+            Parsec::<Transaction, _>::from_existing(eric_id.clone(), &section, is_supermajority);
+        // Peer state is 'pending' when created from existing. Need to call 'add_peer' to update
+        // the state to 'active'.
+        for peer_id in section {
+            eric.peer_list.add_peer(peer_id);
+        }
+        let request = unwrap!(eric.create_gossip(Some(PeerId::new("Alice"))));
+        // Message from a removed peer shall result in error.
+        assert_err_eq!(RemovedPeer, alice.handle_request(&eric_id, request));
     }
 }
