@@ -11,9 +11,6 @@ use maidsafe_utilities::SeededRng;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fmt;
 
-pub struct PeerCount(pub usize);
-pub struct ObservationCount(pub usize);
-
 pub trait RngDebug: Rng + fmt::Debug {}
 
 impl RngDebug for SeededRng {}
@@ -36,7 +33,7 @@ impl Environment {
     /// Initialise the test environment with the given number of peers and observations.  The random
     /// number generator will be seeded with `seed` or randomly if this is `SeededRandom`.
     pub fn new(seed: RngChoice) -> Self {
-        let mut rng: Box<RngDebug> = match seed {
+        let rng: Box<RngDebug> = match seed {
             RngChoice::SeededRandom => Box::new(SeededRng::new()),
             RngChoice::Seeded(seed) => Box::new(SeededRng::from_seed(seed)),
             RngChoice::SeededXor(seed) => {
