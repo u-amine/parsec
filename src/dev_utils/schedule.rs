@@ -198,7 +198,7 @@ impl PendingObservations {
                 + self.min_delay
                 + binomial(rng, self.max_delay - self.min_delay, self.p_delay);
             let step_observations = observations.entry(tgt_step).or_insert_with(Vec::new);
-            step_observations.push(observation);
+            step_observations.push(observation.clone());
         }
     }
 
@@ -293,8 +293,8 @@ impl ScheduleOptions {
 impl Default for ScheduleOptions {
     fn default() -> ScheduleOptions {
         ScheduleOptions {
-            // default genesis of 6 peers
-            genesis_size: 6,
+            // default genesis of 4 peers
+            genesis_size: 4,
             // local step on average every 6-7 steps - not too often
             prob_local_step: 0.15,
             // no randomised failures
@@ -427,7 +427,7 @@ impl ObservationSchedule {
 
     fn for_step(&mut self, step: usize) -> Vec<ObservationEvent> {
         let schedule = mem::replace(&mut self.schedule, vec![]);
-        let schedule_iter = schedule.into_iter();
+        let mut schedule_iter = schedule.into_iter();
         let current = schedule_iter
             .by_ref()
             .take_while(|&(scheduled_step, _)| scheduled_step <= step)
@@ -485,7 +485,8 @@ impl Schedule {
         rng: &mut R,
         step: usize,
         peers: &mut Peers,
-        pending: Option<&mut PendingObservations>,
+        // mut required to be able to use the inner reference in a loop
+        mut pending: Option<&mut PendingObservations>,
         schedule: &mut Vec<ScheduleEvent>,
         options: &ScheduleOptions,
     ) {
@@ -494,7 +495,7 @@ impl Schedule {
             if rng.gen::<f64>() < options.prob_local_step {
                 // we do a local step for peer
                 // first, they need to make observations
-                if let Some(pending) = pending {
+                if let Some(pending) = pending.as_mut() {
                     for observation in pending.pop_at_step(peer, step) {
                         schedule.push(ScheduleEvent::VoteFor(peer.clone(), observation));
                     }

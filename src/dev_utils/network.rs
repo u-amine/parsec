@@ -173,8 +173,8 @@ impl Network {
                 }
                 ScheduleEvent::AddPeer(peer) => {
                     let current_peers = self.peers.keys().cloned().collect();
-                    self.peers.insert(
-                        peer,
+                    let _ = self.peers.insert(
+                        peer.clone(),
                         Peer::new_joining(peer.clone(), &current_peers, &self.genesis),
                     );
                 }
