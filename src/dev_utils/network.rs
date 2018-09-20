@@ -30,12 +30,23 @@ pub struct Network {
     msg_queue: BTreeMap<PeerId, Vec<QueueEntry>>,
 }
 
-type DifferingBlocksOrder<'a> = (
-    &'a PeerId,
-    Vec<&'a Observation>,
-    &'a PeerId,
-    Vec<&'a Observation>,
-);
+#[derive(Debug)]
+pub struct BlocksOrder<'a> {
+    peer: &'a PeerId,
+    order: Vec<&'a Observation>,
+}
+
+#[derive(Debug)]
+pub enum ConsensusError<'a> {
+    DifferingBlocksOrder {
+        order_1: BlocksOrder<'a>,
+        order_2: BlocksOrder<'a>,
+    },
+    WrongBlocksNumber {
+        expected: usize,
+        got: usize,
+    },
+}
 
 impl Network {
     /// Create test network with the given initial number of peers (the genesis group).
@@ -68,14 +79,23 @@ impl Network {
     }
 
     /// Returns true if all peers hold the same sequence of stable blocks.
-    pub fn blocks_all_in_sequence(&self) -> Result<(), DifferingBlocksOrder> {
+    fn blocks_all_in_sequence(&self) -> Result<(), ConsensusError> {
         let first_peer = unwrap!(self.active_peers().next());
         let payloads = first_peer.blocks_payloads();
         if let Some(peer) = self
             .active_peers()
             .find(|peer| peer.blocks_payloads() != payloads)
         {
-            Err((&first_peer.id, payloads, &peer.id, peer.blocks_payloads()))
+            Err(ConsensusError::DifferingBlocksOrder {
+                order_1: BlocksOrder {
+                    peer: &first_peer.id,
+                    order: payloads,
+                },
+                order_2: BlocksOrder {
+                    peer: &peer.id,
+                    order: peer.blocks_payloads(),
+                },
+            })
         } else {
             Ok(())
         }
@@ -157,8 +177,20 @@ impl Network {
             && self.blocks_all_in_sequence().is_ok()
     }
 
+    /// Checks whether there is a right number of blocks and the blocks are in an agreeing order
+    fn check_consensus(&self, expected_len: usize) -> Result<(), ConsensusError> {
+        let len = self.active_peers().next().unwrap().blocks_payloads().len();
+        if len != expected_len {
+            return Err(ConsensusError::WrongBlocksNumber {
+                expected: expected_len,
+                got: len,
+            });
+        }
+        self.blocks_all_in_sequence()
+    }
+
     /// Simulates the network according to the given schedule
-    pub fn execute_schedule(&mut self, schedule: Schedule) {
+    pub fn execute_schedule(&mut self, schedule: Schedule) -> Result<(), ConsensusError> {
         let mut started_up = BTreeSet::new();
         let Schedule {
             num_observations,
@@ -227,5 +259,6 @@ impl Network {
                 break;
             }
         }
+        self.check_consensus(num_observations)
     }
 }

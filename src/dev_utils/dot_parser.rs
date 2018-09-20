@@ -616,9 +616,8 @@ mod tests {
                 ..Default::default()
             },
         );
-        env.network.execute_schedule(schedule);
 
-        let result = env.network.blocks_all_in_sequence();
+        let result = env.network.execute_schedule(schedule);
         assert!(result.is_ok(), "{:?}", result);
 
         let mut num_of_files = 0u8;

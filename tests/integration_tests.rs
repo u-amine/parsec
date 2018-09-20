@@ -94,9 +94,8 @@ mod test {
                 ..Default::default()
             },
         );
-        env.network.execute_schedule(schedule);
 
-        let result = env.network.blocks_all_in_sequence();
+        let result = env.network.execute_schedule(schedule);
         assert!(result.is_ok(), "{:?}", result);
     }
 
@@ -113,9 +112,8 @@ mod test {
                 ..Default::default()
             },
         );
-        env.network.execute_schedule(schedule);
 
-        let result = env.network.blocks_all_in_sequence();
+        let result = env.network.execute_schedule(schedule);
         assert!(result.is_ok(), "{:?}", result);
     }
 
@@ -131,9 +129,8 @@ mod test {
                 ..Default::default()
             },
         );
-        env.network.execute_schedule(schedule);
 
-        let result = env.network.blocks_all_in_sequence();
+        let result = env.network.execute_schedule(schedule);
         assert!(result.is_ok(), "{:?}", result);
     }
 
@@ -149,9 +146,8 @@ mod test {
                 ..Default::default()
             },
         );
-        env.network.execute_schedule(schedule);
 
-        let result = env.network.blocks_all_in_sequence();
+        let result = env.network.execute_schedule(schedule);
         assert!(result.is_ok(), "{:?}", result);
     }
 
@@ -173,9 +169,8 @@ mod test {
                 ..Default::default()
             },
         );
-        env.network.execute_schedule(schedule);
 
-        let result = env.network.blocks_all_in_sequence();
+        let result = env.network.execute_schedule(schedule);
         assert!(result.is_ok(), "{:?}", result);
     }
 
@@ -197,9 +192,8 @@ mod test {
                 ..Default::default()
             },
         );
-        env.network.execute_schedule(schedule);
 
-        let result = env.network.blocks_all_in_sequence();
+        let result = env.network.execute_schedule(schedule);
         assert!(result.is_ok(), "{:?}", result);
     }
 
@@ -218,9 +212,8 @@ mod test {
                 ..Default::default()
             },
         );
-        env.network.execute_schedule(schedule);
 
-        let result = env.network.blocks_all_in_sequence();
+        let result = env.network.execute_schedule(schedule);
         assert!(result.is_ok(), "{:?}", result);
     }
 
@@ -236,9 +229,8 @@ mod test {
                 ..Default::default()
             },
         );
-        env.network.execute_schedule(schedule);
 
-        let result = env.network.blocks_all_in_sequence();
+        let result = env.network.execute_schedule(schedule);
         assert!(result.is_ok(), "{:?}", result);
     }
 
@@ -254,9 +246,8 @@ mod test {
                 ..Default::default()
             },
         );
-        env.network.execute_schedule(schedule);
 
-        let result = env.network.blocks_all_in_sequence();
+        let result = env.network.execute_schedule(schedule);
         assert!(result.is_ok(), "{:?}", result);
     }
 
@@ -281,10 +272,9 @@ mod test {
             ..Default::default()
         }) {
             let _ = log::init(true);
-            env.network.execute_schedule(sched);
 
-            let result = env.network.blocks_all_in_sequence();
-            prop_assert!(result.is_ok(), "{:?}", result);
+            let result = env.network.execute_schedule(sched);
+            assert!(result.is_ok(), "{:?}", result);
         }
     }
 }
