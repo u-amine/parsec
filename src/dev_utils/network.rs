@@ -10,7 +10,7 @@ use super::peer::{Peer, PeerStatus};
 use super::schedule::{self, RequestTiming, Schedule, ScheduleEvent};
 use super::Observation;
 use gossip::{Request, Response};
-use mock::{self, PeerId, Transaction};
+use mock::{PeerId, Transaction};
 use std::collections::{BTreeMap, BTreeSet};
 
 enum Message {
@@ -26,6 +26,7 @@ struct QueueEntry {
 
 pub struct Network {
     pub peers: BTreeMap<PeerId, Peer>,
+    genesis: BTreeSet<PeerId>,
     msg_queue: BTreeMap<PeerId, Vec<QueueEntry>>,
 }
 
@@ -38,9 +39,12 @@ type DifferingBlocksOrder<'a> = (
 
 impl Network {
     /// Create test network with the given initial number of peers (the genesis group).
-    pub fn new(count: usize) -> Self {
-        let all_ids = mock::create_ids(count);
-        Self::with_peers(all_ids)
+    pub fn new() -> Self {
+        Network {
+            peers: BTreeMap::new(),
+            genesis: BTreeSet::new(),
+            msg_queue: BTreeMap::new(),
+        }
     }
 
     /// Create a test network with initial peers constructed from the given IDs
@@ -48,13 +52,10 @@ impl Network {
         let genesis_group = all_ids.into_iter().collect::<BTreeSet<_>>();
         let peers = genesis_group
             .iter()
-            .map(|id| {
-                (
-                    id.clone(),
-                    Peer::new(id.clone(), &genesis_group, PeerStatus::Active),
-                )
-            }).collect();
+            .map(|id| (id.clone(), Peer::new(id.clone(), &genesis_group)))
+            .collect();
         Network {
+            genesis: genesis_group,
             peers,
             msg_queue: BTreeMap::new(),
         }
@@ -160,6 +161,29 @@ impl Network {
         } = schedule;
         for event in events {
             match event {
+                ScheduleEvent::Genesis(genesis_group) => {
+                    let peers = genesis_group
+                        .iter()
+                        .map(|id| (id.clone(), Peer::new(id.clone(), &genesis_group)))
+                        .collect();
+                    self.peers = peers;
+                    self.genesis = genesis_group;
+                    // do a full reset while we're at it
+                    self.msg_queue = BTreeMap::new();
+                }
+                ScheduleEvent::AddPeer(peer) => {
+                    let current_peers = self.peers.keys().cloned().collect();
+                    self.peers.insert(
+                        peer,
+                        Peer::new_joining(peer.clone(), &current_peers, &self.genesis),
+                    );
+                }
+                ScheduleEvent::RemovePeer(peer) => {
+                    (*self.peer_mut(&peer)).status = PeerStatus::Removed;
+                }
+                ScheduleEvent::Fail(peer) => {
+                    (*self.peer_mut(&peer)).status = PeerStatus::Failed;
+                }
                 ScheduleEvent::LocalStep {
                     global_step,
                     peer,
@@ -192,9 +216,6 @@ impl Network {
                 }
                 ScheduleEvent::VoteFor(peer, observation) => {
                     let _ = self.peer_mut(&peer).vote_for(&observation);
-                }
-                ScheduleEvent::Fail(peer) => {
-                    (*self.peer_mut(&peer)).status = PeerStatus::Failed;
                 }
             }
             if self.consensus_broken() || self.consensus_complete(num_observations) {

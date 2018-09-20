@@ -6,10 +6,8 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::Observation;
 use dev_utils::network::Network;
 use maidsafe_utilities::SeededRng;
-use observation::Observation as ParsecObservation;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fmt;
 
@@ -23,7 +21,6 @@ impl RngDebug for XorShiftRng {}
 
 pub struct Environment {
     pub network: Network,
-    pub observations: Vec<Observation>,
     pub rng: Box<RngDebug>,
 }
 
@@ -38,11 +35,7 @@ pub enum RngChoice {
 impl Environment {
     /// Initialise the test environment with the given number of peers and observations.  The random
     /// number generator will be seeded with `seed` or randomly if this is `SeededRandom`.
-    pub fn new(
-        peer_count: &PeerCount,
-        observation_count: &ObservationCount,
-        seed: RngChoice,
-    ) -> Self {
+    pub fn new(seed: RngChoice) -> Self {
         let mut rng: Box<RngDebug> = match seed {
             RngChoice::SeededRandom => Box::new(SeededRng::new()),
             RngChoice::Seeded(seed) => Box::new(SeededRng::from_seed(seed)),
@@ -53,16 +46,9 @@ impl Environment {
             }
         };
 
-        let network = Network::new(peer_count.0);
-        let observations = (0..observation_count.0)
-            .map(|_| ParsecObservation::OpaquePayload(rng.gen()))
-            .collect::<Vec<Observation>>();
+        let network = Network::new();
 
-        Self {
-            network,
-            observations,
-            rng,
-        }
+        Self { network, rng }
     }
 }
 
@@ -70,9 +56,8 @@ impl fmt::Debug for Environment {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Environment({} peers, {} observations, {:?})",
+            "Environment({} peers, {:?})",
             self.network.peers.len(),
-            self.observations.len(),
             self.rng
         )
     }

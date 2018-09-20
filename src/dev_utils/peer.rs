@@ -31,12 +31,30 @@ pub struct Peer {
 }
 
 impl Peer {
-    pub fn new(id: PeerId, genesis_group: &BTreeSet<PeerId>, status: PeerStatus) -> Self {
+    pub fn new(id: PeerId, genesis_group: &BTreeSet<PeerId>) -> Self {
         Self {
             id: id.clone(),
             parsec: Parsec::from_genesis(id, genesis_group, parsec::is_supermajority),
             blocks: vec![],
-            status: status,
+            status: PeerStatus::Active,
+        }
+    }
+
+    pub fn new_joining(
+        id: PeerId,
+        current_group: &BTreeSet<PeerId>,
+        genesis_group: &BTreeSet<PeerId>,
+    ) -> Self {
+        Self {
+            id: id.clone(),
+            parsec: Parsec::from_existing(
+                id,
+                genesis_group,
+                current_group,
+                parsec::is_supermajority,
+            ),
+            blocks: vec![],
+            status: PeerStatus::Pending,
         }
     }
 
