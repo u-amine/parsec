@@ -6,18 +6,17 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::{Bounded, BoundedBoxedStrategy, EnvironmentStrategy, EnvironmentValueTree};
-use dev_utils::environment::Environment;
-use dev_utils::schedule::{
-    DelayDistribution, Request, RequestTiming, Schedule, ScheduleEvent, ScheduleOptions,
-};
-use proptest_crate::prelude::Just;
+use super::{Bounded, BoundedBoxedStrategy};
+use dev_utils::environment::{Environment, RngChoice};
+use dev_utils::schedule::{DelayDistribution, Schedule, ScheduleOptions};
+use proptest_crate::prelude::{Just, RngCore};
 use proptest_crate::strategy::{NewTree, Strategy, ValueTree};
 use proptest_crate::test_runner::TestRunner;
-use std::collections::BTreeSet;
 
 #[derive(Debug)]
 pub struct ScheduleOptionsStrategy {
+    pub num_peers: BoundedBoxedStrategy<usize>,
+    pub num_observations: BoundedBoxedStrategy<usize>,
     pub local_step: BoundedBoxedStrategy<f64>,
     pub recv_trans: BoundedBoxedStrategy<f64>,
     pub failure: BoundedBoxedStrategy<f64>,
@@ -65,6 +64,8 @@ where
 impl Default for ScheduleOptionsStrategy {
     fn default() -> ScheduleOptionsStrategy {
         ScheduleOptionsStrategy {
+            num_peers: Just(6).into(),
+            num_observations: Just(1).into(),
             local_step: Just(0.15).into(),
             recv_trans: Just(0.05).into(),
             failure: Just(0.0).into(),
@@ -80,6 +81,8 @@ impl Strategy for ScheduleOptionsStrategy {
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
         let max_sched = ScheduleOptions {
+            genesis_size: self.num_peers.max(),
+            opaque_to_add: self.num_observations.max(),
             prob_local_step: self.local_step.min(),
             prob_opaque: self.recv_trans.max(),
             prob_failure: self.failure.max(),
@@ -88,6 +91,8 @@ impl Strategy for ScheduleOptionsStrategy {
             ..Default::default()
         };
         let min_sched = ScheduleOptions {
+            genesis_size: self.num_peers.min(),
+            opaque_to_add: self.num_observations.min(),
             prob_local_step: self.local_step.max(),
             prob_opaque: self.recv_trans.min(),
             prob_failure: self.failure.min(),
@@ -100,13 +105,17 @@ impl Strategy for ScheduleOptionsStrategy {
         // "importance"
         let (l_min, l_max) = (self.local_step.min(), self.local_step.max());
         (
+            &self.num_peers,
+            &self.num_observations,
             &self.failure,
             &self.vote_duplication,
             &self.recv_trans,
             (&self.local_step).prop_map(move |l| l_max + l_min - l),
             &self.delay_distr,
         )
-            .prop_map(|(f, v, r, l, d)| ScheduleOptions {
+            .prop_map(|(np, no, f, v, r, l, d)| ScheduleOptions {
+                genesis_size: np,
+                opaque_to_add: no,
                 prob_failure: f,
                 prob_vote_duplication: v,
                 prob_opaque: r,
@@ -159,7 +168,6 @@ impl ValueTree for ScheduleOptionsValueTree {
 
 #[derive(Debug, Default)]
 pub struct ScheduleStrategy {
-    pub env: EnvironmentStrategy,
     pub opts: ScheduleOptionsStrategy,
 }
 
@@ -168,67 +176,47 @@ impl Strategy for ScheduleStrategy {
     type Tree = ScheduleValueTree;
 
     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
-        self.env
+        let seed = {
+            let rng = runner.rng();
+            [
+                rng.next_u32(),
+                rng.next_u32(),
+                rng.next_u32(),
+                rng.next_u32(),
+            ]
+        };
+        self.opts
             .new_tree(runner)
-            .and_then(|e| self.opts.new_tree(runner).map(|o| (e, o)))
-            .map(|(e, o)| ScheduleValueTree::new(e, o))
+            .and_then(|o| Ok(ScheduleValueTree::new(seed, o)))
     }
 }
 
 pub struct ScheduleValueTree {
-    env: EnvironmentValueTree,
+    seed: [u32; 4],
     opts: ScheduleOptionsValueTree,
+    #[allow(unused)]
     max_schedule: Schedule,
-    shrink_opts: bool,
 }
 
 impl ScheduleValueTree {
-    pub fn new(env: EnvironmentValueTree, opts: ScheduleOptionsValueTree) -> Self {
-        let mut max_env = env.max();
+    pub fn new(seed: [u32; 4], opts: ScheduleOptionsValueTree) -> Self {
+        let mut env = Environment::new(RngChoice::SeededXor(seed));
         let max_opts = opts.max();
-        let max_schedule = Schedule::new(&mut max_env, &max_opts);
+        let max_schedule = Schedule::new(&mut env, &max_opts);
         ScheduleValueTree {
-            env,
+            seed,
             opts,
             max_schedule,
-            shrink_opts: true,
         }
     }
 }
 
 impl ScheduleValueTree {
-    fn filtered_schedule(&self, env: &Environment) -> Schedule {
-        let peers_set: BTreeSet<_> = env.network.peers.keys().cloned().collect();
-        let trans_set: BTreeSet<_> = env.observations.iter().collect();
-        let result = self
-            .max_schedule
-            .events
-            .iter()
-            .filter(|&ev| match *ev {
-                ScheduleEvent::LocalStep {
-                    ref peer,
-                    ref request_timing,
-                    ..
-                } => {
-                    let request_ok = match *request_timing {
-                        RequestTiming::Later => true,
-                        RequestTiming::DuringThisStep(Request { ref recipient, .. })
-                        | RequestTiming::DuringThisStepIfNewData(Request {
-                            ref recipient, ..
-                        }) => peers_set.contains(recipient),
-                    };
-                    request_ok && peers_set.contains(peer)
-                }
-                ScheduleEvent::Fail(ref peer) => peers_set.contains(peer),
-                ScheduleEvent::VoteFor(ref peer, ref trans) => {
-                    peers_set.contains(peer) && trans_set.contains(trans)
-                }
-            }).cloned()
-            .collect();
-        Schedule {
-            events: result,
-            num_observations: env.observations.len(),
-        }
+    fn filtered_schedule(&self, opts: &ScheduleOptions) -> (Environment, Schedule) {
+        // TODO: implement actual filtering of the max schedule
+        let mut env = Environment::new(RngChoice::SeededXor(self.seed));
+        let schedule = Schedule::new(&mut env, opts);
+        (env, schedule)
     }
 }
 
@@ -236,34 +224,18 @@ impl ValueTree for ScheduleValueTree {
     type Value = (Environment, Schedule);
 
     fn current(&self) -> (Environment, Schedule) {
-        trace!("Scheduling with options: {:?}", self.opts.current());
-        let env = self.env.current();
-        trace!(
-            "{} peers, {} observations",
-            env.network.peers.len(),
-            env.observations.len()
-        );
-        let schedule = self.filtered_schedule(&env);
+        let cur_opts = self.opts.current();
+        trace!("Scheduling with options: {:?}", cur_opts);
+        let (env, schedule) = self.filtered_schedule(&cur_opts);
         trace!("{:?}", schedule);
         (env, schedule)
     }
 
     fn simplify(&mut self) -> bool {
-        if self.shrink_opts {
-            self.opts.simplify() || {
-                self.shrink_opts = false;
-                self.env.simplify()
-            }
-        } else {
-            self.env.simplify()
-        }
+        self.opts.simplify()
     }
 
     fn complicate(&mut self) -> bool {
-        if self.shrink_opts {
-            self.opts.complicate()
-        } else {
-            self.env.complicate()
-        }
+        self.opts.complicate()
     }
 }
