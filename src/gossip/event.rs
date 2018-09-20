@@ -350,6 +350,8 @@ impl Event<Transaction, PeerId> {
         last_ancestors: BTreeMap<PeerId, u64>,
         interesting_content: BTreeSet<Observation<Transaction, PeerId>>,
     ) -> Self {
+        use dev_utils::parse_peer_ids;
+
         let cause = match cause {
             "cause: Initial" => Cause::Initial,
             "cause: Request" => Cause::Request {
@@ -362,7 +364,9 @@ impl Event<Transaction, PeerId> {
             },
             _ => {
                 let content = unwrap!(unwrap!(cause.split('(').nth(2)).split(')').next());
-                let observation = if cause.contains("OpaquePayload") {
+                let observation = if cause.contains("Genesis") {
+                    Observation::Genesis(parse_peer_ids(content))
+                } else if cause.contains("OpaquePayload") {
                     Observation::OpaquePayload(Transaction::new(content))
                 } else if cause.contains("Genesis") {
                     // `content` will contain e.g. "{Alice, Bob, Carol, Dave, Eric}"

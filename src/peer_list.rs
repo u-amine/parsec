@@ -172,11 +172,11 @@ impl PeerList<PeerId> {
     pub(super) fn new_from_dot_input(
         our_id: PeerId,
         events_graph: &BTreeMap<Hash, Event<Transaction, PeerId>>,
-        peer_states: &BTreeMap<PeerId, String>,
+        peer_states: &BTreeMap<PeerId, PeerState>,
     ) -> Self {
         let mut peers = BTreeMap::new();
         let mut peer_id_hashes = Vec::new();
-        for (peer_id, state_str) in peer_states {
+        for (peer_id, &state) in peer_states {
             let mut events = BTreeMap::new();
             for event in events_graph.values() {
                 if event.creator() == peer_id {
@@ -196,13 +196,6 @@ impl PeerList<PeerId> {
                 }
             }
 
-            // TODO: Handle all possible `PeerState`s.
-            let state = match state_str.as_ref() {
-                "Pending" => PeerState::SEND,
-                "Active" => PeerState::VOTE | PeerState::SEND | PeerState::RECV,
-                "Removed" => PeerState::default(),
-                _ => panic!("wrong state string: {:?}", state_str),
-            };
             let _ = peers.insert(peer_id.clone(), Peer { state, events });
             peer_id_hashes.push((Hash::from(serialise(&peer_id).as_slice()), peer_id.clone()))
         }
