@@ -407,11 +407,26 @@ impl ObservationSchedule {
                     removed_peers += 1;
                 }
             }
+
+            // generate a random failure
             if rng.gen::<f64>() < options.prob_failure {
                 if let Some(id) = peers.fail_random_peer(rng, options.min_peers) {
                     schedule.push((step, ObservationEvent::Fail(id)));
                 }
             }
+            // then handle deterministic failures
+            let num_deterministic_fails = options
+                .deterministic_failures
+                .get(&step)
+                .cloned()
+                .unwrap_or(0);
+
+            for _ in 0..num_deterministic_fails {
+                if let Some(id) = peers.fail_random_peer(rng, options.min_peers) {
+                    schedule.push((step, ObservationEvent::Fail(id)));
+                }
+            }
+
             step += 1;
         }
 
@@ -516,26 +531,6 @@ impl Schedule {
                 ));
             }
         }
-
-        // then, if we should fail a peer, we do
-        if rng.gen::<f64>() < options.prob_failure {
-            if let Some(peer) = peers.fail_random_peer(rng, options.min_peers) {
-                schedule.push(ScheduleEvent::Fail(peer));
-            }
-        }
-
-        // then handle deterministic failures
-        let num_deterministic_fails = options
-            .deterministic_failures
-            .get(&step)
-            .cloned()
-            .unwrap_or(0);
-
-        for _ in 0..num_deterministic_fails {
-            if let Some(peer) = peers.fail_random_peer(rng, options.min_peers) {
-                schedule.push(ScheduleEvent::Fail(peer));
-            }
-        }
     }
 
     /// Creates a new pseudo-random schedule based on the given options
@@ -600,7 +595,6 @@ impl Schedule {
                     }
                 }
             }
-            // TODO: handle observations, put into pending etc.
             Self::perform_step(
                 &mut env.rng,
                 step,
