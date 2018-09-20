@@ -1012,8 +1012,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // the early events in `self.events_order` to be skipped mistakenly. To avoid this, if there
         // are any peers for which `peer_id` doesn't have a `last_ancestors` entry, add those peers'
         // oldest events we know about to the list of hashes.
-        for (peer_id, peer) in self.peer_list.iter() {
-            if !peer_last_event.last_ancestors().contains_key(peer_id) {
+        for (id, peer) in self.peer_list.iter() {
+            if !peer_last_event.last_ancestors().contains_key(id) {
                 if let Some(hash) = peer.events.get(&0) {
                     let _ = last_ancestors_hashes.insert(hash);
                 }
@@ -1023,7 +1023,16 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .events_order
             .iter()
             .skip_while(move |hash| !last_ancestors_hashes.contains(hash))
-            .filter_map(move |hash| self.get_known_event(hash).ok()))
+            .filter_map(move |hash| self.get_known_event(hash).ok())
+            .filter(move |event| {
+                // We only need to include events newer than those indicated by
+                // `peer_last_event.last_ancestors()`
+                peer_last_event
+                    .last_ancestors()
+                    .get(event.creator())
+                    .map(|&last_ancestor_index| event.index() > last_ancestor_index)
+                    .unwrap_or(true)
+            }))
     }
 
     // Get the responsiveness threshold based on the current number of peers.
