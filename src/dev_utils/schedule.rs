@@ -218,15 +218,8 @@ impl PendingObservations {
     }
 
     /// Returns true if no more peers have pending observations
-    pub fn is_empty(&self) -> bool {
-        self.queues.values().all(|v| v.is_empty())
-    }
-
-    /// Removes peers that failed
-    pub fn remove_peers<I: IntoIterator<Item = PeerId>>(&mut self, peers: I) {
-        for peer in peers {
-            let _ = self.queues.remove(&peer);
-        }
+    pub fn queues_empty<'a, I: Iterator<Item = &'a PeerId>>(&self, mut peers: I) -> bool {
+        peers.all(|id| self.queues.get(id).map_or(true, |queue| queue.is_empty()))
     }
 }
 
@@ -430,13 +423,11 @@ impl ObservationSchedule {
 
     fn for_step(&mut self, step: usize) -> Vec<ObservationEvent> {
         let schedule = mem::replace(&mut self.schedule, vec![]);
-        let mut schedule_iter = schedule.into_iter();
-        let current = schedule_iter
-            .by_ref()
-            .take_while(|&(scheduled_step, _)| scheduled_step <= step)
-            .map(|(_, obs)| obs)
-            .collect();
-        self.schedule = schedule_iter.collect();
+        let (current, rest): (Vec<_>, _) = schedule
+            .into_iter()
+            .partition(|&(scheduled_step, _)| scheduled_step <= step);
+        let current = current.into_iter().map(|(_, obs)| obs).collect();
+        self.schedule = rest;
         current
     }
 
@@ -559,7 +550,7 @@ impl Schedule {
             }
         }
 
-        while !obs_schedule.schedule.is_empty() || !pending.is_empty() {
+        while !obs_schedule.schedule.is_empty() || !pending.queues_empty(peers.active_peers()) {
             let obs_for_step = obs_schedule.for_step(step);
             for observation in obs_for_step {
                 match observation {
