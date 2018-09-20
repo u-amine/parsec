@@ -308,7 +308,7 @@ impl Default for ScheduleOptions {
             // randomised delays, 4 steps on average
             delay_distr: DelayDistribution::Poisson(4.0),
             // gossip when we receive new data
-            gossip_strategy: GossipStrategy::AfterReceive,
+            gossip_strategy: GossipStrategy::Probabilistic(0.75),
             // vote while gossiping
             votes_before_gossip: false,
             // add 5 opaque observations
