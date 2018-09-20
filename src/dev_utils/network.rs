@@ -191,7 +191,6 @@ impl Network {
 
     /// Simulates the network according to the given schedule
     pub fn execute_schedule(&mut self, schedule: Schedule) -> Result<(), ConsensusError> {
-        let mut started_up = BTreeSet::new();
         let Schedule {
             num_observations,
             events,
@@ -226,8 +225,11 @@ impl Network {
                     peer,
                     request_timing,
                 } => {
-                    let has_new_data = self.handle_messages(&peer, global_step);
+                    let new_data = self.handle_messages(&peer, global_step);
+                    self.peer_mut(&peer).received_data(new_data);
                     self.peer_mut(&peer).poll();
+                    let has_new_data = self.peer(&peer).has_new_data;
+                    self.peer_mut(&peer).reset_new_data();
                     let mut handle_req = |req: schedule::Request| {
                         let request =
                             unwrap!(self.peer(&peer).parsec.create_gossip(Some(&req.recipient)));
@@ -243,8 +245,7 @@ impl Network {
                             handle_req(req);
                         }
                         RequestTiming::DuringThisStepIfNewData(req) => {
-                            if has_new_data || !started_up.contains(&peer) {
-                                let _ = started_up.insert(peer.clone());
+                            if has_new_data {
                                 handle_req(req);
                             }
                         }
@@ -252,7 +253,7 @@ impl Network {
                     }
                 }
                 ScheduleEvent::VoteFor(peer, observation) => {
-                    let _ = self.peer_mut(&peer).vote_for(&observation);
+                    self.peer_mut(&peer).vote_for(&observation);
                 }
             }
             if self.consensus_broken() || self.consensus_complete(num_observations) {

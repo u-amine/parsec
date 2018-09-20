@@ -27,6 +27,7 @@ pub struct Peer {
     /// The blocks returned by `parsec.poll()`, held in the order in which they were returned.
     pub blocks: Vec<Block<Transaction, PeerId>>,
     pub status: PeerStatus,
+    pub has_new_data: bool,
 }
 
 impl Peer {
@@ -36,6 +37,7 @@ impl Peer {
             parsec: Parsec::from_genesis(id, genesis_group, parsec::is_supermajority),
             blocks: vec![],
             status: PeerStatus::Active,
+            has_new_data: true,
         }
     }
 
@@ -54,16 +56,23 @@ impl Peer {
             ),
             blocks: vec![],
             status: PeerStatus::Active,
+            has_new_data: false,
         }
     }
 
-    pub fn vote_for(&mut self, observation: &Observation) -> bool {
+    pub fn vote_for(&mut self, observation: &Observation) {
         if !self.parsec.have_voted_for(observation) {
             unwrap!(self.parsec.vote_for(observation.clone()));
-            true
-        } else {
-            false
+            self.has_new_data = true;
         }
+    }
+
+    pub fn received_data(&mut self, data: bool) {
+        self.has_new_data = self.has_new_data || data;
+    }
+
+    pub fn reset_new_data(&mut self) {
+        self.has_new_data = false;
     }
 
     pub fn poll(&mut self) {
