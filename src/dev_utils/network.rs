@@ -61,13 +61,18 @@ impl Network {
         }
     }
 
+    fn active_peers(&self) -> impl Iterator<Item = &Peer> {
+        self.peers
+            .values()
+            .filter(|&peer| peer.status == PeerStatus::Active)
+    }
+
     /// Returns true if all peers hold the same sequence of stable blocks.
     pub fn blocks_all_in_sequence(&self) -> Result<(), DifferingBlocksOrder> {
-        let first_peer = unwrap!(self.peers.iter().next()).1;
+        let first_peer = unwrap!(self.active_peers().next());
         let payloads = first_peer.blocks_payloads();
         if let Some(peer) = self
-            .peers
-            .values()
+            .active_peers()
             .find(|peer| peer.blocks_payloads() != payloads)
         {
             Err((&first_peer.id, payloads, &peer.id, peer.blocks_payloads()))
@@ -135,7 +140,7 @@ impl Network {
 
     fn consensus_broken(&self) -> bool {
         let mut block_order = BTreeMap::new();
-        for peer in self.peers.values() {
+        for peer in self.active_peers() {
             for (index, block) in peer.blocks_payloads().into_iter().enumerate() {
                 let old_index = block_order.insert(block, index);
                 if old_index.map(|idx| idx != index).unwrap_or(false) {
@@ -148,7 +153,7 @@ impl Network {
     }
 
     fn consensus_complete(&self, num_observations: usize) -> bool {
-        self.peers.iter().next().unwrap().1.blocks_payloads().len() == num_observations
+        self.active_peers().next().unwrap().blocks_payloads().len() == num_observations
             && self.blocks_all_in_sequence().is_ok()
     }
 

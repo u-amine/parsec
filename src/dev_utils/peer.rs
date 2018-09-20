@@ -17,7 +17,6 @@ use std::fmt::{self, Debug, Formatter};
 #[derive(Clone, Copy, PartialEq)]
 pub enum PeerStatus {
     Active,
-    Pending,
     Removed,
     Failed,
 }
@@ -54,7 +53,7 @@ impl Peer {
                 parsec::is_supermajority,
             ),
             blocks: vec![],
-            status: PeerStatus::Pending,
+            status: PeerStatus::Active,
         }
     }
 
