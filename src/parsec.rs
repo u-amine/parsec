@@ -1188,6 +1188,19 @@ impl<T: NetworkEvent, S: SecretId> Drop for Parsec<T, S> {
 impl Parsec<Transaction, PeerId> {
     pub(crate) fn from_parsed_contents(parsed_contents: ParsedContents) -> Self {
         let mut parsec = Parsec::empty(parsed_contents.our_id, is_supermajority);
+
+        for hash in &parsed_contents.events_order.clone() {
+            let event = unwrap!(parsed_contents.events.get(hash));
+            if !event.interesting_content.is_empty() {
+                let _ = parsec
+                    .interesting_events
+                    .entry(event.creator().clone())
+                    .and_modify(|hashes| {
+                        hashes.push_back(*event.hash());
+                    }).or_insert_with(|| iter::once(*event.hash()).collect());
+            }
+        }
+
         parsec.events = parsed_contents.events;
         parsec.events_order = parsed_contents.events_order;
         parsec.meta_votes = parsed_contents.meta_votes;

@@ -44,3 +44,10 @@ impl Debug for Hash {
         )
     }
 }
+
+#[cfg(any(test, feature = "dump-graphs"))]
+impl Hash {
+    pub fn all_zero() -> Self {
+        Hash([0; HASH_LEN])
+    }
+}
