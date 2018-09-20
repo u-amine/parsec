@@ -172,11 +172,11 @@ pub struct PendingObservations {
 }
 
 impl PendingObservations {
-    pub fn new() -> PendingObservations {
+    pub fn new(opts: &ScheduleOptions) -> PendingObservations {
         PendingObservations {
-            min_delay: 1,
-            max_delay: 21,
-            p_delay: 0.4,
+            min_delay: opts.min_observation_delay,
+            max_delay: opts.max_observation_delay,
+            p_delay: opts.p_observation_delay,
             queues: BTreeMap::new(),
         }
     }
@@ -274,6 +274,12 @@ pub struct ScheduleOptions {
     pub min_peers: usize,
     /// Maximum number of peers
     pub max_peers: usize,
+    /// Minimum delay between an event and its observation
+    pub min_observation_delay: usize,
+    /// Maximum delay between an event and its observation
+    pub max_observation_delay: usize,
+    /// The binomial distribution p coefficient for observation delay
+    pub p_observation_delay: f64,
 }
 
 impl ScheduleOptions {
@@ -321,6 +327,12 @@ impl Default for ScheduleOptions {
             min_peers: 3,
             // allow at most as many peers as we have names
             max_peers: NAMES.len(),
+            // observation delay between 1
+            min_observation_delay: 1,
+            // ...and 100
+            max_observation_delay: 100,
+            // with binomial p coefficient 0.45
+            p_observation_delay: 0.45,
         }
     }
 }
@@ -532,7 +544,7 @@ impl Schedule {
     /// `result` variable so the result can be saved when the `dump-graphs` feature is used.
     #[cfg_attr(feature = "cargo-clippy", allow(let_and_return))]
     pub fn new(env: &mut Environment, options: &ScheduleOptions) -> Schedule {
-        let mut pending = PendingObservations::new();
+        let mut pending = PendingObservations::new(options);
         let mut obs_schedule = ObservationSchedule::gen(&mut env.rng, options);
         // the +1 below is to account for genesis
         let num_observations = obs_schedule.count_observations() + 1;
