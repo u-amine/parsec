@@ -206,7 +206,7 @@ fn parse_opaque_payload_observation(input: &mut &str) -> Option<Observation<Tran
     Some(Observation::OpaquePayload(Transaction::new(content)))
 }
 
-fn parse_peer_entries<'a>(input: &'a str) -> impl Iterator<Item = (PeerId, &'a str)> {
+fn parse_peer_entries(input: &str) -> impl Iterator<Item = (PeerId, &str)> {
     parse_entries(input).map(|entry| {
         let mut it = entry.split(": ");
         let peer_id = PeerId::new(unwrap!(it.next()));
@@ -216,7 +216,7 @@ fn parse_peer_entries<'a>(input: &'a str) -> impl Iterator<Item = (PeerId, &'a s
     })
 }
 
-fn parse_entries<'a>(input: &'a str) -> impl Iterator<Item = &'a str> {
+fn parse_entries(input: &str) -> impl Iterator<Item = &str> {
     extract_between(input, "{", "}")
         .split(',')
         .map(|s| s.trim())
@@ -315,22 +315,26 @@ fn parse_peer_state(input: &mut &str) -> PeerState {
 
     let mut result = PeerState::inactive();
 
-    skip_whitespace(input);
-    while !skip_string(input, ")") {
-        if skip_string(input, "vote") {
-            result = result | PeerState::VOTE;
-        } else if skip_string(input, "send") {
-            result = result | PeerState::SEND;
-        } else if skip_string(input, "recv") {
-            result = result | PeerState::RECV;
+    loop {
+        skip_whitespace(input);
+
+        if skip_string(input, "VOTE") {
+            result |= PeerState::VOTE;
+        } else if skip_string(input, "SEND") {
+            result |= PeerState::SEND;
+        } else if skip_string(input, "RECV") {
+            result |= PeerState::RECV;
         } else {
             panic!("Invalid peer state {:?}", input);
         }
 
         skip_whitespace(input);
-        assert!(skip_string(input, ","));
-        skip_whitespace(input);
+        if !skip_string(input, "|") {
+            break;
+        }
     }
+
+    assert!(skip_string(input, ")"));
 
     result
 }

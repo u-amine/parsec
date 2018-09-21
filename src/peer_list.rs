@@ -269,16 +269,30 @@ impl BitOrAssign for PeerState {
 
 impl Debug for PeerState {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let mut separator = false;
+
         write!(f, "PeerState(");
+
         if self.contains(Self::VOTE) {
-            write!(f, "vote,");
+            separator = true;
+            write!(f, "VOTE");
         }
+
         if self.contains(Self::SEND) {
-            write!(f, "send,");
+            if separator {
+                write!(f, "|");
+            }
+            separator = true;
+            write!(f, "SEND");
         }
+
         if self.contains(Self::RECV) {
-            write!(f, "recv,");
+            if separator {
+                write!(f, "|");
+            }
+            write!(f, "RECV");
         }
+
         write!(f, ")")
     }
 }

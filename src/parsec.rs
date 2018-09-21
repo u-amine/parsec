@@ -1509,17 +1509,17 @@ mod functional_tests {
         let mut alice = Parsec::from_parsed_contents(parsed_contents);
         let eric_id = PeerId::new("Eric");
         assert!(alice.peer_list.all_ids().any(|peer_id| *peer_id == eric_id));
-        assert_ne!(alice.peer_list.peer_state(&eric_id), PeerState::default());
+        assert_ne!(alice.peer_list.peer_state(&eric_id), PeerState::inactive());
 
         // Add event now which shall result in Alice removing Eric.
         unwrap!(alice.add_event(a_last));
-        assert_eq!(alice.peer_list.peer_state(&eric_id), PeerState::default());
+        assert_eq!(alice.peer_list.peer_state(&eric_id), PeerState::inactive());
 
         // Try calling `create_gossip()` for Eric shall result in error.
         assert_err_eq!(UnexpectedPeerState, alice.create_gossip(Some(&eric_id)));
 
         // Construct Eric's parsec instance.
-        let mut section: BTreeSet<PeerId> = alice.peer_list.all_ids().cloned().collect();
+        let mut section: BTreeSet<_> = alice.peer_list.all_ids().cloned().collect();
         let _ = section.remove(&eric_id);
         let mut eric = Parsec::<Transaction, _>::from_existing(
             eric_id.clone(),
@@ -1527,15 +1527,16 @@ mod functional_tests {
             &section,
             is_supermajority,
         );
+
         // Peer state is (VOTE | SEND) when created from existing. Need to call
-        // 'add_peer' to update the state to (VOTE | SEND | RECV ).
+        // 'add_peer' to update the state to (VOTE | SEND | RECV).
         for peer_id in section {
             eric.peer_list.add_peer(peer_id, PeerState::RECV);
         }
 
         // Eric can no longer gossip to anyone.
         assert_err_eq!(
-            UnexpectedSelfState,
+            UnexpectedPeerState,
             eric.create_gossip(Some(&PeerId::new("Alice")))
         );
     }
