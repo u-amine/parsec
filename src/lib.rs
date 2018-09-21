@@ -60,7 +60,6 @@
     variant_size_differences
 )]
 
-#[cfg(feature = "dump-graphs")]
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
@@ -80,6 +79,7 @@ extern crate tiny_keccak;
 #[cfg(any(test, feature = "testing", feature = "dump-graphs"))]
 #[macro_use]
 extern crate unwrap;
+extern crate safe_crypto;
 
 mod block;
 mod dump_graph;

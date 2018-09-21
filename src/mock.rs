@@ -9,28 +9,60 @@
 use id::{PublicId, SecretId};
 use network_event::NetworkEvent;
 use rand::{Rand, Rng};
+use safe_crypto::Signature as SafeSignature;
+use safe_crypto::{gen_sign_keypair, PublicSignKey, SecretSignKey};
+use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
 
 const NAMES: &[&str] = &[
     "Alice", "Bob", "Carol", "Dave", "Eric", "Fred", "Gina", "Hank", "Iris", "Judy", "Kent",
     "Lucy", "Mike", "Nina", "Oran", "Paul", "Quin", "Rose", "Stan", "Tina",
 ];
 
+lazy_static! {
+    static ref PEERS: Vec<PeerId> = NAMES
+        .iter()
+        .map(|name| PeerId::new_with_random_keypair(name))
+        .collect();
+}
+
 /// **NOT FOR PRODUCTION USE**: Mock signature type.
-#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Debug)]
-pub struct Signature(String);
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct Signature(SafeSignature);
+
+impl Debug for Signature {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        write!(formatter, "..")
+    }
+}
 
 /// **NOT FOR PRODUCTION USE**: Mock type implementing `PublicId` and `SecretId` traits.  For
 /// non-mocks, these two traits must be implemented by two separate types; a public key and secret
 /// key respectively.
-#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct PeerId {
     id: String,
+    pub_sign: PublicSignKey,
+    sec_sign: SecretSignKey,
 }
 
 impl PeerId {
     pub fn new(id: &str) -> Self {
-        Self { id: id.to_string() }
+        PEERS
+            .iter()
+            .find(|peer| peer.id == id)
+            .unwrap_or(&PeerId::new_with_random_keypair(id))
+            .clone()
+    }
+
+    fn new_with_random_keypair(id: &str) -> Self {
+        let (pub_sign, sec_sign) = gen_sign_keypair();
+        Self {
+            id: id.to_string(),
+            pub_sign,
+            sec_sign,
+        }
     }
 
     // Only being used by the dot_parser.
@@ -54,10 +86,37 @@ impl Debug for PeerId {
     }
 }
 
+impl Hash for PeerId {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+        self.pub_sign.hash(state);
+    }
+}
+
+impl PartialEq for PeerId {
+    fn eq(&self, other: &PeerId) -> bool {
+        self.id == other.id && self.pub_sign == other.pub_sign
+    }
+}
+
+impl Eq for PeerId {}
+
+impl PartialOrd for PeerId {
+    fn partial_cmp(&self, other: &PeerId) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PeerId {
+    fn cmp(&self, other: &PeerId) -> Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+
 impl PublicId for PeerId {
     type Signature = Signature;
-    fn verify_signature(&self, _signature: &Self::Signature, _data: &[u8]) -> bool {
-        true
+    fn verify_signature(&self, signature: &Self::Signature, data: &[u8]) -> bool {
+        self.pub_sign.verify_detached(&signature.0, data)
     }
 }
 
@@ -66,8 +125,8 @@ impl SecretId for PeerId {
     fn public_id(&self) -> &Self::PublicId {
         &self
     }
-    fn sign_detached(&self, _data: &[u8]) -> Signature {
-        Signature(format!("of {:?}", self))
+    fn sign_detached(&self, data: &[u8]) -> Signature {
+        Signature(self.sec_sign.sign_detached(data))
     }
 }
 

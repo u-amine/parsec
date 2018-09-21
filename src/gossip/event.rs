@@ -415,6 +415,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use error::Error;
     use gossip::cause::Cause;
     use gossip::Event;
     use hash::Hash;
@@ -662,5 +663,35 @@ mod tests {
                 &alice.peer_list
             )).is_none()
         );
+    }
+
+    #[test]
+    fn event_construction_unpack_fail_with_wrong_signature() {
+        let alice = create_event_with_single_peer("Alice");
+        let mut events = BTreeMap::new();
+        let initial_event_hash = insert_into_gossip_graph(alice.event, &mut events);
+
+        // Our observation
+        let net_event = Observation::OpaquePayload(Transaction::new("event_observed_by_alice"));
+
+        let event_from_observation = Event::<Transaction, PeerId>::new_from_observation(
+            initial_event_hash,
+            net_event,
+            &events,
+            &alice.peer_list,
+        );
+
+        let mut packed_event = event_from_observation.pack();
+        packed_event.signature = alice.peer_list.our_id().sign_detached(&[123]);
+
+        let error = unwrap_err!(Event::<Transaction, PeerId>::unpack(
+            packed_event,
+            &events,
+            &alice.peer_list
+        ));
+        if let Error::SignatureFailure = error {
+        } else {
+            panic!("Expected SignatureFailure, but got {:?}", error);
+        }
     }
 }
