@@ -39,7 +39,7 @@ The output must contain lines analogous to these:
 Writing dot files in /tmp/parsec_graphs/53srr3/test_minimal_network
 Writing dot files in /tmp/parsec_graphs/53srr3/test_multiple_votes_before_gossip
 Writing dot files in /tmp/parsec_graphs/53srr3/test_faulty_third_terminate_concurrently
-Writing dot files in /tmp/parsec_graphs/53srr3/test_duplicate_votes_before_gossip
+Writing dot files in /tmp/parsec_graphs/53srr3/test_duplicate_vote_is_reduced_to_single
 Writing dot files in /tmp/parsec_graphs/53srr3/test_faulty_third_never_gossip
 Writing dot files in /tmp/parsec_graphs/53srr3/test_faulty_third_terminate_at_random_points
 Writing dot files in /tmp/parsec_graphs/53srr3/test_multiple_votes_during_gossip
