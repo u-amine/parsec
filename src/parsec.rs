@@ -1508,6 +1508,7 @@ mod functional_tests {
 
         let mut alice = Parsec::from_parsed_contents(parsed_contents);
         let eric_id = PeerId::new("Eric");
+
         assert!(alice.peer_list.all_ids().any(|peer_id| *peer_id == eric_id));
         assert_ne!(alice.peer_list.peer_state(&eric_id), PeerState::inactive());
 
@@ -1536,7 +1537,7 @@ mod functional_tests {
 
         // Eric can no longer gossip to anyone.
         assert_err_eq!(
-            UnexpectedPeerState,
+            UnexpectedSelfState,
             eric.create_gossip(Some(&PeerId::new("Alice")))
         );
     }

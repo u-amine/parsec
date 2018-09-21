@@ -334,7 +334,7 @@ fn parse_peer_state(input: &mut &str) -> PeerState {
         }
     }
 
-    assert!(skip_string(input, ")"));
+    assert!(skip_string(input, ")\""));
 
     result
 }
