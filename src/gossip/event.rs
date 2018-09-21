@@ -364,6 +364,13 @@ impl Event<Transaction, PeerId> {
                 let content = unwrap!(unwrap!(cause.split('(').nth(2)).split(')').next());
                 let observation = if cause.contains("OpaquePayload") {
                     Observation::OpaquePayload(Transaction::new(content))
+                } else if cause.contains("Genesis") {
+                    // `content` will contain e.g. "{Alice, Bob, Carol, Dave, Eric}"
+                    let peer_ids = content[1..content.len() - 1]
+                        .split(", ")
+                        .map(PeerId::new)
+                        .collect();
+                    Observation::Genesis(peer_ids)
                 } else if cause.contains("Add") {
                     Observation::Add(PeerId::new(content))
                 } else if cause.contains("Remove") {

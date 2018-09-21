@@ -10,7 +10,7 @@ use hash::Hash;
 use id::PublicId;
 use serialise;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Debug)]
 pub(crate) struct RoundHash {
     public_id_hash: Hash,
     latest_block_hash: Hash,

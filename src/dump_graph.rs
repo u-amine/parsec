@@ -438,11 +438,10 @@ mod detail {
         peer_list: &PeerList<S>,
     ) -> io::Result<()> {
         writeln!(writer, "/// our_id: {:?}", peer_list.our_id().public_id())?;
-        let mut peer_states = BTreeMap::new();
-        for (name, state) in peer_list.iter() {
-            let _ = peer_states.insert(name, state.print_state());
-        }
+        let peer_states = peer_list
+            .iter()
+            .map(|(peer_id, peer)| (peer_id, format!("{:?}", peer.state())))
+            .collect::<BTreeMap<_, _>>();
         writeln!(writer, "/// peer_states: {:?}", peer_states)
     }
-
 }
