@@ -334,34 +334,34 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.peer_list.our_id().public_id()
     }
 
-    fn confirm_peer_state(&self, peer_id: &S::PublicId, expected: PeerState) -> Result<(), Error> {
+    fn confirm_peer_state(&self, peer_id: &S::PublicId, required: PeerState) -> Result<(), Error> {
         let actual = self.peer_list.peer_state(peer_id);
-        if actual.contains(expected) {
-            Ok(())
-        } else {
-            debug!(
-                "{:?} detected invalid state of {:?} (expected: {:?}, actual: {:?})",
-                self.our_pub_id(),
-                peer_id,
-                expected,
-                actual,
-            );
-            Err(Error::UnexpectedPeerState)
-        }
-    }
-
-    fn confirm_self_state(&self, expected: PeerState) -> Result<(), Error> {
-        let actual = self.peer_list.our_state();
-        if actual.contains(expected) {
+        if actual.contains(required) {
             Ok(())
         } else {
             trace!(
-                "{:?} has invalid state (expected: {:?}, actual: {:?})",
+                "{:?} detected invalid state of {:?} (required: {:?}, actual: {:?})",
                 self.our_pub_id(),
-                expected,
+                peer_id,
+                required,
                 actual,
             );
-            Err(Error::UnexpectedSelfState)
+            Err(Error::InvalidPeerState { required, actual })
+        }
+    }
+
+    fn confirm_self_state(&self, required: PeerState) -> Result<(), Error> {
+        let actual = self.peer_list.our_state();
+        if actual.contains(required) {
+            Ok(())
+        } else {
+            trace!(
+                "{:?} has invalid state (required: {:?}, actual: {:?})",
+                self.our_pub_id(),
+                required,
+                actual,
+            );
+            Err(Error::InvalidSelfState { required, actual })
         }
     }
 
@@ -1246,10 +1246,10 @@ mod functional_tests {
         }
     }
 
-    macro_rules! assert_err_eq {
-        ($expected_error:tt, $result:expr) => {
+    macro_rules! assert_err {
+        ($expected_error:pat, $result:expr) => {
             match $result {
-                Err(Error::$expected_error) => (),
+                Err($expected_error) => (),
                 unexpected => panic!(
                     "Expected {}, but got {:?}",
                     stringify!($expected_error),
@@ -1438,7 +1438,7 @@ mod functional_tests {
         let alice_snapshot = Snapshot::new(&alice);
 
         // Try calling `create_gossip()` for a peer which doesn't exist yet.
-        assert_err_eq!(UnknownPeer, alice.create_gossip(Some(&fred_id)));
+        assert_err!(Error::UnknownPeer, alice.create_gossip(Some(&fred_id)));
         assert_eq!(alice_snapshot, Snapshot::new(&alice));
 
         // Keep a copy of a request which will be used later in the test.  This request will not
@@ -1469,8 +1469,8 @@ mod functional_tests {
         // TODO - re-enable once `handle_request` is fixed to match the expected behaviour by
         //        MAID-3066/3067.
         if false {
-            assert_err_eq!(
-                InvalidInitialRequest,
+            assert_err!(
+                Error::InvalidInitialRequest,
                 fred.handle_request(&alice_id, malicious_message)
             );
         }
@@ -1481,8 +1481,8 @@ mod functional_tests {
         if false {
             // Pass the deficient message gathered earlier which will not be sufficient to allow
             // Fred to see himself getting added to the section.
-            assert_err_eq!(
-                InvalidInitialRequest,
+            assert_err!(
+                Error::InvalidInitialRequest,
                 fred.handle_request(&alice_id, deficient_message)
             );
         }
@@ -1517,7 +1517,7 @@ mod functional_tests {
         assert_eq!(alice.peer_list.peer_state(&eric_id), PeerState::inactive());
 
         // Try calling `create_gossip()` for Eric shall result in error.
-        assert_err_eq!(UnexpectedPeerState, alice.create_gossip(Some(&eric_id)));
+        assert_err!(Error::InvalidPeerState { .. }, alice.create_gossip(Some(&eric_id)));
 
         // Construct Eric's parsec instance.
         let mut section: BTreeSet<_> = alice.peer_list.all_ids().cloned().collect();
@@ -1536,8 +1536,8 @@ mod functional_tests {
         }
 
         // Eric can no longer gossip to anyone.
-        assert_err_eq!(
-            UnexpectedSelfState,
+        assert_err!(
+            Error::InvalidSelfState { .. },
             eric.create_gossip(Some(&PeerId::new("Alice")))
         );
     }

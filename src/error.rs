@@ -6,9 +6,12 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use peer_list::PeerState;
+
 quick_error! {
     /// Parsec error variants.
     #[derive(Debug)]
+    #[allow(missing_docs)] // quick_error chokes on doc comments inside the variants.
     pub enum Error {
         /// Payload of a `Vote` doesn't match the payload of a `Block`.
         MismatchedPayload {
@@ -28,12 +31,18 @@ quick_error! {
             display("The peer_id is not known to our node's peer_list.")
         }
         /// Peer is known to us, but has unexpected state
-        UnexpectedPeerState {
-            display("The peer_id is in unexpected state.")
+        InvalidPeerState {
+            required: PeerState,
+            actual: PeerState,
+        } {
+            display("The peer is in invalid state (required: {:?}, actual: {:?}).", required, actual)
         }
         /// Our node is in unexpected state
-        UnexpectedSelfState {
-            display("Our node is in unexpected state.")
+        InvalidSelfState {
+            required: PeerState,
+            actual: PeerState
+        } {
+            display("Our node is in invalid state (required: {:?}, actual: {:?}).", required, actual)
         }
         /// The given event is invalid or malformed.
         InvalidEvent {

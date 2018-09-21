@@ -131,7 +131,10 @@ impl<S: SecretId> PeerList<S> {
     ) -> Result<(), Error> {
         if let Some(peer) = self.peers.get_mut(event.creator()) {
             if *event.creator() != *self.our_id.public_id() && !peer.state.can_send() {
-                return Err(Error::UnexpectedPeerState);
+                return Err(Error::InvalidPeerState {
+                    required: PeerState::SEND,
+                    actual: peer.state,
+                });
             }
 
             match peer.events.entry(event.index()) {
