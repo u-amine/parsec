@@ -589,7 +589,7 @@ fn skip_string(input: &mut &str, content: &str) -> bool {
 #[cfg(all(test, feature = "dump-graphs"))]
 mod tests {
     use super::*;
-    use dev_utils::{Environment, GossipStrategy, RngChoice, Schedule, ScheduleOptions};
+    use dev_utils::{Environment, RngChoice, Schedule, ScheduleOptions};
     use dump_graph::DIR;
     use maidsafe_utilities::serialisation::deserialise;
     use meta_vote::MetaVote;
@@ -612,7 +612,7 @@ mod tests {
             &ScheduleOptions {
                 genesis_size: 4,
                 opaque_to_add: 5,
-                gossip_strategy: GossipStrategy::Probabilistic(0.8),
+                gossip_prob: 0.8,
                 ..Default::default()
             },
         );

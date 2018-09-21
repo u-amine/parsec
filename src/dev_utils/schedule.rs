@@ -41,8 +41,6 @@ pub enum RequestTiming {
     Later,
     /// Make a request
     DuringThisStep(Request),
-    /// Make a request if new data is available
-    DuringThisStepIfNewData(Request),
 }
 
 /// Represents an event the network is supposed to simulate.
@@ -116,15 +114,10 @@ impl ScheduleEvent {
         peers: &[PeerId],
         options: &ScheduleOptions,
     ) -> ScheduleEvent {
-        let request_timing = match options.gossip_strategy {
-            GossipStrategy::Probabilistic(prob) => if rng.gen::<f64>() < prob {
-                RequestTiming::DuringThisStep(Self::gen_request(rng, peer, peers, options))
-            } else {
-                RequestTiming::Later
-            },
-            GossipStrategy::AfterReceive => {
-                RequestTiming::DuringThisStepIfNewData(Self::gen_request(rng, peer, peers, options))
-            }
+        let request_timing = if rng.gen::<f64>() < options.gossip_prob {
+            RequestTiming::DuringThisStep(Self::gen_request(rng, peer, peers, options))
+        } else {
+            RequestTiming::Later
         };
         ScheduleEvent::LocalStep {
             global_step: step,
@@ -223,15 +216,6 @@ impl PendingObservations {
     }
 }
 
-/// The condition on which a node gossips when it's scheduled
-#[derive(Clone, Copy, Debug)]
-pub enum GossipStrategy {
-    /// Gossiping with a constant probability per local step
-    Probabilistic(f64),
-    /// Always gossip after receiving new data
-    AfterReceive,
-}
-
 /// Available options for the distribution of message delays
 #[derive(Clone, Copy, Debug)]
 pub enum DelayDistribution {
@@ -254,8 +238,8 @@ pub struct ScheduleOptions {
     pub deterministic_failures: BTreeMap<usize, usize>,
     /// The distribution of message delays
     pub delay_distr: DelayDistribution,
-    /// The strategy that defines when a node gossips
-    pub gossip_strategy: GossipStrategy,
+    /// The probability that a node will gossip during its local step
+    pub gossip_prob: f64,
     /// When true, nodes will first insert all votes into the graph, then start gossiping
     pub votes_before_gossip: bool,
     /// Number of opaque observations to make
@@ -307,8 +291,8 @@ impl Default for ScheduleOptions {
             deterministic_failures: BTreeMap::new(),
             // randomised delays, 4 steps on average
             delay_distr: DelayDistribution::Poisson(4.0),
-            // gossip when we receive new data
-            gossip_strategy: GossipStrategy::Probabilistic(0.75),
+            // gossip every other local step
+            gossip_prob: 0.5,
             // vote while gossiping
             votes_before_gossip: false,
             // add 5 opaque observations

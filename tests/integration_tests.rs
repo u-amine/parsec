@@ -68,9 +68,7 @@ extern crate rand;
 mod test {
     use maidsafe_utilities::log;
     use parsec::dev_utils::proptest::{arbitrary_delay, ScheduleOptionsStrategy, ScheduleStrategy};
-    use parsec::dev_utils::{
-        DelayDistribution, Environment, GossipStrategy, RngChoice, Schedule, ScheduleOptions,
-    };
+    use parsec::dev_utils::{DelayDistribution, Environment, RngChoice, Schedule, ScheduleOptions};
     use proptest::prelude::ProptestConfig;
     use proptest::test_runner::FileFailurePersistence;
     use rand::Rng;
@@ -226,23 +224,6 @@ mod test {
             &ScheduleOptions {
                 opaque_to_add: num_observations,
                 delay_distr: DelayDistribution::Constant(0),
-                ..Default::default()
-            },
-        );
-
-        let result = env.network.execute_schedule(schedule);
-        assert!(result.is_ok(), "{:?}", result);
-    }
-
-    #[test]
-    fn random_schedule_probabilistic_gossip() {
-        let num_observations = 10;
-        let mut env = Environment::new(SEED);
-        let schedule = Schedule::new(
-            &mut env,
-            &ScheduleOptions {
-                opaque_to_add: num_observations,
-                gossip_strategy: GossipStrategy::Probabilistic(0.8),
                 ..Default::default()
             },
         );

@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::peer::{Peer, PeerStatus};
-use super::schedule::{self, RequestTiming, Schedule, ScheduleEvent};
+use super::schedule::{RequestTiming, Schedule, ScheduleEvent};
 use super::Observation;
 use gossip::{Request, Response};
 use mock::{PeerId, Transaction};
@@ -121,13 +121,12 @@ impl Network {
     }
 
     /// Handles incoming requests and responses
-    fn handle_messages(&mut self, peer: &PeerId, step: usize) -> bool {
+    fn handle_messages(&mut self, peer: &PeerId, step: usize) {
         if let Some(msgs) = self.msg_queue.remove(peer) {
             let (to_handle, rest) = msgs
                 .into_iter()
                 .partition(|entry| entry.deliver_after <= step);
             let _ = self.msg_queue.insert(peer.clone(), rest);
-            let result = !to_handle.is_empty();
             for entry in to_handle {
                 match entry.message {
                     Message::Request(req, resp_delay) => {
@@ -152,9 +151,6 @@ impl Network {
                     }
                 }
             }
-            result
-        } else {
-            false
         }
     }
 
@@ -225,12 +221,9 @@ impl Network {
                     peer,
                     request_timing,
                 } => {
-                    let new_data = self.handle_messages(&peer, global_step);
-                    self.peer_mut(&peer).received_data(new_data);
+                    self.handle_messages(&peer, global_step);
                     self.peer_mut(&peer).poll();
-                    let has_new_data = self.peer(&peer).has_new_data;
-                    self.peer_mut(&peer).reset_new_data();
-                    let mut handle_req = |req: schedule::Request| {
+                    if let RequestTiming::DuringThisStep(req) = request_timing {
                         let request =
                             unwrap!(self.peer(&peer).parsec.create_gossip(Some(&req.recipient)));
                         self.send_message(
@@ -239,17 +232,6 @@ impl Network {
                             Message::Request(request, req.resp_delay),
                             global_step + req.req_delay,
                         );
-                    };
-                    match request_timing {
-                        RequestTiming::DuringThisStep(req) => {
-                            handle_req(req);
-                        }
-                        RequestTiming::DuringThisStepIfNewData(req) => {
-                            if has_new_data {
-                                handle_req(req);
-                            }
-                        }
-                        RequestTiming::Later => (),
                     }
                 }
                 ScheduleEvent::VoteFor(peer, observation) => {
