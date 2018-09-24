@@ -211,19 +211,19 @@ impl PeerList<PeerId> {
     }
 }
 
+/// Peer state is a bitflag with these flags:
 ///
-/// Valid states:
+/// - `VOTE`: if enabled, the peer can vote, which means they are counted towards
+///           the supermajority.
+/// - `SEND`: if enabled, the peer can send gossips. For us it means we can
+///           send gossips to others. For others it means we can receive gossips
+///           from them.
+/// - `RECV`: if enabled, the peer can receive gossips. For us, it means we
+///           can receive gossips from others. For others it means we can send
+///           gossips to them.
 ///
-/// | vote  | send  | receive |
-/// +-------+-------+---------+
-/// | true  | true  | true    | Active
-/// | true  | true  | false   | Genesis member or peer who we reached consensus
-/// |       |       |         | on adding, but they haven't contacted us yet
-/// | false | true  | true    | Non-genesis member who contacted us
-/// | false | true  | false   | Non-genesis member
-/// | false | false | true    | Us, when joining
-/// | false | false | false   | Inactive / Removed
-///
+/// If all three are enabled, the state is called `active`. If none is enabled,
+/// it's `inactive`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct PeerState(u8);
 
@@ -237,6 +237,10 @@ impl PeerState {
 
     pub fn inactive() -> Self {
         PeerState(0)
+    }
+
+    pub fn active() -> Self {
+        Self::VOTE | Self::SEND | Self::RECV
     }
 
     pub fn contains(self, other: Self) -> bool {

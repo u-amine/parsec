@@ -76,10 +76,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let mut parsec = Self::empty(our_id, is_interesting_event);
 
         for peer_id in genesis_group {
-            parsec.peer_list.add_peer(
-                peer_id.clone(),
-                PeerState::VOTE | PeerState::SEND | PeerState::RECV,
-            );
+            parsec
+                .peer_list
+                .add_peer(peer_id.clone(), PeerState::active());
         }
 
         parsec.initialise_round_hashes();
@@ -215,6 +214,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.confirm_self_state(PeerState::SEND)?;
 
         if let Some(recipient_id) = peer_id {
+            // We require `PeerState::VOTE` in addition to `PeerState::RECV` here,
+            // Because if the peer does not have `PeerState::VOTE`, it means we haven't
+            // yet reached consensus on adding them to the section so we shouldn't contact
+            // them yet.
             self.confirm_peer_state(recipient_id, PeerState::VOTE | PeerState::RECV)?;
 
             if self.peer_list.last_event_hash(recipient_id).is_some() {
@@ -298,12 +301,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .vote()
                 .map_or(false, |voted| voted.payload() == observation)
         })
-    }
-
-    /// Returns whether we have a peer with the given id in our peer list and that
-    /// it is active.
-    pub fn has_active_peer(&self, peer_id: &S::PublicId) -> bool {
-        self.peer_list.peer_state(peer_id).can_vote()
     }
 
     /// Must only be used for events which have already been added to our graph.
@@ -506,14 +503,25 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 // - If we are the new peer, we must wait for the other members
                 //   to send gossips to us first.
                 //
-                // To distinguish between the two, we check whether we can contact
-                // all the peers we know that can vote.
+                // To distinguish between the two, we check whether everyone we
+                // reached consensus on adding also reached consensus on adding us.
                 let recv = self
                     .peer_list
                     .iter()
                     .filter(|&(id, peer)| {
-                        peer.state.can_vote() && *id != peer_id && *id != *self.our_pub_id()
-                    }).all(|(_, peer)| peer.state.can_recv());
+                        // Peers that can vote, which means we have reached consensus
+                        // on adding them.
+                        peer.state.can_vote() &&
+                        // Excluding the peer begin added.
+                        *id != peer_id &&
+                        // And excluding us.
+                        *id != *self.our_pub_id()
+                    }).all(|(_, peer)| {
+                        // Peers that can receive, which implies they've already
+                        // sent us at least one message which implies they've already
+                        // reached consensus on adding us.
+                        peer.state.can_recv()
+                    });
 
                 self.peer_list.add_peer(
                     peer_id,
