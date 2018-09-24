@@ -24,7 +24,7 @@ impl Peer {
     pub fn new(id: PeerId, genesis_group: &BTreeSet<PeerId>) -> Self {
         Self {
             id: id.clone(),
-            parsec: Parsec::new(id, genesis_group, parsec::is_supermajority),
+            parsec: Parsec::from_genesis(id, genesis_group, parsec::is_supermajority),
             blocks: vec![],
         }
     }

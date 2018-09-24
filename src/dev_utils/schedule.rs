@@ -464,7 +464,8 @@ impl Schedule {
             step += 1;
         }
         let result = Schedule {
-            num_observations: env.observations.len(),
+            // HACK: + 1 is for the `Genesis` observation
+            num_observations: env.observations.len() + 1,
             events: schedule,
         };
         #[cfg(feature = "dump-graphs")]

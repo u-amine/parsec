@@ -293,11 +293,7 @@ fn main() {
             let receiver_index = (sender_index + 1) % peers.len();
             let receiver_id = peers[receiver_index].id.clone();
             let sender_id = peers[sender_index].id.clone();
-            let request = unwrap!(
-                peers[sender_index]
-                    .parsec
-                    .create_gossip(Some(receiver_id.clone()))
-            );
+            let request = unwrap!(peers[sender_index].parsec.create_gossip(Some(&receiver_id)));
             let response = unwrap!(
                 peers[receiver_index]
                     .parsec

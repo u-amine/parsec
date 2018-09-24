@@ -16,6 +16,7 @@ use network_event::NetworkEvent;
 use serialise;
 use std::collections::btree_map::{self, BTreeMap, Entry};
 use std::fmt::{self, Debug, Formatter};
+use std::ops::{BitOr, BitOrAssign};
 
 pub(crate) struct PeerList<S: SecretId> {
     our_id: S,
@@ -40,8 +41,13 @@ impl<S: SecretId> PeerList<S> {
     }
 
     /// Returns all sorted peer_ids.
-    pub fn all_ids(&self) -> Vec<&S::PublicId> {
-        self.peers.keys().collect()
+    pub fn all_ids(&self) -> impl Iterator<Item = &S::PublicId> {
+        self.peers.keys()
+    }
+
+    /// Returns ids of all peers that can vote.
+    pub fn voter_ids(&self) -> impl Iterator<Item = &S::PublicId> {
+        self.voters().map(|(id, _)| id)
     }
 
     /// Returns an unsorted map of Hash(peer_id) => peer_id
@@ -54,43 +60,31 @@ impl<S: SecretId> PeerList<S> {
         self.peers.iter()
     }
 
-    /// Returns the number of peers.
-    pub fn num_peers(&self) -> usize {
-        self.peers.len()
+    /// Returns an iterator of peers that can vote
+    pub fn voters(&self) -> impl Iterator<Item = (&S::PublicId, &Peer)> {
+        self.peers.iter().filter(|(_, peer)| peer.state.can_vote())
     }
 
-    pub fn is_pending(&self, peer_id: &S::PublicId) -> bool {
-        self.peers.get(peer_id).map_or(false, Peer::is_pending)
+    pub fn peer_state(&self, peer_id: &S::PublicId) -> PeerState {
+        self.peers
+            .get(peer_id)
+            .map(|peer| peer.state)
+            .unwrap_or_else(PeerState::inactive)
     }
 
-    pub fn is_active(&self, peer_id: &S::PublicId) -> bool {
-        self.peers.get(peer_id).map_or(false, Peer::is_active)
+    pub fn our_state(&self) -> PeerState {
+        self.peer_state(self.our_id.public_id())
     }
 
-    pub fn is_removed(&self, peer_id: &S::PublicId) -> bool {
-        self.peers.get(peer_id).map_or(false, Peer::is_removed)
-    }
-
-    /// Adds a pending peer.
-    pub fn add_pending_peer(&mut self, peer_id: S::PublicId) {
-        match self.peers.entry(peer_id.clone()) {
-            Entry::Occupied(_) => return,
-            Entry::Vacant(entry) => {
-                let _ = entry.insert(Peer::new_pending());
-                self.peer_id_hashes
-                    .push((Hash::from(serialise(&peer_id).as_slice()), peer_id));
-            }
-        }
-    }
-
-    /// Adds a peer into the map. If the peer has already been added as pending, activate it.
-    pub fn add_peer(&mut self, peer_id: S::PublicId) {
+    /// Adds a peer in the given state into the map. If the peer has already been
+    /// added, merge its state with the one given.
+    pub fn add_peer(&mut self, peer_id: S::PublicId, state: PeerState) {
         match self.peers.entry(peer_id.clone()) {
             Entry::Occupied(mut entry) => {
-                entry.get_mut().state = PeerState::Active;
+                entry.get_mut().state |= state;
             }
             Entry::Vacant(entry) => {
-                let _ = entry.insert(Peer::new_active());
+                let _ = entry.insert(Peer::new(state));
                 self.peer_id_hashes
                     .push((Hash::from(serialise(&peer_id).as_slice()), peer_id));
             }
@@ -99,7 +93,7 @@ impl<S: SecretId> PeerList<S> {
 
     pub fn remove_peer(&mut self, peer_id: &S::PublicId) {
         if let Some(peer) = self.peers.get_mut(peer_id) {
-            peer.state = PeerState::Removed;
+            peer.state = PeerState::inactive();
         } else {
             debug!(
                 "{:?} tried to remove unknown peer {:?}",
@@ -109,9 +103,10 @@ impl<S: SecretId> PeerList<S> {
         }
     }
 
-    /// Checks whether the input count becomes the super majority of the network.
+    /// Checks whether the input count becomes the super majority of the members
+    /// that can vote.
     pub fn is_super_majority(&self, count: usize) -> bool {
-        3 * count > 2 * self.peers.len()
+        3 * count > 2 * self.voters().count()
     }
 
     /// Returns the hash of the last event created by this peer. Returns `None` if cannot find.
@@ -136,6 +131,13 @@ impl<S: SecretId> PeerList<S> {
         event: &Event<T, S::PublicId>,
     ) -> Result<(), Error> {
         if let Some(peer) = self.peers.get_mut(event.creator()) {
+            if *event.creator() != *self.our_id.public_id() && !peer.state.can_send() {
+                return Err(Error::InvalidPeerState {
+                    required: PeerState::SEND,
+                    actual: peer.state,
+                });
+            }
+
             match peer.events.entry(event.index()) {
                 Entry::Occupied(entry) => {
                     if entry.get() != event.hash() {
@@ -174,11 +176,11 @@ impl PeerList<PeerId> {
     pub(super) fn new_from_dot_input(
         our_id: PeerId,
         events_graph: &BTreeMap<Hash, Event<Transaction, PeerId>>,
-        peer_states: &BTreeMap<PeerId, String>,
+        peer_states: &BTreeMap<PeerId, PeerState>,
     ) -> Self {
         let mut peers = BTreeMap::new();
         let mut peer_id_hashes = Vec::new();
-        for (peer_id, state_str) in peer_states {
+        for (peer_id, &state) in peer_states {
             let mut events = BTreeMap::new();
             for event in events_graph.values() {
                 if event.creator() == peer_id {
@@ -197,12 +199,7 @@ impl PeerList<PeerId> {
                     );
                 }
             }
-            let state = match state_str.as_ref() {
-                "Pending" => PeerState::Pending,
-                "Active" => PeerState::Active,
-                "Removed" => PeerState::Removed,
-                _ => panic!("wrong state string: {:?}", state_str),
-            };
+
             let _ = peers.insert(peer_id.clone(), Peer { state, events });
             peer_id_hashes.push((Hash::from(serialise(&peer_id).as_slice()), peer_id.clone()))
         }
@@ -215,56 +212,109 @@ impl PeerList<PeerId> {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Debug)]
-pub(crate) enum PeerState {
-    Pending,
-    Active,
-    Removed,
+/// Peer state is a bitflag with these flags:
+///
+/// - `VOTE`: if enabled, the peer can vote, which means they are counted towards
+///           the supermajority.
+/// - `SEND`: if enabled, the peer can send gossips. For us it means we can
+///           send gossips to others. For others it means we can receive gossips
+///           from them.
+/// - `RECV`: if enabled, the peer can receive gossips. For us, it means we
+///           can receive gossips from others. For others it means we can send
+///           gossips to them.
+///
+/// If all three are enabled, the state is called `active`. If none is enabled,
+/// it's `inactive`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct PeerState(u8);
+
+impl PeerState {
+    /// The peer is counted towards supermajority.
+    pub const VOTE: Self = PeerState(0b0000_0001);
+    /// The peer can send gossips.
+    pub const SEND: Self = PeerState(0b0000_0010);
+    /// The peer can receive gossips.
+    pub const RECV: Self = PeerState(0b0000_0100);
+
+    pub fn inactive() -> Self {
+        PeerState(0)
+    }
+
+    pub fn active() -> Self {
+        Self::VOTE | Self::SEND | Self::RECV
+    }
+
+    pub fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    pub fn can_vote(self) -> bool {
+        self.contains(Self::VOTE)
+    }
+
+    pub fn can_send(self) -> bool {
+        self.contains(Self::SEND)
+    }
+
+    pub fn can_recv(self) -> bool {
+        self.contains(Self::RECV)
+    }
+}
+
+impl BitOr for PeerState {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        PeerState(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for PeerState {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0
+    }
+}
+
+impl Debug for PeerState {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let mut separator = false;
+
+        write!(f, "PeerState(");
+
+        if self.contains(Self::VOTE) {
+            separator = true;
+            write!(f, "VOTE");
+        }
+
+        if self.contains(Self::SEND) {
+            if separator {
+                write!(f, "|");
+            }
+            separator = true;
+            write!(f, "SEND");
+        }
+
+        if self.contains(Self::RECV) {
+            if separator {
+                write!(f, "|");
+            }
+            write!(f, "RECV");
+        }
+
+        write!(f, ")")
+    }
 }
 
 #[derive(Debug)]
 pub(crate) struct Peer {
-    state: PeerState,
+    pub state: PeerState,
     pub events: BTreeMap<u64, Hash>,
 }
 
 impl Peer {
-    pub fn is_pending(&self) -> bool {
-        match self.state {
-            PeerState::Pending => true,
-            PeerState::Active | PeerState::Removed => false,
-        }
-    }
-
-    pub fn is_active(&self) -> bool {
-        match self.state {
-            PeerState::Active => true,
-            PeerState::Pending | PeerState::Removed => false,
-        }
-    }
-
-    pub fn is_removed(&self) -> bool {
-        match self.state {
-            PeerState::Removed => true,
-            PeerState::Active | PeerState::Pending => false,
-        }
-    }
-
-    #[cfg(any(test, feature = "dump-graphs"))]
-    pub fn state(&self) -> PeerState {
-        self.state
-    }
-
-    fn new_active() -> Self {
+    fn new(state: PeerState) -> Self {
         Self {
-            state: PeerState::Active,
-            events: BTreeMap::new(),
-        }
-    }
-
-    fn new_pending() -> Self {
-        Self {
-            state: PeerState::Pending,
+            state,
             events: BTreeMap::new(),
         }
     }

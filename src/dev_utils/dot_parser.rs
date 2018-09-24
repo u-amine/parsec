@@ -11,7 +11,7 @@ use hash::Hash;
 use meta_vote::{BoolSet, MetaVote, Step};
 use mock::{PeerId, Transaction};
 use observation::Observation;
-use peer_list::PeerList;
+use peer_list::{PeerList, PeerState};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{self, Read};
@@ -56,6 +56,10 @@ pub(crate) fn parse_test_dot_file(filename: &str) -> ParsedContents {
         "Failed to parse {}",
         dot_path.display()
     )
+}
+
+pub(crate) fn parse_peer_ids(input: &str) -> BTreeSet<PeerId> {
+    parse_entries(input).map(PeerId::new).collect()
 }
 
 fn open_corresponding_svg(dot_path: &Path) -> File {
@@ -116,28 +120,10 @@ impl ParsingEvent {
         last_ancestors_string: &str,
         observations: BTreeSet<PeerId>,
     ) -> Self {
-        let split_vbc = parse_entries(interesting_content_string);
-        let interesting_content = if split_vbc.is_empty() {
-            BTreeSet::new()
-        } else {
-            split_vbc
-                .iter()
-                .map(|s| {
-                    let content = extract_between(s, "(", ")");
-                    let category = unwrap!(s.split('(').next());
-                    match category {
-                        "Add" => Observation::Add(PeerId::new(content)),
-                        "Remove" => Observation::Remove(PeerId::new(content)),
-                        "OpaquePayload" => Observation::OpaquePayload(Transaction::new(content)),
-                        _ => panic!("wrong interesting_content string: {:?}", s),
-                    }
-                }).collect::<BTreeSet<_>>()
-        };
-
-        let mut last_ancestors = BTreeMap::new();
-        for (peer, index) in parse_peer_entries(last_ancestors_string) {
-            let _ = last_ancestors.insert(peer, unwrap!(index.parse()));
-        }
+        let interesting_content = parse_interesting_content(interesting_content_string);
+        let last_ancestors = parse_peer_entries(last_ancestors_string)
+            .map(|(peer, index)| (peer, unwrap!(index.parse())))
+            .collect();
 
         ParsingEvent {
             creator,
@@ -152,22 +138,88 @@ impl ParsingEvent {
     }
 }
 
-fn parse_peer_entries<'a>(input: &'a str) -> BTreeMap<PeerId, &'a str> {
-    let mut result = BTreeMap::new();
-    for entry in &parse_entries(input) {
-        let split_entry = entry.split(": ").collect::<Vec<_>>();
-        let _ = result.insert(PeerId::new(split_entry[0]), split_entry[1]);
+fn parse_interesting_content(input: &str) -> BTreeSet<Observation<Transaction, PeerId>> {
+    let mut input = input;
+
+    skip_whitespace(&mut input);
+    assert!(skip_string(&mut input, "interesting_content:"));
+    skip_whitespace(&mut input);
+    assert!(skip_string(&mut input, "{"));
+
+    let mut result = BTreeSet::new();
+
+    while !skip_string(&mut input, "}") {
+        let _ = result.insert(parse_observation(&mut input));
+        let _ = skip_string(&mut input, ",");
     }
+
     result
 }
 
-fn parse_entries<'a>(input: &'a str) -> Vec<&'a str> {
-    let split = extract_between(input, "{", "}");
-    if split.is_empty() {
-        Vec::new()
-    } else {
-        split.split(',').map(|s| s.trim()).collect()
+fn parse_observation(input: &mut &str) -> Observation<Transaction, PeerId> {
+    skip_whitespace(input);
+
+    if let Some(observation) = parse_genesis_observation(input) {
+        return observation;
     }
+
+    if let Some(observation) = parse_add_observation(input) {
+        return observation;
+    }
+
+    if let Some(observation) = parse_remove_observation(input) {
+        return observation;
+    }
+
+    if let Some(observation) = parse_opaque_payload_observation(input) {
+        return observation;
+    }
+
+    panic!("Failed to parse Observation: {:?}", input);
+}
+
+fn parse_genesis_observation(input: &mut &str) -> Option<Observation<Transaction, PeerId>> {
+    let _ = parse_string(input, "Genesis")?;
+    assert!(skip_string(input, "("));
+    let content = unwrap!(parse_until(input, ")"));
+    Some(Observation::Genesis(parse_peer_ids(content)))
+}
+
+fn parse_add_observation(input: &mut &str) -> Option<Observation<Transaction, PeerId>> {
+    let _ = parse_string(input, "Add")?;
+    assert!(skip_string(input, "("));
+    let name = unwrap!(parse_until(input, ")"));
+    Some(Observation::Add(PeerId::new(name)))
+}
+
+fn parse_remove_observation(input: &mut &str) -> Option<Observation<Transaction, PeerId>> {
+    let _ = parse_string(input, "Remove")?;
+    assert!(skip_string(input, "("));
+    let name = unwrap!(parse_until(input, ")"));
+    Some(Observation::Remove(PeerId::new(name)))
+}
+
+fn parse_opaque_payload_observation(input: &mut &str) -> Option<Observation<Transaction, PeerId>> {
+    let _ = parse_string(input, "OpaquePayload")?;
+    assert!(skip_string(input, "("));
+    let content = unwrap!(parse_until(input, ")"));
+    Some(Observation::OpaquePayload(Transaction::new(content)))
+}
+
+fn parse_peer_entries(input: &str) -> impl Iterator<Item = (PeerId, &str)> {
+    parse_entries(input).map(|entry| {
+        let mut it = entry.split(": ");
+        let peer_id = PeerId::new(unwrap!(it.next()));
+        let value = unwrap!(it.next());
+
+        (peer_id, value)
+    })
+}
+
+fn parse_entries(input: &str) -> impl Iterator<Item = &str> {
+    extract_between(input, "{", "}")
+        .split(',')
+        .map(|s| s.trim())
 }
 
 fn read(mut file: File) -> io::Result<ParsedContents> {
@@ -176,7 +228,6 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
 
     let mut parsing_events = parse_event_graph(&contents);
     let mut parsing_mvs = parse_meta_votes(&contents);
-
     let mut events = BTreeMap::new();
     let mut events_order = Vec::new();
     let mut name_hash_map: BTreeMap<String, Hash> = BTreeMap::new();
@@ -212,12 +263,6 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
 
         if let Some(meta_vote) = parsing_mvs.remove(&ordered_event) {
             let _ = meta_votes.insert(hash, meta_vote);
-        } else if let Some(parent_meta_vote) = parsed_event
-            .self_parent()
-            .and_then(|self_parent| meta_votes.get(self_parent))
-            .and_then(|meta_vote| Some(meta_vote.clone()))
-        {
-            let _ = meta_votes.insert(hash, parent_meta_vote);
         }
 
         let _ = events.insert(hash, parsed_event);
@@ -239,14 +284,59 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
     })
 }
 
-fn parse_peer_states(contents: &str) -> BTreeMap<PeerId, String> {
-    let states_string = extract_between(contents, "/// peer_states", "\n").trim();
-    let mut peer_states = BTreeMap::new();
-    for (peer, state_string) in parse_peer_entries(states_string) {
-        let state = unwrap!(state_string.split('\"').nth(1));
-        let _ = peer_states.insert(peer, state.to_string());
+fn parse_peer_states(contents: &str) -> BTreeMap<PeerId, PeerState> {
+    let mut input = extract_between(contents, "/// peer_states:", "\n");
+
+    skip_whitespace(&mut input);
+    assert!(skip_string(&mut input, "{"));
+
+    let mut result = BTreeMap::new();
+
+    loop {
+        skip_whitespace(&mut input);
+        let name = unwrap!(parse_until(&mut input, ":"));
+        let peer_id = PeerId::new(name);
+
+        let state = parse_peer_state(&mut input);
+        let _ = result.insert(peer_id, state);
+
+        skip_whitespace(&mut input);
+        if !skip_string(&mut input, ",") {
+            break;
+        }
     }
-    peer_states
+
+    result
+}
+
+fn parse_peer_state(input: &mut &str) -> PeerState {
+    skip_whitespace(input);
+    assert!(skip_string(input, "\"PeerState("));
+
+    let mut result = PeerState::inactive();
+
+    loop {
+        skip_whitespace(input);
+
+        if skip_string(input, "VOTE") {
+            result |= PeerState::VOTE;
+        } else if skip_string(input, "SEND") {
+            result |= PeerState::SEND;
+        } else if skip_string(input, "RECV") {
+            result |= PeerState::RECV;
+        } else {
+            panic!("Invalid peer state {:?}", input);
+        }
+
+        skip_whitespace(input);
+        if !skip_string(input, "|") {
+            break;
+        }
+    }
+
+    assert!(skip_string(input, ")\""));
+
+    result
 }
 
 fn parse_event_graph(contents: &str) -> BTreeMap<String, ParsingEvent> {
@@ -309,6 +399,7 @@ fn parse_meta_votes(contents: &str) -> BTreeMap<String, BTreeMap<PeerId, Vec<Met
             } else {
                 parse_meta_vote(line)
             };
+
             let _ = parsing_mvs
                 .entry(event_name.clone())
                 .and_modify(|peer_votes| {
@@ -360,6 +451,7 @@ fn split_events(contents: &str) -> SplitEvents {
         .map(|s| {
             let name = unwrap!(unwrap!(s.split("cluster_").last()).split(' ').next());
             let split_content = unwrap!(s.split('{').nth(1)).split('}').collect::<Vec<_>>();
+
             let events = split_content[0]
                 .split('\n')
                 .filter(|s| s.contains("->"))
@@ -460,6 +552,38 @@ fn parse_option_bool(line: &str) -> Option<bool> {
 
 fn extract_between<'a>(input: &'a str, left: &str, right: &str) -> &'a str {
     unwrap!(unwrap!(input.split(left).nth(1)).split(right).next())
+}
+
+fn parse_string<'a>(input: &mut &'a str, content: &str) -> Option<&'a str> {
+    if input.starts_with(content) {
+        let (result, rest) = input.split_at(content.len());
+        *input = rest;
+        Some(result)
+    } else {
+        None
+    }
+}
+
+// Extract the portion of `input` from the beginning until the given delimiter.
+// The delimiter is consumed, but not appended to the result.
+fn parse_until<'a>(input: &mut &'a str, stop: &str) -> Option<&'a str> {
+    for cursor in 0..input.len() {
+        if input[cursor..].starts_with(stop) {
+            let result = &input[..cursor];
+            *input = &input[(cursor + stop.len())..];
+            return Some(result);
+        }
+    }
+
+    None
+}
+
+fn skip_whitespace(input: &mut &str) {
+    *input = input.trim_left();
+}
+
+fn skip_string(input: &mut &str, content: &str) -> bool {
+    parse_string(input, content).is_some()
 }
 
 #[cfg(all(test, feature = "dump-graphs"))]

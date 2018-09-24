@@ -19,7 +19,7 @@ use meta_vote::{MetaVote, Step};
 use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
 use observation::{Malice, Observation};
-use peer_list::PeerList;
+use peer_list::{PeerList, PeerState};
 use round_hash::RoundHash;
 use serialise;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -63,36 +63,6 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
 
 impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// Creates a new `Parsec` for a peer with the given ID and genesis peer IDs (ours included).
-    pub fn new(
-        our_id: S,
-        genesis_group: &BTreeSet<S::PublicId>,
-        is_interesting_event: IsInterestingEventFn<S::PublicId>,
-    ) -> Self {
-        let mut parsec = Self::empty(our_id, is_interesting_event);
-
-        let initial_hash = Hash::from([].as_ref());
-        for peer_id in genesis_group {
-            let round_hash = RoundHash::new(peer_id, initial_hash);
-
-            parsec.peer_list.add_peer(peer_id.clone());
-            let _ = parsec
-                .round_hashes
-                .insert(peer_id.clone(), vec![round_hash]);
-        }
-
-        let initial_event = Event::new_initial(&parsec.peer_list);
-        if let Err(error) = parsec.add_event(initial_event) {
-            log_or_panic!(
-                "{:?} initialising Parsec failed when adding initial_event: {:?}",
-                parsec.our_pub_id(),
-                error
-            );
-        }
-
-        parsec
-    }
-
-    /// Creates a new `Parsec` for a peer with the given ID and genesis peer IDs (ours included).
     /// Version to be used in production
     pub fn from_genesis(
         our_id: S,
@@ -103,8 +73,27 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             log_or_panic!("Genesis group must contain us");
         }
 
-        let mut parsec = Self::new(our_id, genesis_group, is_interesting_event);
+        let mut parsec = Self::empty(our_id, is_interesting_event);
 
+        for peer_id in genesis_group {
+            parsec
+                .peer_list
+                .add_peer(peer_id.clone(), PeerState::active());
+        }
+
+        parsec.initialise_round_hashes();
+
+        // Add initial event.
+        let event = Event::new_initial(&parsec.peer_list);
+        if let Err(error) = parsec.add_event(event) {
+            log_or_panic!(
+                "{:?} initialising Parsec failed when adding initial event: {:?}",
+                parsec.our_pub_id(),
+                error
+            );
+        }
+
+        // Add event carying genesis observation.
         let genesis_observation = Observation::Genesis(genesis_group.clone());
         let self_parent_hash = parsec.our_last_event_hash();
         let event = Event::new_from_observation(
@@ -128,9 +117,18 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// Creates a new `Parsec` for a peer that is joining an existing section.
     pub fn from_existing(
         our_id: S,
+        genesis_group: &BTreeSet<S::PublicId>,
         section: &BTreeSet<S::PublicId>,
         is_interesting_event: IsInterestingEventFn<S::PublicId>,
     ) -> Self {
+        if genesis_group.is_empty() {
+            log_or_panic!("Genesis group can't be empty");
+        }
+
+        if genesis_group.contains(our_id.public_id()) {
+            log_or_panic!("Genesis group can't already contain us");
+        }
+
         if section.is_empty() {
             log_or_panic!("Section can't be empty");
         }
@@ -142,15 +140,24 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let our_public_id = our_id.public_id().clone();
         let mut parsec = Self::empty(our_id, is_interesting_event);
 
-        parsec.peer_list.add_pending_peer(our_public_id);
-        for peer_id in section {
-            parsec.peer_list.add_pending_peer(peer_id.clone());
+        parsec.peer_list.add_peer(our_public_id, PeerState::RECV);
+
+        for peer_id in genesis_group {
+            parsec
+                .peer_list
+                .add_peer(peer_id.clone(), PeerState::VOTE | PeerState::SEND)
         }
+
+        for peer_id in section {
+            parsec.peer_list.add_peer(peer_id.clone(), PeerState::SEND);
+        }
+
+        parsec.initialise_round_hashes();
 
         let initial_event = Event::new_initial(&parsec.peer_list);
         if let Err(error) = parsec.add_event(initial_event) {
             log_or_panic!(
-                "{:?} initialising Parsec failed when adding initial_event: {:?}",
+                "{:?} initialising Parsec failed when adding initial event: {:?}",
                 parsec.our_pub_id(),
                 error
             );
@@ -179,10 +186,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// Adds a vote for `observation`.  Returns an error if we have already voted for this.
     pub fn vote_for(&mut self, observation: Observation<T, S::PublicId>) -> Result<(), Error> {
         debug!("{:?} voting for {:?}", self.our_pub_id(), observation);
-        self.confirm_self_not_removed()?;
+
+        self.confirm_self_state(PeerState::VOTE)?;
+
         if self.have_voted_for(&observation) {
             return Err(Error::DuplicateVote);
         }
+
         let self_parent_hash = self.our_last_event_hash();
         let event = Event::new_from_observation(
             self_parent_hash,
@@ -199,26 +209,36 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// returned.
     pub fn create_gossip(
         &self,
-        peer_id: Option<S::PublicId>,
+        peer_id: Option<&S::PublicId>,
     ) -> Result<Request<T, S::PublicId>, Error> {
+        self.confirm_self_state(PeerState::SEND)?;
+
+        if let Some(recipient_id) = peer_id {
+            // We require `PeerState::VOTE` in addition to `PeerState::RECV` here,
+            // Because if the peer does not have `PeerState::VOTE`, it means we haven't
+            // yet reached consensus on adding them to the section so we shouldn't contact
+            // them yet.
+            self.confirm_peer_state(recipient_id, PeerState::VOTE | PeerState::RECV)?;
+
+            if self.peer_list.last_event_hash(recipient_id).is_some() {
+                debug!(
+                    "{:?} creating gossip request for {:?}",
+                    self.our_pub_id(),
+                    recipient_id
+                );
+
+                return self
+                    .events_to_gossip_to_peer(recipient_id)
+                    .map(Request::new);
+            }
+        }
+
         debug!(
             "{:?} creating gossip request for {:?}",
             self.our_pub_id(),
             peer_id
         );
-        self.confirm_self_not_removed()?;
-        if let Some(recipient_id) = peer_id {
-            self.confirm_peer_not_removed(&recipient_id)?;
-            if !self.peer_list.is_active(&recipient_id) {
-                trace!("{:?} doesn't know {:?}", self.our_pub_id(), recipient_id);
-                return Err(Error::UnknownPeer);
-            }
-            if self.peer_list.last_event_hash(&recipient_id).is_some() {
-                return self
-                    .events_to_gossip_to_peer(&recipient_id)
-                    .map(Request::new);
-            }
-        }
+
         let mut events = vec![];
         for event_hash in &self.events_order {
             events.push(self.get_known_event(event_hash)?);
@@ -268,6 +288,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.consensused_blocks.pop_front()
     }
 
+    /// Check if we can vote (that is, we have reached a consensus on us being
+    /// full member of the section)
+    pub fn can_vote(&self) -> bool {
+        self.peer_list.peer_state(self.our_pub_id()).can_vote()
+    }
+
     /// Checks if the given `observation` has already been voted for by us.
     pub fn have_voted_for(&self, observation: &Observation<T, S::PublicId>) -> bool {
         self.events.values().any(|event| {
@@ -305,20 +331,35 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.peer_list.our_id().public_id()
     }
 
-    fn confirm_self_not_removed(&self) -> Result<(), Error> {
-        if self.peer_list.is_removed(self.our_pub_id()) {
-            trace!("{:?} has been removed", self.our_pub_id());
-            return Err(Error::SelfRemoved);
+    fn confirm_peer_state(&self, peer_id: &S::PublicId, required: PeerState) -> Result<(), Error> {
+        let actual = self.peer_list.peer_state(peer_id);
+        if actual.contains(required) {
+            Ok(())
+        } else {
+            trace!(
+                "{:?} detected invalid state of {:?} (required: {:?}, actual: {:?})",
+                self.our_pub_id(),
+                peer_id,
+                required,
+                actual,
+            );
+            Err(Error::InvalidPeerState { required, actual })
         }
-        Ok(())
     }
 
-    fn confirm_peer_not_removed(&self, peer_id: &S::PublicId) -> Result<(), Error> {
-        if self.peer_list.is_removed(peer_id) {
-            trace!("{:?} has removed {:?}", self.our_pub_id(), peer_id);
-            return Err(Error::RemovedPeer);
+    fn confirm_self_state(&self, required: PeerState) -> Result<(), Error> {
+        let actual = self.peer_list.our_state();
+        if actual.contains(required) {
+            Ok(())
+        } else {
+            trace!(
+                "{:?} has invalid state (required: {:?}, actual: {:?})",
+                self.our_pub_id(),
+                required,
+                actual,
+            );
+            Err(Error::InvalidSelfState { required, actual })
         }
-        Ok(())
     }
 
     fn our_last_event_hash(&self) -> Hash {
@@ -362,8 +403,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         src: &S::PublicId,
         packed_events: Vec<PackedEvent<T, S::PublicId>>,
     ) -> Result<(), Error> {
-        self.confirm_self_not_removed()?;
-        self.confirm_peer_not_removed(src)?;
+        self.confirm_self_state(PeerState::RECV)?;
+        self.confirm_peer_state(src, PeerState::SEND)?;
+
+        // We have received at least one gossip from the sender, so they can now
+        // receive gossips from us as well.
+        self.peer_list.add_peer(src.clone(), PeerState::RECV);
+
         for packed_event in packed_events {
             if let Some(event) = Event::unpack(packed_event, &self.events, &self.peer_list)? {
                 self.add_event(event)?;
@@ -376,7 +422,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.peer_list.add_event(&event)?;
         let event_hash = *event.hash();
         let is_initial = event.is_initial();
-        if self.peer_list.is_pending(self.our_pub_id()) && event.creator() != self.our_pub_id() {
+
+        if !self.peer_list.our_state().contains(PeerState::VOTE)
+            && event.creator() != self.our_pub_id()
+        {
             // We're handling an event before we've been made active.  If it's not one of our own
             // events, it means we're in the process of handling our first incoming request.  Insert
             // it immediately before our initial event, so that when we calculate the list of events
@@ -394,10 +443,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         } else {
             self.events_order.push(event_hash);
         }
+
         let _ = self.events.insert(event_hash, event);
+
         if is_initial {
             return Ok(());
         }
+
         self.set_interesting_content(&event_hash)?;
         self.process_event(&event_hash)?;
         self.handle_malice(&event_hash)?;
@@ -409,7 +461,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.set_observations(event_hash)?;
         self.set_meta_votes(event_hash)?;
         self.update_round_hashes(event_hash);
-        if let Some(block) = self.next_stable_block() {
+
+        if let Some(block) = self.next_stable_block(event_hash) {
             dump_graph::to_file(
                 self.our_pub_id(),
                 &self.events,
@@ -425,40 +478,79 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 block.payload(),
                 payload_hash
             );
+
             self.consensus_history.push(payload_hash);
             let observation = block.payload().clone();
             self.consensused_blocks.push_back(block);
 
-            match observation {
-                Observation::Genesis(peer_ids) => {
-                    for peer_id in peer_ids {
-                        self.peer_list.add_peer(peer_id);
-                    }
-                }
-                Observation::Add(peer_id) => {
-                    self.peer_list.add_peer(peer_id);
-                }
-                Observation::Remove(peer_id) => {
-                    self.peer_list.remove_peer(&peer_id);
-                    if peer_id == *self.our_pub_id() {
-                        return Ok(());
-                    }
-                }
-                Observation::Accusation { offender, malice } => {
-                    info!(
-                        "{:?} removing {:?} due to consensus on accusation of malice {:?}",
-                        self.our_pub_id(),
-                        offender,
-                        malice
-                    );
-                    self.peer_list.remove_peer(&offender);
-                }
-                Observation::OpaquePayload(_) => {}
+            if !self.handle_consensus(observation) {
+                return Ok(());
             }
 
             self.restart_consensus(&payload_hash);
         }
         Ok(())
+    }
+
+    fn handle_consensus(&mut self, observation: Observation<T, S::PublicId>) -> bool {
+        match observation {
+            Observation::Genesis(_) => {
+                // TODO: handle malice
+            }
+            Observation::Add(peer_id) => {
+                // - If we are already full member of the section, we can start
+                //   sending gossips to the new peer from this moment.
+                // - If we are the new peer, we must wait for the other members
+                //   to send gossips to us first.
+                //
+                // To distinguish between the two, we check whether everyone we
+                // reached consensus on adding also reached consensus on adding us.
+                let recv = self
+                    .peer_list
+                    .iter()
+                    .filter(|&(id, peer)| {
+                        // Peers that can vote, which means we have reached consensus
+                        // on adding them.
+                        peer.state.can_vote() &&
+                        // Excluding the peer begin added.
+                        *id != peer_id &&
+                        // And excluding us.
+                        *id != *self.our_pub_id()
+                    }).all(|(_, peer)| {
+                        // Peers that can receive, which implies they've already
+                        // sent us at least one message which implies they've already
+                        // reached consensus on adding us.
+                        peer.state.can_recv()
+                    });
+
+                self.peer_list.add_peer(
+                    peer_id,
+                    if recv {
+                        PeerState::VOTE | PeerState::SEND | PeerState::RECV
+                    } else {
+                        PeerState::VOTE | PeerState::SEND
+                    },
+                );
+            }
+            Observation::Remove(peer_id) => {
+                self.peer_list.remove_peer(&peer_id);
+                if peer_id == *self.our_pub_id() {
+                    return false;
+                }
+            }
+            Observation::Accusation { offender, malice } => {
+                info!(
+                    "{:?} removing {:?} due to consensus on accusation of malice {:?}",
+                    self.our_pub_id(),
+                    offender,
+                    malice
+                );
+                self.peer_list.remove_peer(&offender);
+            }
+            Observation::OpaquePayload(_) => {}
+        }
+
+        true
     }
 
     fn set_interesting_content(&mut self, event_hash: &Hash) -> Result<(), Error> {
@@ -495,7 +587,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             }).filter(|&this_payload| !self.payload_is_already_carried(event, this_payload))
             .filter(|&this_payload| {
                 let voters = self.ancestors_carrying_payload(event, this_payload);
-                let all_peers = self.peer_list.iter().map(|(peer, _)| peer).collect();
+                let all_peers = self.peer_list.voter_ids().collect();
                 (self.is_interesting_event)(&voters, &all_peers)
             }).cloned()
             .collect())
@@ -590,7 +682,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 }
             } else if self.is_observer(event) {
                 // Start meta votes for this event.
-                for peer_id in self.peer_list.all_ids() {
+                for peer_id in self.peer_list.voter_ids() {
                     let other_votes = self.collect_other_meta_votes(peer_id, event);
                     let initial_estimate = event.observations.contains(peer_id);
                     let _ = meta_votes.insert(
@@ -610,6 +702,14 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             let _ = self.meta_votes.insert(*event_hash, meta_votes);
         }
         Ok(())
+    }
+
+    fn initialise_round_hashes(&mut self) {
+        let initial_hash = Hash::from([].as_ref());
+        for (peer_id, _) in self.peer_list.iter() {
+            let round_hash = RoundHash::new(peer_id, initial_hash);
+            let _ = self.round_hashes.insert(peer_id.clone(), vec![round_hash]);
+        }
     }
 
     fn update_round_hashes(&mut self, event_hash: &Hash) {
@@ -802,9 +902,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let mut other_votes = vec![];
         for creator in self
             .peer_list
-            .all_ids()
-            .iter()
-            .filter(|&id| *id != event.creator())
+            .voter_ids()
+            .filter(|id| *id != event.creator())
         {
             if let Some(meta_votes) =
                 event
@@ -825,73 +924,71 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         other_votes
     }
 
-    fn next_stable_block(&mut self) -> Option<Block<T, S::PublicId>> {
-        self.meta_votes
-            .get(&self.our_last_event_hash())
-            .and_then(|our_last_meta_votes| {
-                let our_decided_meta_votes =
-                    our_last_meta_votes.iter().filter_map(|(id, event_votes)| {
-                        let vote = event_votes.last();
-                        vote.and_then(|v| {
-                            if v.decision.is_some() {
-                                Some((id, v))
-                            } else {
-                                None
-                            }
-                        })
-                    });
-                if our_decided_meta_votes.clone().count() < self.peer_list.all_ids().len() {
-                    None
-                } else {
-                    let elected_valid_blocks = our_decided_meta_votes
-                        .filter_map(|(id, vote)| {
-                            if vote.decision == Some(true) {
-                                self.interesting_events
-                                    .get(&id)
-                                    .and_then(|hashes| hashes.front())
-                                    .and_then(|hash| self.get_known_event(&hash).ok())
-                                    .map(|oldest_event| oldest_event.interesting_content.clone())
-                            } else {
-                                None
-                            }
-                        }).collect::<Vec<BTreeSet<Observation<T, S::PublicId>>>>();
-                    // This is sorted by peer_ids, which should avoid ties when picking the event
-                    // with the most represented payload.
-                    let payloads = elected_valid_blocks
-                        .iter()
-                        .flat_map(|payloads_carried| payloads_carried)
-                        .collect::<Vec<_>>();
-                    let copied_payloads = payloads.clone();
-                    copied_payloads
-                        .iter()
-                        .max_by(|lhs_payload, rhs_payload| {
-                            let lhs_count = payloads
-                                .iter()
-                                .filter(|payload_carried| lhs_payload == payload_carried)
-                                .count();
-                            let rhs_count = payloads
-                                .iter()
-                                .filter(|payload_carried| rhs_payload == payload_carried)
-                                .count();
-                            lhs_count.cmp(&rhs_count)
-                        }).cloned()
-                        .and_then(|winning_payload| {
-                            let votes = self
-                                .events
-                                .iter()
-                                .filter_map(|(_hash, event)| {
-                                    event.vote().and_then(|vote| {
-                                        if vote.payload() == winning_payload {
-                                            Some((event.creator().clone(), vote.clone()))
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                }).collect();
-                            Block::new(winning_payload.clone(), &votes).ok()
-                        })
-                }
-            })
+    fn next_stable_block(&mut self, event_hash: &Hash) -> Option<Block<T, S::PublicId>> {
+        self.meta_votes.get(event_hash).and_then(|last_meta_votes| {
+            let decided_meta_votes = last_meta_votes.iter().filter_map(|(id, event_votes)| {
+                let vote = event_votes.last();
+                vote.and_then(|v| {
+                    if v.decision.is_some() {
+                        Some((id, v))
+                    } else {
+                        None
+                    }
+                })
+            });
+            if decided_meta_votes.clone().count() < self.peer_list.voters().count() {
+                None
+            } else {
+                let elected_valid_blocks = decided_meta_votes
+                    .filter_map(|(id, vote)| {
+                        if vote.decision == Some(true) {
+                            self.interesting_events
+                                .get(&id)
+                                .and_then(|hashes| hashes.front())
+                                .and_then(|hash| self.get_known_event(&hash).ok())
+                                .map(|oldest_event| oldest_event.interesting_content.clone())
+                        } else {
+                            None
+                        }
+                    }).collect::<Vec<BTreeSet<Observation<T, S::PublicId>>>>();
+                // This is sorted by peer_ids, which should avoid ties when picking the event
+                // with the most represented payload.
+                let payloads = elected_valid_blocks
+                    .iter()
+                    .flat_map(|payloads_carried| payloads_carried)
+                    .collect::<Vec<_>>();
+
+                let copied_payloads = payloads.clone();
+                copied_payloads
+                    .iter()
+                    .max_by(|lhs_payload, rhs_payload| {
+                        let lhs_count = payloads
+                            .iter()
+                            .filter(|payload_carried| lhs_payload == payload_carried)
+                            .count();
+                        let rhs_count = payloads
+                            .iter()
+                            .filter(|payload_carried| rhs_payload == payload_carried)
+                            .count();
+                        lhs_count.cmp(&rhs_count)
+                    }).cloned()
+                    .and_then(|winning_payload| {
+                        let votes = self
+                            .events
+                            .iter()
+                            .filter_map(|(_hash, event)| {
+                                event.vote().and_then(|vote| {
+                                    if vote.payload() == winning_payload {
+                                        Some((event.creator().clone(), vote.clone()))
+                                    } else {
+                                        None
+                                    }
+                                })
+                            }).collect();
+                        Block::new(winning_payload.clone(), &votes).ok()
+                    })
+            }
+        })
     }
 
     fn clear_consensus_data(&mut self, payload: &Observation<T, S::PublicId>) {
@@ -923,8 +1020,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.round_hashes = self
             .peer_list
             .all_ids()
-            .iter()
-            .map(|&peer_id| {
+            .map(|peer_id| {
                 let round_hash = RoundHash::new(peer_id, *latest_block_hash);
                 (peer_id.clone(), vec![round_hash])
             }).collect();
@@ -1037,7 +1133,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     // Get the responsiveness threshold based on the current number of peers.
     fn responsiveness_threshold(&self) -> usize {
-        (self.peer_list.num_peers() as f64).log2().ceil() as usize
+        (self.peer_list.voters().count() as f64).log2().ceil() as usize
     }
 
     fn handle_malice(&mut self, event_hash: &Hash) -> Result<(), Error> {
@@ -1146,7 +1242,7 @@ mod functional_tests {
             let peer_list = parsec
                 .peer_list
                 .iter()
-                .map(|(peer_id, peer)| (peer_id.clone(), (peer.state(), peer.events.clone())))
+                .map(|(peer_id, peer)| (peer_id.clone(), (peer.state, peer.events.clone())))
                 .collect();
             let events = parsec.events.keys().cloned().collect();
 
@@ -1162,10 +1258,10 @@ mod functional_tests {
         }
     }
 
-    macro_rules! assert_err_eq {
-        ($expected_error:tt, $result:expr) => {
+    macro_rules! assert_err {
+        ($expected_error:pat, $result:expr) => {
             match $result {
-                Err(Error::$expected_error) => (),
+                Err($expected_error) => (),
                 unexpected => panic!(
                     "Expected {}, but got {:?}",
                     stringify!($expected_error),
@@ -1181,11 +1277,15 @@ mod functional_tests {
         let our_id = unwrap!(peers.pop());
         let peers = peers.into_iter().collect();
 
-        let parsec =
-            Parsec::<Transaction, _>::from_existing(our_id.clone(), &peers, is_supermajority);
+        let parsec = Parsec::<Transaction, _>::from_existing(
+            our_id.clone(),
+            &peers,
+            &peers,
+            is_supermajority,
+        );
 
         // Existing section + us
-        assert_eq!(parsec.peer_list.num_peers(), peers.len() + 1);
+        assert_eq!(parsec.peer_list.all_ids().count(), peers.len() + 1);
 
         // Only the initial event should be in the gossip graph.
         assert_eq!(parsec.events.len(), 1);
@@ -1197,12 +1297,59 @@ mod functional_tests {
     // TODO: remove this `cfg` once the `maidsafe_utilities` crate with PR 130 is published.
     #[cfg(feature = "testing")]
     #[test]
+    #[should_panic(expected = "Genesis group can't be empty")]
+    fn from_existing_requires_non_empty_genesis_group() {
+        use mock;
+
+        let mut peers = mock::create_ids(10);
+        let our_id = unwrap!(peers.pop());
+        let peers = peers.into_iter().collect();
+
+        let _ = Parsec::<Transaction, _>::from_existing(
+            our_id,
+            &BTreeSet::new(),
+            &peers,
+            is_supermajority,
+        );
+    }
+
+    // TODO: remove this `cfg` once the `maidsafe_utilities` crate with PR 130 is published.
+    #[cfg(feature = "testing")]
+    #[test]
+    #[should_panic(expected = "Genesis group can't already contain us")]
+    fn from_existing_requires_that_genesis_group_does_not_contain_us() {
+        use mock;
+
+        let peers = mock::create_ids(10);
+        let our_id = unwrap!(peers.first()).clone();
+        let genesis_group = peers.iter().cloned().collect();
+        let section = peers.into_iter().skip(1).collect();
+
+        let _ = Parsec::<Transaction, _>::from_existing(
+            our_id,
+            &genesis_group,
+            &section,
+            is_supermajority,
+        );
+    }
+
+    // TODO: remove this `cfg` once the `maidsafe_utilities` crate with PR 130 is published.
+    #[cfg(feature = "testing")]
+    #[test]
     #[should_panic(expected = "Section can't be empty")]
     fn from_existing_requires_non_empty_section() {
-        let mut peers = mock::create_ids(1);
-        let our_id = unwrap!(peers.pop());
+        use mock;
 
-        let _ = Parsec::<Transaction, _>::from_existing(our_id, &BTreeSet::new(), is_supermajority);
+        let mut peers = mock::create_ids(10);
+        let our_id = unwrap!(peers.pop());
+        let genesis_group = peers.into_iter().collect();
+
+        let _ = Parsec::<Transaction, _>::from_existing(
+            our_id,
+            &genesis_group,
+            &BTreeSet::new(),
+            is_supermajority,
+        );
     }
 
     // TODO: remove this `cfg` once the `maidsafe_utilities` crate with PR 130 is published.
@@ -1210,11 +1357,19 @@ mod functional_tests {
     #[test]
     #[should_panic(expected = "Section can't already contain us")]
     fn from_existing_requires_that_section_does_not_contain_us() {
-        let peers = mock::create_ids(8);
-        let our_id = unwrap!(peers.first()).clone();
-        let peers = peers.into_iter().collect();
+        use mock;
 
-        let _ = Parsec::<Transaction, _>::from_existing(our_id, &peers, is_supermajority);
+        let peers = mock::create_ids(10);
+        let our_id = unwrap!(peers.first()).clone();
+        let genesis_group = peers.iter().skip(1).cloned().collect();
+        let section = peers.into_iter().collect();
+
+        let _ = Parsec::<Transaction, _>::from_existing(
+            our_id,
+            &genesis_group,
+            &section,
+            is_supermajority,
+        );
     }
 
     #[test]
@@ -1226,7 +1381,7 @@ mod functional_tests {
         let parsec =
             Parsec::<Transaction, _>::from_genesis(our_id.clone(), &peers, is_supermajority);
         // the peer_list should contain the entire genesis group
-        assert_eq!(parsec.peer_list.num_peers(), peers.len());
+        assert_eq!(parsec.peer_list.all_ids().count(), peers.len());
         // initial event + genesis_observation
         assert_eq!(parsec.events.len(), 2);
         let initial_hash = parsec.events_order[0];
@@ -1277,25 +1432,29 @@ mod functional_tests {
         let mut parsed_contents = parse_test_dot_file("add_fred.dot");
         // Split out the events Eric would send to Alice.  These are the last seven events listed in
         // `parsed_contents.events_order`, i.e. B_14, C_14, D_14, D_15, B_15, C_15, E_14, and E_15.
-        //
-        // The final decision to add Fred is reached in E_15.
-        let e_15_hash = unwrap!(parsed_contents.events_order.pop());
-        let e_15 = unwrap!(parsed_contents.events.remove(&e_15_hash));
-        let final_hashes = parsed_contents.events_order.split_off(71);
-        let mut final_events = vec![];
-        for hash in &final_hashes {
-            final_events.push(unwrap!(parsed_contents.events.remove(hash)));
-        }
+        let index = parsed_contents.events_order.len() - 8;
+        let mut final_events: Vec<_> = parsed_contents
+            .events_order
+            .split_off(index)
+            .iter()
+            .map(|hash| unwrap!(parsed_contents.events.remove(hash)))
+            .collect();
+
+        let e_15 = unwrap!(final_events.pop());
+        let e_14 = unwrap!(final_events.pop());
+
+        // The final decision to add Fred is reached in C_15.
+        let c_15 = unwrap!(final_events.pop());
 
         let mut alice = Parsec::from_parsed_contents(parsed_contents);
         let genesis_group = alice.peer_list.all_ids().into_iter().cloned().collect();
         let fred_id = PeerId::new("Fred");
-        assert!(!alice.peer_list.all_ids().contains(&&fred_id));
+        assert!(!alice.peer_list.all_ids().any(|peer_id| *peer_id == fred_id));
 
         let alice_snapshot = Snapshot::new(&alice);
 
         // Try calling `create_gossip()` for a peer which doesn't exist yet.
-        assert_err_eq!(UnknownPeer, alice.create_gossip(Some(fred_id.clone())));
+        assert_err!(Error::InvalidPeerState { .. }, alice.create_gossip(Some(&fred_id)));
         assert_eq!(alice_snapshot, Snapshot::new(&alice));
 
         // Keep a copy of a request which will be used later in the test.  This request will not
@@ -1306,14 +1465,20 @@ mod functional_tests {
         // Alice adding Fred.
         for event in final_events {
             unwrap!(alice.add_event(event));
-            assert!(!alice.peer_list.all_ids().contains(&&fred_id));
+            assert!(!alice.peer_list.all_ids().any(|peer_id| *peer_id == fred_id));
         }
+
+        // NOTE: currently the consensus is reached at c_15, but when we implement
+        //       peer membership, it won't be reached until the "Eric" sync event.
+        unwrap!(alice.add_event(c_15));
+        unwrap!(alice.add_event(e_14));
         unwrap!(alice.add_event(e_15));
         unwrap!(alice.create_sync_event(&PeerId::new("Eric"), true));
-        assert!(alice.peer_list.all_ids().contains(&&fred_id));
+        assert!(alice.peer_list.all_ids().any(|peer_id| *peer_id == fred_id));
 
         // Construct Fred's Parsec instance.
-        let mut fred = Parsec::from_existing(fred_id, &genesis_group, is_supermajority);
+        let mut fred =
+            Parsec::from_existing(fred_id, &genesis_group, &genesis_group, is_supermajority);
         let fred_snapshot = Snapshot::new(&fred);
 
         // Create a "naughty Carol" instance where the graph only shows four peers existing before
@@ -1325,8 +1490,8 @@ mod functional_tests {
         // TODO - re-enable once `handle_request` is fixed to match the expected behaviour by
         //        MAID-3066/3067.
         if false {
-            assert_err_eq!(
-                InvalidInitialRequest,
+            assert_err!(
+                Error::InvalidInitialRequest,
                 fred.handle_request(&alice_id, malicious_message)
             );
         }
@@ -1337,8 +1502,8 @@ mod functional_tests {
         if false {
             // Pass the deficient message gathered earlier which will not be sufficient to allow
             // Fred to see himself getting added to the section.
-            assert_err_eq!(
-                InvalidInitialRequest,
+            assert_err!(
+                Error::InvalidInitialRequest,
                 fred.handle_request(&alice_id, deficient_message)
             );
         }
@@ -1364,28 +1529,37 @@ mod functional_tests {
 
         let mut alice = Parsec::from_parsed_contents(parsed_contents);
         let eric_id = PeerId::new("Eric");
-        assert!(alice.peer_list.all_ids().contains(&&eric_id));
-        assert!(!alice.peer_list.is_removed(&&eric_id));
+
+        assert!(alice.peer_list.all_ids().any(|peer_id| *peer_id == eric_id));
+        assert_ne!(alice.peer_list.peer_state(&eric_id), PeerState::inactive());
 
         // Add event now which shall result in Alice removing Eric.
         unwrap!(alice.add_event(a_last));
-        assert!(alice.peer_list.is_removed(&&eric_id));
+        assert_eq!(alice.peer_list.peer_state(&eric_id), PeerState::inactive());
 
         // Try calling `create_gossip()` for Eric shall result in error.
-        assert_err_eq!(RemovedPeer, alice.create_gossip(Some(eric_id.clone())));
+        assert_err!(Error::InvalidPeerState { .. }, alice.create_gossip(Some(&eric_id)));
 
         // Construct Eric's parsec instance.
-        let mut section: BTreeSet<PeerId> =
-            alice.peer_list.all_ids().into_iter().cloned().collect();
+        let mut section: BTreeSet<_> = alice.peer_list.all_ids().cloned().collect();
         let _ = section.remove(&eric_id);
-        let mut eric = Parsec::from_existing(eric_id.clone(), &section, is_supermajority);
-        // Peer state is 'pending' when created from existing. Need to call 'add_peer' to update
-        // the state to 'active'.
+        let mut eric = Parsec::<Transaction, _>::from_existing(
+            eric_id.clone(),
+            &section,
+            &section,
+            is_supermajority,
+        );
+
+        // Peer state is (VOTE | SEND) when created from existing. Need to call
+        // 'add_peer' to update the state to (VOTE | SEND | RECV).
         for peer_id in section {
-            eric.peer_list.add_peer(peer_id);
+            eric.peer_list.add_peer(peer_id, PeerState::RECV);
         }
-        let request = unwrap!(eric.create_gossip(Some(PeerId::new("Alice"))));
-        // Message from a removed peer shall result in error.
-        assert_err_eq!(RemovedPeer, alice.handle_request(&eric_id, request));
+
+        // Eric can no longer gossip to anyone.
+        assert_err!(
+            Error::InvalidSelfState { .. },
+            eric.create_gossip(Some(&PeerId::new("Alice")))
+        );
     }
 }
