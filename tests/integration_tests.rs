@@ -250,7 +250,6 @@ mod test {
                 vote_duplication: (0.0..0.5).into(),
                 delay_distr: arbitrary_delay(0..10, 0.0..10.0),
             },
-            ..Default::default()
         }) {
             let _ = log::init(true);
 

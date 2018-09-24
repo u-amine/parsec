@@ -169,7 +169,7 @@ impl Peers {
         let mut failed_peers = self.num_failed_peers();
         let name = self.choose_name_to_remove(rng);
         {
-            let status = self.0.get(&name).unwrap();
+            let status = &self.0[&name];
             if *status == PeerStatus::Active {
                 active_peers -= 1;
             } else if *status == PeerStatus::Failed {

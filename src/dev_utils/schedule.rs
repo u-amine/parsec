@@ -180,7 +180,7 @@ impl PendingObservations {
         rng: &mut R,
         peers: I,
         step: usize,
-        observation: Observation,
+        observation: &Observation,
     ) {
         for peer in peers {
             let observations = self
@@ -537,7 +537,7 @@ impl Schedule {
         if options.votes_before_gossip {
             let opaque_transactions = obs_schedule.extract_opaque();
             for obs in opaque_transactions {
-                pending.peers_make_observation(&mut env.rng, peers.active_peers(), step, obs);
+                pending.peers_make_observation(&mut env.rng, peers.active_peers(), step, &obs);
             }
         }
 
@@ -551,7 +551,7 @@ impl Schedule {
                             &mut env.rng,
                             peers.active_peers(),
                             step,
-                            ParsecObservation::Add(new_peer.clone()),
+                            &ParsecObservation::Add(new_peer.clone()),
                         );
                         schedule.push(ScheduleEvent::AddPeer(new_peer));
                     }
@@ -561,7 +561,7 @@ impl Schedule {
                             &mut env.rng,
                             peers.active_peers(),
                             step,
-                            ParsecObservation::Remove(peer.clone()),
+                            &ParsecObservation::Remove(peer.clone()),
                         );
                         schedule.push(ScheduleEvent::RemovePeer(peer));
                     }
@@ -570,7 +570,7 @@ impl Schedule {
                             &mut env.rng,
                             peers.active_peers(),
                             step,
-                            ParsecObservation::OpaquePayload(payload),
+                            &ParsecObservation::OpaquePayload(payload),
                         );
                     }
                     ObservationEvent::Fail(peer) => {

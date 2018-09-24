@@ -24,6 +24,7 @@ struct QueueEntry {
     pub deliver_after: usize,
 }
 
+#[derive(Default)]
 pub struct Network {
     pub peers: BTreeMap<PeerId, Peer>,
     genesis: BTreeSet<PeerId>,
@@ -49,13 +50,9 @@ pub enum ConsensusError<'a> {
 }
 
 impl Network {
-    /// Create test network with the given initial number of peers (the genesis group).
+    /// Create an empty test network
     pub fn new() -> Self {
-        Network {
-            peers: BTreeMap::new(),
-            genesis: BTreeSet::new(),
-            msg_queue: BTreeMap::new(),
-        }
+        Self::default()
     }
 
     /// Create a test network with initial peers constructed from the given IDs
