@@ -93,12 +93,12 @@ impl Debug for Peer {
     }
 }
 
-pub struct Peers(BTreeMap<PeerId, PeerStatus>);
+pub struct PeerStatuses(BTreeMap<PeerId, PeerStatus>);
 
-impl Peers {
-    /// Creates a new Peers struct with the given active peers
-    pub fn new(names: &BTreeSet<PeerId>) -> Peers {
-        Peers(
+impl PeerStatuses {
+    /// Creates a new PeerStatuses struct with the given active peers
+    pub fn new(names: &BTreeSet<PeerId>) -> PeerStatuses {
+        PeerStatuses(
             names
                 .into_iter()
                 .map(|x| (x.clone(), PeerStatus::Active))

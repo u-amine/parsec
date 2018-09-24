@@ -30,8 +30,8 @@ pub enum RngChoice {
 }
 
 impl Environment {
-    /// Initialise the test environment with the given number of peers and observations.  The random
-    /// number generator will be seeded with `seed` or randomly if this is `SeededRandom`.
+    /// Initialise the test environment. The random number generator will be seeded with `seed`
+    /// or randomly if this is `SeededRandom`.
     pub fn new(seed: RngChoice) -> Self {
         let rng: Box<RngDebug> = match seed {
             RngChoice::SeededRandom => Box::new(SeededRng::new()),

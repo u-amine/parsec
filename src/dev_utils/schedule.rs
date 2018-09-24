@@ -8,7 +8,7 @@
 
 use super::Environment;
 use super::Observation;
-use super::Peers;
+use super::PeerStatuses;
 #[cfg(feature = "dump-graphs")]
 use dump_graph::DIR;
 use mock::{PeerId, Transaction, NAMES};
@@ -367,7 +367,7 @@ impl ObservationSchedule {
             .take(options.genesis_size)
             .map(|s| PeerId::new(*s))
             .collect();
-        let mut peers = Peers::new(&genesis_names);
+        let mut peers = PeerStatuses::new(&genesis_names);
 
         let mut step: usize = 1;
         while num_observations
@@ -489,7 +489,7 @@ impl Schedule {
     fn perform_step<R: Rng>(
         rng: &mut R,
         step: usize,
-        peers: &mut Peers,
+        peers: &mut PeerStatuses,
         // mut required to be able to use the inner reference in a loop
         mut pending: Option<&mut PendingObservations>,
         schedule: &mut Vec<ScheduleEvent>,
@@ -527,7 +527,7 @@ impl Schedule {
         let mut obs_schedule = ObservationSchedule::gen(&mut env.rng, options);
         // the +1 below is to account for genesis
         let num_observations = obs_schedule.count_observations() + 1;
-        let mut peers = Peers::new(&obs_schedule.genesis);
+        let mut peers = PeerStatuses::new(&obs_schedule.genesis);
         let mut step = 0;
 
         // genesis has to be first
