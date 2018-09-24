@@ -900,7 +900,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         event: &Event<T, S::PublicId>,
     ) -> Vec<Vec<MetaVote>> {
         let mut other_votes = vec![];
-        for creator in self.peer_list.all_ids().filter(|id| *id != event.creator()) {
+        for creator in self
+            .peer_list
+            .voter_ids()
+            .filter(|id| *id != event.creator())
+        {
             if let Some(meta_votes) =
                 event
                     .last_ancestors()
