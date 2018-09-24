@@ -2,7 +2,7 @@ digraph GossipGraph {
   splines=false
   rankdir=BT
 /// our_id: Carol
-/// peer_states: {Alice: "Active", Bob: "Active", Carol: "Active", Dave: "Active"}
+/// peer_states: {Alice: "PeerState(VOTE|SEND|RECV)", Bob: "PeerState(VOTE|SEND|RECV)", Carol: "PeerState(VOTE|SEND|RECV)", Dave: "PeerState(VOTE|SEND|RECV)"}
 /// { 07092c..
 /// cause: Response
 /// interesting_content: {}

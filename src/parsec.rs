@@ -1428,15 +1428,19 @@ mod functional_tests {
         let mut parsed_contents = parse_test_dot_file("add_fred.dot");
         // Split out the events Eric would send to Alice.  These are the last seven events listed in
         // `parsed_contents.events_order`, i.e. B_14, C_14, D_14, D_15, B_15, C_15, E_14, and E_15.
-        //
-        // The final decision to add Fred is reached in E_15.
-        let e_15_hash = unwrap!(parsed_contents.events_order.pop());
-        let e_15 = unwrap!(parsed_contents.events.remove(&e_15_hash));
-        let final_hashes = parsed_contents.events_order.split_off(71);
-        let mut final_events = vec![];
-        for hash in &final_hashes {
-            final_events.push(unwrap!(parsed_contents.events.remove(hash)));
-        }
+        let index = parsed_contents.events_order.len() - 8;
+        let mut final_events: Vec<_> = parsed_contents
+            .events_order
+            .split_off(index)
+            .iter()
+            .map(|hash| unwrap!(parsed_contents.events.remove(hash)))
+            .collect();
+
+        let e_15 = unwrap!(final_events.pop());
+        let e_14 = unwrap!(final_events.pop());
+
+        // The final decision to add Fred is reached in C_15.
+        let c_15 = unwrap!(final_events.pop());
 
         let mut alice = Parsec::from_parsed_contents(parsed_contents);
         let genesis_group = alice.peer_list.all_ids().into_iter().cloned().collect();
@@ -1446,7 +1450,7 @@ mod functional_tests {
         let alice_snapshot = Snapshot::new(&alice);
 
         // Try calling `create_gossip()` for a peer which doesn't exist yet.
-        assert_err!(Error::UnknownPeer, alice.create_gossip(Some(&fred_id)));
+        assert_err!(Error::InvalidPeerState { .. }, alice.create_gossip(Some(&fred_id)));
         assert_eq!(alice_snapshot, Snapshot::new(&alice));
 
         // Keep a copy of a request which will be used later in the test.  This request will not
@@ -1459,6 +1463,11 @@ mod functional_tests {
             unwrap!(alice.add_event(event));
             assert!(!alice.peer_list.all_ids().any(|peer_id| *peer_id == fred_id));
         }
+
+        // NOTE: currently the consensus is reached at c_15, but when we implement
+        //       peer membership, it won't be reached until the "Eric" sync event.
+        unwrap!(alice.add_event(c_15));
+        unwrap!(alice.add_event(e_14));
         unwrap!(alice.add_event(e_15));
         unwrap!(alice.create_sync_event(&PeerId::new("Eric"), true));
         assert!(alice.peer_list.all_ids().any(|peer_id| *peer_id == fred_id));

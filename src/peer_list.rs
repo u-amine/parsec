@@ -77,7 +77,7 @@ impl<S: SecretId> PeerList<S> {
     }
 
     /// Adds a peer in the given state into the map. If the peer has already been
-    // added, merge its state with the one given.
+    /// added, merge its state with the one given.
     pub fn add_peer(&mut self, peer_id: S::PublicId, state: PeerState) {
         match self.peers.entry(peer_id.clone()) {
             Entry::Occupied(mut entry) => {
@@ -103,7 +103,8 @@ impl<S: SecretId> PeerList<S> {
         }
     }
 
-    /// Checks whether the input count becomes the super majority of the network.
+    /// Checks whether the input count becomes the super majority of the members
+    /// that can vote.
     pub fn is_super_majority(&self, count: usize) -> bool {
         3 * count > 2 * self.voters().count()
     }
