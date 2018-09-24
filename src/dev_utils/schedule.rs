@@ -8,9 +8,11 @@
 
 use super::Environment;
 use super::Observation;
+use super::PeerStatuses;
 #[cfg(feature = "dump-graphs")]
 use dump_graph::DIR;
-use mock::PeerId;
+use mock::{PeerId, Transaction, NAMES};
+use observation::Observation as ParsecObservation;
 use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -39,8 +41,6 @@ pub enum RequestTiming {
     Later,
     /// Make a request
     DuringThisStep(Request),
-    /// Make a request if new data is available
-    DuringThisStepIfNewData(Request),
 }
 
 /// Represents an event the network is supposed to simulate.
@@ -49,6 +49,8 @@ pub enum RequestTiming {
 /// by this time, generating appropriate responses and optionally sending a gossip request.
 #[derive(Clone, Debug)]
 pub enum ScheduleEvent {
+    /// Event storing the names of the initial nodes
+    Genesis(BTreeSet<PeerId>),
     /// This event variant represents a node being scheduled to execute a local step. It contains a
     /// global step number, the ID of the node being scheduled, and optionally data of the request
     /// the node will send.
@@ -62,6 +64,12 @@ pub enum ScheduleEvent {
     Fail(PeerId),
     /// This event makes a node vote on the given observation.
     VoteFor(PeerId, Observation),
+    /// Adds a peer to the network (this is separate from nodes voting to add the peer)
+    AddPeer(PeerId),
+    /// Removes a peer from the network (this is separate from nodes voting to remove the peer)
+    /// It is similar to Fail in that the peer will stop responding; however, this will also
+    /// cause the other peers to vote for removal
+    RemovePeer(PeerId),
 }
 
 // A function generating a Poisson-distributed random number.
@@ -99,77 +107,23 @@ impl ScheduleEvent {
         }
     }
 
-    fn gen_local_step<R: Rng>(
+    pub fn gen_local_step<R: Rng>(
         rng: &mut R,
         step: usize,
         peer: &PeerId,
         peers: &[PeerId],
         options: &ScheduleOptions,
     ) -> ScheduleEvent {
-        let request_timing = match options.gossip_strategy {
-            GossipStrategy::Probabilistic(prob) => if rng.gen::<f64>() < prob {
-                RequestTiming::DuringThisStep(Self::gen_request(rng, peer, peers, options))
-            } else {
-                RequestTiming::Later
-            },
-            GossipStrategy::AfterReceive => {
-                RequestTiming::DuringThisStepIfNewData(Self::gen_request(rng, peer, peers, options))
-            }
+        let request_timing = if rng.gen::<f64>() < options.gossip_prob {
+            RequestTiming::DuringThisStep(Self::gen_request(rng, peer, peers, options))
+        } else {
+            RequestTiming::Later
         };
         ScheduleEvent::LocalStep {
             global_step: step,
             peer: peer.clone(),
             request_timing,
         }
-    }
-
-    fn gen_votes<R: Rng>(
-        rng: &mut R,
-        pending: &mut PendingObservations,
-        options: &ScheduleOptions,
-    ) -> Vec<ScheduleEvent> {
-        let mut result = vec![];
-        for peer in pending.nonempty_peers() {
-            if rng.gen::<f64>() < options.prob_recv_trans {
-                let observation = if rng.gen::<f64>() < options.prob_vote_duplication {
-                    pending.peek_next_for_peer(&peer)
-                } else {
-                    pending.next_for_peer(&peer)
-                };
-                if let Some(observation) = observation {
-                    result.push(ScheduleEvent::VoteFor(peer, observation));
-                }
-            }
-        }
-        result
-    }
-
-    /// Generates a random network event.
-    pub fn gen_random<R: Rng>(
-        rng: &mut R,
-        step: usize,
-        peers: &[PeerId],
-        // note: first &mut required below to enable reborrowing
-        pending: &mut Option<&mut PendingObservations>,
-        options: &ScheduleOptions,
-    ) -> Vec<ScheduleEvent> {
-        let mut result = vec![];
-        for peer in peers {
-            if rng.gen::<f64>() < options.prob_local_step {
-                result.push(Self::gen_local_step(rng, step, peer, peers, options));
-            }
-        }
-
-        if let Some(pending) = pending {
-            result.extend(Self::gen_votes(rng, pending, options));
-        }
-
-        if rng.gen::<f64>() < options.prob_failure {
-            let peer = unwrap!(rng.choose(peers));
-            result.push(ScheduleEvent::Fail(peer.clone()));
-        }
-
-        result
     }
 
     pub fn fail(&self) -> Option<&PeerId> {
@@ -185,75 +139,81 @@ impl ScheduleEvent {
             ScheduleEvent::LocalStep { ref peer, .. } => peer,
             ScheduleEvent::Fail(ref peer) => peer,
             ScheduleEvent::VoteFor(ref peer, _) => peer,
+            ScheduleEvent::AddPeer(ref peer) => peer,
+            ScheduleEvent::RemovePeer(ref peer) => peer,
+            ScheduleEvent::Genesis(_) => panic!("ScheduleEvent::get_peer called on Genesis!"),
         }
     }
+}
+
+fn binomial<R: Rng>(rng: &mut R, n: usize, p: f64) -> usize {
+    let mut successes = 0;
+    for _ in 0..n {
+        if rng.gen::<f64>() < p {
+            successes += 1;
+        }
+    }
+    successes
 }
 
 /// Stores pending observations per node, so that nodes only vote for each observation once.
-pub struct PendingObservations(BTreeMap<PeerId, Vec<Observation>>);
+pub struct PendingObservations {
+    min_delay: usize,
+    max_delay: usize,
+    p_delay: f64,
+    queues: BTreeMap<PeerId, BTreeMap<usize, Vec<Observation>>>,
+}
 
 impl PendingObservations {
-    pub fn new<R: Rng>(
-        rng: &mut R,
-        peers: &[PeerId],
-        observations: &[Observation],
-    ) -> PendingObservations {
-        let mut inner = BTreeMap::new();
-        for peer in peers {
-            let mut trans = observations.to_vec();
-            rng.shuffle(&mut trans);
-            let _ = inner.insert(peer.clone(), trans);
+    pub fn new(opts: &ScheduleOptions) -> PendingObservations {
+        PendingObservations {
+            min_delay: opts.min_observation_delay,
+            max_delay: opts.max_observation_delay,
+            p_delay: opts.p_observation_delay,
+            queues: BTreeMap::new(),
         }
-        PendingObservations(inner)
     }
 
-    /// Gets the next observation for a given node, and removes it from the cache
-    pub fn next_for_peer(&mut self, peer: &PeerId) -> Option<Observation> {
-        self.0.get_mut(peer).and_then(|trans| trans.pop())
+    /// Add the observation to peers' queues at a random step after the event happened
+    pub fn peers_make_observation<'a, R: Rng, I: Iterator<Item = &'a PeerId>>(
+        &mut self,
+        rng: &mut R,
+        peers: I,
+        step: usize,
+        observation: &Observation,
+    ) {
+        for peer in peers {
+            let observations = self
+                .queues
+                .entry(peer.clone())
+                .or_insert_with(BTreeMap::new);
+            let tgt_step = step
+                + self.min_delay
+                + binomial(rng, self.max_delay - self.min_delay, self.p_delay);
+            let step_observations = observations.entry(tgt_step).or_insert_with(Vec::new);
+            step_observations.push(observation.clone());
+        }
     }
 
-    /// Gets the next observation for a given node without removing it
-    pub fn peek_next_for_peer(&mut self, peer: &PeerId) -> Option<Observation> {
-        self.0.get_mut(peer).and_then(|trans| trans.last().cloned())
-    }
-
-    /// Returns the list of names of peers that still have pending observations
-    pub fn nonempty_peers(&self) -> Vec<PeerId> {
-        self.0
-            .iter()
-            .filter(|&(_, v)| !v.is_empty())
-            .map(|(k, _)| k.clone())
-            .collect()
+    /// Pops all the observations that should be made at `step` at the latest
+    pub fn pop_at_step(&mut self, peer: &PeerId, step: usize) -> Vec<Observation> {
+        let mut result = vec![];
+        if let Some(queue) = self.queues.get_mut(peer) {
+            let to_leave = queue.split_off(&(step + 1));
+            let popped = mem::replace(queue, to_leave);
+            for (_, observations) in popped {
+                result.extend(observations.into_iter());
+            }
+            result
+        } else {
+            vec![]
+        }
     }
 
     /// Returns true if no more peers have pending observations
-    pub fn is_empty(&self) -> bool {
-        self.0.values().all(|v| v.is_empty())
+    pub fn queues_empty<'a, I: Iterator<Item = &'a PeerId>>(&self, mut peers: I) -> bool {
+        peers.all(|id| self.queues.get(id).map_or(true, |queue| queue.is_empty()))
     }
-
-    /// Removes peers that failed
-    pub fn remove_peers<I: IntoIterator<Item = PeerId>>(&mut self, peers: I) {
-        for peer in peers {
-            let _ = self.0.remove(&peer);
-        }
-    }
-
-    /// Returns an iterator of all (peer, observation) pairs, clearing the observation cache in the
-    /// process.
-    pub fn all_observations(&mut self) -> impl Iterator<Item = (PeerId, Observation)> {
-        let data = mem::replace(&mut self.0, BTreeMap::new());
-        data.into_iter()
-            .flat_map(|(peer, x)| x.into_iter().map(move |trans| (peer.clone(), trans)))
-    }
-}
-
-/// The condition on which a node gossips when it's scheduled
-#[derive(Clone, Copy, Debug)]
-pub enum GossipStrategy {
-    /// Gossiping with a constant probability per local step
-    Probabilistic(f64),
-    /// Always gossip after receiving new data
-    AfterReceive,
 }
 
 /// Available options for the distribution of message delays
@@ -266,10 +226,10 @@ pub enum DelayDistribution {
 /// A struct aggregating the options controlling schedule generation
 #[derive(Clone, Debug)]
 pub struct ScheduleOptions {
+    /// Size of the genesis group
+    pub genesis_size: usize,
     /// Probability per global step that a node will be scheduled to execute a local step
     pub prob_local_step: f64,
-    /// Probability per global step that a node will make a vote
-    pub prob_recv_trans: f64,
     /// Probabilitity per step that a random node will fail
     pub prob_failure: f64,
     /// Probability that a vote will get repeated
@@ -278,10 +238,32 @@ pub struct ScheduleOptions {
     pub deterministic_failures: BTreeMap<usize, usize>,
     /// The distribution of message delays
     pub delay_distr: DelayDistribution,
-    /// The strategy that defines when a node gossips
-    pub gossip_strategy: GossipStrategy,
+    /// The probability that a node will gossip during its local step
+    pub gossip_prob: f64,
     /// When true, nodes will first insert all votes into the graph, then start gossiping
     pub votes_before_gossip: bool,
+    /// Number of opaque observations to make
+    pub opaque_to_add: usize,
+    /// Probability per global step that a node will make a vote
+    pub prob_opaque: f64,
+    /// The number of peers to be added during the simulation
+    pub peers_to_add: usize,
+    /// Probability per step that a peer will get added
+    pub prob_add: f64,
+    /// The number of peers to be removed during the simulation
+    pub peers_to_remove: usize,
+    /// Probability per step that a peer will get removed
+    pub prob_remove: f64,
+    /// Minimum number of non-failed peers
+    pub min_peers: usize,
+    /// Maximum number of peers
+    pub max_peers: usize,
+    /// Minimum delay between an event and its observation
+    pub min_observation_delay: usize,
+    /// Maximum delay between an event and its observation
+    pub max_observation_delay: usize,
+    /// The binomial distribution p coefficient for observation delay
+    pub p_observation_delay: f64,
 }
 
 impl ScheduleOptions {
@@ -297,10 +279,10 @@ impl ScheduleOptions {
 impl Default for ScheduleOptions {
     fn default() -> ScheduleOptions {
         ScheduleOptions {
+            // default genesis of 4 peers
+            genesis_size: 4,
             // local step on average every 6-7 steps - not too often
             prob_local_step: 0.15,
-            // vote every 20 steps on average; so that there are local steps scheduled in between
-            prob_recv_trans: 0.05,
             // no randomised failures
             prob_failure: 0.0,
             // no vote duplication
@@ -309,11 +291,164 @@ impl Default for ScheduleOptions {
             deterministic_failures: BTreeMap::new(),
             // randomised delays, 4 steps on average
             delay_distr: DelayDistribution::Poisson(4.0),
-            // gossip when we receive new data
-            gossip_strategy: GossipStrategy::AfterReceive,
+            // gossip every other local step
+            gossip_prob: 0.5,
             // vote while gossiping
             votes_before_gossip: false,
+            // add 5 opaque observations
+            opaque_to_add: 5,
+            // vote for an opaque observation every ~20 steps
+            prob_opaque: 0.05,
+            // no adds
+            peers_to_add: 0,
+            // add a node every 50 steps, on average
+            prob_add: 0.02,
+            // no removes
+            peers_to_remove: 0,
+            // remove a node every 50 steps, on average
+            prob_remove: 0.02,
+            // always keep at least 3 active peers
+            min_peers: 3,
+            // allow at most as many peers as we have names
+            max_peers: NAMES.len(),
+            // observation delay between 1
+            min_observation_delay: 1,
+            // ...and 100
+            max_observation_delay: 100,
+            // with binomial p coefficient 0.45
+            p_observation_delay: 0.45,
         }
+    }
+}
+
+enum ObservationEvent {
+    Opaque(Transaction),
+    AddPeer(PeerId),
+    RemovePeer(PeerId),
+    Fail(PeerId),
+}
+
+impl ObservationEvent {
+    pub fn is_opaque(&self) -> bool {
+        match *self {
+            ObservationEvent::Opaque(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn get_opaque(self) -> Option<Observation> {
+        match self {
+            ObservationEvent::Opaque(t) => Some(ParsecObservation::OpaquePayload(t)),
+            _ => None,
+        }
+    }
+}
+
+struct ObservationSchedule {
+    pub genesis: BTreeSet<PeerId>,
+    /// A `Vec` of pairs (step number, event), carrying information about what events happen at
+    /// which steps
+    pub schedule: Vec<(usize, ObservationEvent)>,
+}
+
+impl ObservationSchedule {
+    fn gen<R: Rng>(rng: &mut R, options: &ScheduleOptions) -> ObservationSchedule {
+        let mut schedule = vec![];
+        let mut names_iter = NAMES.iter();
+
+        // a counter for peer adds/removes and opaque transactions
+        // (so not counting genesis and failures)
+        let mut num_observations: usize = 0;
+        let mut added_peers: usize = 0;
+        let mut removed_peers: usize = 0;
+        // schedule genesis first
+        let genesis_names = names_iter
+            .by_ref()
+            .take(options.genesis_size)
+            .map(|s| PeerId::new(*s))
+            .collect();
+        let mut peers = PeerStatuses::new(&genesis_names);
+
+        let mut step: usize = 1;
+        while num_observations
+            < options.opaque_to_add + options.peers_to_add + options.peers_to_remove
+        {
+            if rng.gen::<f64>() < options.prob_opaque {
+                schedule.push((step, ObservationEvent::Opaque(rng.gen())));
+                num_observations += 1;
+            }
+            if added_peers < options.peers_to_add && rng.gen::<f64>() < options.prob_add {
+                let next_id = PeerId::new(names_iter.next().unwrap());
+                peers.add_peer(next_id.clone());
+                schedule.push((step, ObservationEvent::AddPeer(next_id)));
+                num_observations += 1;
+                added_peers += 1;
+            }
+            if removed_peers < options.peers_to_remove && rng.gen::<f64>() < options.prob_remove {
+                if let Some(id) = peers.remove_random_peer(rng, options.min_peers) {
+                    schedule.push((step, ObservationEvent::RemovePeer(id)));
+                    num_observations += 1;
+                    removed_peers += 1;
+                }
+            }
+
+            // generate a random failure
+            if rng.gen::<f64>() < options.prob_failure {
+                if let Some(id) = peers.fail_random_peer(rng, options.min_peers) {
+                    schedule.push((step, ObservationEvent::Fail(id)));
+                }
+            }
+            // then handle deterministic failures
+            let num_deterministic_fails = options
+                .deterministic_failures
+                .get(&step)
+                .cloned()
+                .unwrap_or(0);
+
+            for _ in 0..num_deterministic_fails {
+                if let Some(id) = peers.fail_random_peer(rng, options.min_peers) {
+                    schedule.push((step, ObservationEvent::Fail(id)));
+                }
+            }
+
+            step += 1;
+        }
+
+        ObservationSchedule {
+            genesis: genesis_names,
+            schedule,
+        }
+    }
+
+    fn extract_opaque(&mut self) -> Vec<Observation> {
+        let schedule = mem::replace(&mut self.schedule, vec![]);
+        let (opaque, rest): (Vec<_>, _) = schedule
+            .into_iter()
+            .partition(|&(_, ref observation)| observation.is_opaque());
+        self.schedule = rest;
+        opaque
+            .into_iter()
+            .filter_map(|(_, o)| o.get_opaque())
+            .collect()
+    }
+
+    fn for_step(&mut self, step: usize) -> Vec<ObservationEvent> {
+        let schedule = mem::replace(&mut self.schedule, vec![]);
+        let (current, rest): (Vec<_>, _) = schedule
+            .into_iter()
+            .partition(|&(scheduled_step, _)| scheduled_step <= step);
+        let current = current.into_iter().map(|(_, obs)| obs).collect();
+        self.schedule = rest;
+        current
+    }
+
+    fn count_observations(&self) -> usize {
+        self.schedule
+            .iter()
+            .filter(|&(_, ref obs)| match *obs {
+                ObservationEvent::Fail(_) => false,
+                _ => true,
+            }).count()
     }
 }
 
@@ -354,60 +489,32 @@ impl Schedule {
     fn perform_step<R: Rng>(
         rng: &mut R,
         step: usize,
-        peers: &mut Vec<PeerId>,
-        // note: mut required below for reborrowing in ScheduleEvent::gen_random
+        peers: &mut PeerStatuses,
+        // mut required to be able to use the inner reference in a loop
         mut pending: Option<&mut PendingObservations>,
         schedule: &mut Vec<ScheduleEvent>,
-        num_peers: usize,
         options: &ScheduleOptions,
     ) {
-        // first, generate deterministic failures that are supposed to happen
-        let num_deterministic_fails = options
-            .deterministic_failures
-            .get(&step)
-            .cloned()
-            .unwrap_or(0);
-        // take random peers to fail
-        let mut peers_to_fail = peers.clone();
-        rng.shuffle(&mut peers_to_fail);
-        let mut events: Vec<_> = peers_to_fail
-            .into_iter()
-            .take(num_deterministic_fails)
-            .map(ScheduleEvent::Fail)
-            .collect();
-        // extend that with random events
-        events.extend(ScheduleEvent::gen_random(
-            rng,
-            step,
-            peers,
-            &mut pending,
-            options,
-        ));
-        // now, we can have more than max number of failures among events
-        // we need to limit that
-        // first, we will calculate the max number of failures we can add
-        // note: num_peers is the original number of peers, and `peers` only contains
-        // active peers, which means they may differ if some peers already failed
-        let less_than_a_third_malicious_nodes = (num_peers - 1) / 3;
-        let min_honest_nodes = num_peers - less_than_a_third_malicious_nodes;
-        let max_number_of_failures = peers.len() - min_honest_nodes;
-        // we take out all the failures
-        let (fails, mut other): (Vec<_>, _) = events.into_iter().partition(|e| e.fail().is_some());
-        // limit them to the max number
-        let fails: Vec<_> = fails.into_iter().take(max_number_of_failures).collect();
-        // since we have fails separated, take this opportunity to remove failed peers from
-        // the peers vector
-        let failed_peers: BTreeSet<_> = fails.iter().filter_map(|e| e.fail().cloned()).collect();
-        // other events can still refer to failed peers, as they were drawn using the full peer
-        // list
-        other.retain(|ev| !failed_peers.contains(ev.get_peer()));
-        peers.retain(|p| !failed_peers.contains(p));
-        if let Some(pending) = pending {
-            pending.remove_peers(failed_peers);
+        // first, peers that get scheduled make observations and perform local steps
+        for peer in peers.active_peers() {
+            if rng.gen::<f64>() < options.prob_local_step {
+                // we do a local step for peer
+                // first, they need to make observations
+                if let Some(pending) = pending.as_mut() {
+                    for observation in pending.pop_at_step(peer, step) {
+                        schedule.push(ScheduleEvent::VoteFor(peer.clone(), observation));
+                    }
+                }
+                let present_peers: Vec<_> = peers.present_peers().cloned().collect();
+                schedule.push(ScheduleEvent::gen_local_step(
+                    rng,
+                    step,
+                    peer,
+                    &present_peers,
+                    options,
+                ));
+            }
         }
-        // finally, add all events to results
-        schedule.extend(fails);
-        schedule.extend(other);
     }
 
     /// Creates a new pseudo-random schedule based on the given options
@@ -416,34 +523,73 @@ impl Schedule {
     /// `result` variable so the result can be saved when the `dump-graphs` feature is used.
     #[cfg_attr(feature = "cargo-clippy", allow(let_and_return))]
     pub fn new(env: &mut Environment, options: &ScheduleOptions) -> Schedule {
-        let mut peers: Vec<_> = env.network.peers.iter().map(|p| p.id.clone()).collect();
-        let num_peers = env.network.peers.len();
-        let mut pending = PendingObservations::new(&mut env.rng, &peers, &env.observations);
+        let mut pending = PendingObservations::new(options);
+        let mut obs_schedule = ObservationSchedule::gen(&mut env.rng, options);
+        // the +1 below is to account for genesis
+        let num_observations = obs_schedule.count_observations() + 1;
+        let mut peers = PeerStatuses::new(&obs_schedule.genesis);
         let mut step = 0;
 
-        // if votes before gossip enabled, insert all votes
-        let mut schedule = if options.votes_before_gossip {
-            pending
-                .all_observations()
-                .map(|(p, tx)| ScheduleEvent::VoteFor(p, tx))
-                .collect()
-        } else {
-            vec![]
-        };
+        // genesis has to be first
+        let mut schedule = vec![ScheduleEvent::Genesis(obs_schedule.genesis.clone())];
 
-        while !pending.is_empty() {
+        // if votes before gossip enabled, insert all votes
+        if options.votes_before_gossip {
+            let opaque_transactions = obs_schedule.extract_opaque();
+            for obs in opaque_transactions {
+                pending.peers_make_observation(&mut env.rng, peers.active_peers(), step, &obs);
+            }
+        }
+
+        while !obs_schedule.schedule.is_empty() || !pending.queues_empty(peers.active_peers()) {
+            let obs_for_step = obs_schedule.for_step(step);
+            for observation in obs_for_step {
+                match observation {
+                    ObservationEvent::AddPeer(new_peer) => {
+                        peers.add_peer(new_peer.clone());
+                        pending.peers_make_observation(
+                            &mut env.rng,
+                            peers.active_peers(),
+                            step,
+                            &ParsecObservation::Add(new_peer.clone()),
+                        );
+                        schedule.push(ScheduleEvent::AddPeer(new_peer));
+                    }
+                    ObservationEvent::RemovePeer(peer) => {
+                        peers.remove_peer(&peer);
+                        pending.peers_make_observation(
+                            &mut env.rng,
+                            peers.active_peers(),
+                            step,
+                            &ParsecObservation::Remove(peer.clone()),
+                        );
+                        schedule.push(ScheduleEvent::RemovePeer(peer));
+                    }
+                    ObservationEvent::Opaque(payload) => {
+                        pending.peers_make_observation(
+                            &mut env.rng,
+                            peers.active_peers(),
+                            step,
+                            &ParsecObservation::OpaquePayload(payload),
+                        );
+                    }
+                    ObservationEvent::Fail(peer) => {
+                        peers.fail_peer(&peer);
+                        schedule.push(ScheduleEvent::Fail(peer));
+                    }
+                }
+            }
             Self::perform_step(
                 &mut env.rng,
                 step,
                 &mut peers,
                 Some(&mut pending),
                 &mut schedule,
-                num_peers,
                 options,
             );
             step += 1;
         }
-        let n = peers.len() as f64;
+        let n = peers.present_peers().count() as f64;
         // Gossip should theoretically complete in O(log N) steps
         // But the number of local steps taken by each node depends on the probability
         // of a local step - each node will take on avg [num steps]*[prob] local steps
@@ -452,20 +598,11 @@ impl Schedule {
         let adjustment_coeff = 200.0;
         let additional_steps = (adjustment_coeff * n.ln() / options.prob_local_step) as usize;
         for _ in 0..additional_steps {
-            Self::perform_step(
-                &mut env.rng,
-                step,
-                &mut peers,
-                None,
-                &mut schedule,
-                num_peers,
-                options,
-            );
+            Self::perform_step(&mut env.rng, step, &mut peers, None, &mut schedule, options);
             step += 1;
         }
         let result = Schedule {
-            // HACK: + 1 is for the `Genesis` observation
-            num_observations: env.observations.len() + 1,
+            num_observations,
             events: schedule,
         };
         #[cfg(feature = "dump-graphs")]

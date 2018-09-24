@@ -10,14 +10,24 @@ use super::Observation;
 use block::Block;
 use mock::{PeerId, Transaction};
 use parsec::{self, Parsec};
-use std::collections::BTreeSet;
+use rand::Rng;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum PeerStatus {
+    Active,
+    Removed,
+    Failed,
+}
 
 pub struct Peer {
     pub id: PeerId,
     pub parsec: Parsec<Transaction, PeerId>,
     /// The blocks returned by `parsec.poll()`, held in the order in which they were returned.
     pub blocks: Vec<Block<Transaction, PeerId>>,
+    pub status: PeerStatus,
+    pub has_new_data: bool,
 }
 
 impl Peer {
@@ -26,16 +36,43 @@ impl Peer {
             id: id.clone(),
             parsec: Parsec::from_genesis(id, genesis_group, parsec::is_supermajority),
             blocks: vec![],
+            status: PeerStatus::Active,
+            has_new_data: true,
         }
     }
 
-    pub fn vote_for(&mut self, observation: &Observation) -> bool {
+    pub fn new_joining(
+        id: PeerId,
+        current_group: &BTreeSet<PeerId>,
+        genesis_group: &BTreeSet<PeerId>,
+    ) -> Self {
+        Self {
+            id: id.clone(),
+            parsec: Parsec::from_existing(
+                id,
+                genesis_group,
+                current_group,
+                parsec::is_supermajority,
+            ),
+            blocks: vec![],
+            status: PeerStatus::Active,
+            has_new_data: false,
+        }
+    }
+
+    pub fn vote_for(&mut self, observation: &Observation) {
         if !self.parsec.have_voted_for(observation) {
             unwrap!(self.parsec.vote_for(observation.clone()));
-            true
-        } else {
-            false
+            self.has_new_data = true;
         }
+    }
+
+    pub fn received_data(&mut self, data: bool) {
+        self.has_new_data = self.has_new_data || data;
+    }
+
+    pub fn reset_new_data(&mut self) {
+        self.has_new_data = false;
     }
 
     pub fn poll(&mut self) {
@@ -53,5 +90,127 @@ impl Peer {
 impl Debug for Peer {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         write!(formatter, "{:?}: Blocks: {:?}", self.id, self.blocks)
+    }
+}
+
+pub struct PeerStatuses(BTreeMap<PeerId, PeerStatus>);
+
+impl PeerStatuses {
+    /// Creates a new PeerStatuses struct with the given active peers
+    pub fn new(names: &BTreeSet<PeerId>) -> PeerStatuses {
+        PeerStatuses(
+            names
+                .into_iter()
+                .map(|x| (x.clone(), PeerStatus::Active))
+                .collect(),
+        )
+    }
+
+    fn choose_name_to_remove<R: Rng>(&self, rng: &mut R) -> PeerId {
+        let names: Vec<&PeerId> = self
+            .0
+            .iter()
+            .filter(|&(_, status)| *status == PeerStatus::Active || *status == PeerStatus::Failed)
+            .map(|(id, _)| id)
+            .collect();
+        (*rng.choose(&names).unwrap()).clone()
+    }
+
+    fn choose_name_to_fail<R: Rng>(&self, rng: &mut R) -> PeerId {
+        let names: Vec<&PeerId> = self
+            .0
+            .iter()
+            .filter(|&(_, status)| *status == PeerStatus::Active)
+            .map(|(id, _)| id)
+            .collect();
+        (*rng.choose(&names).unwrap()).clone()
+    }
+
+    fn num_active_peers(&self) -> usize {
+        self.0
+            .values()
+            .filter(|&status| *status == PeerStatus::Active)
+            .count()
+    }
+
+    /// Returns an iterator through the list of the active peers
+    pub fn active_peers(&self) -> impl Iterator<Item = &PeerId> {
+        self.0
+            .iter()
+            .filter(|&(_, status)| *status == PeerStatus::Active)
+            .map(|(id, _)| id)
+    }
+
+    /// Returns an iterator through the list of the active peers
+    pub fn present_peers(&self) -> impl Iterator<Item = &PeerId> {
+        self.0
+            .iter()
+            .filter(|&(_, status)| *status == PeerStatus::Active || *status == PeerStatus::Failed)
+            .map(|(id, _)| id)
+    }
+
+    fn num_failed_peers(&self) -> usize {
+        self.0
+            .values()
+            .filter(|&status| *status == PeerStatus::Failed)
+            .count()
+    }
+
+    /// Adds an active peer.
+    pub fn add_peer(&mut self, p: PeerId) {
+        let _ = self.0.insert(p, PeerStatus::Active);
+    }
+
+    // Randomly chooses a peer to remove. Only actually removes if removing won't cause the failed
+    // peers to go over N/3.
+    // Returns the removed peer's name if removing occurred.
+    pub fn remove_random_peer<R: Rng>(&mut self, rng: &mut R, min_active: usize) -> Option<PeerId> {
+        let mut active_peers = self.num_active_peers();
+        let mut failed_peers = self.num_failed_peers();
+        let name = self.choose_name_to_remove(rng);
+        {
+            let status = &self.0[&name];
+            if *status == PeerStatus::Active {
+                active_peers -= 1;
+            } else if *status == PeerStatus::Failed {
+                failed_peers -= 1;
+            } else {
+                return None;
+            }
+        }
+        if 2 * failed_peers < active_peers && active_peers >= min_active {
+            let status = self.0.get_mut(&name).unwrap();
+            *status = PeerStatus::Removed;
+            Some(name)
+        } else {
+            None
+        }
+    }
+
+    /// Remove the given peer
+    pub fn remove_peer(&mut self, peer: &PeerId) {
+        let status = self.0.get_mut(peer).unwrap();
+        *status = PeerStatus::Removed;
+    }
+
+    /// Randomly chooses a peer to fail. Only actually fails if it won't cause the failed peers to
+    /// go over N/3.
+    /// Returns the failed peer's name if failing occurred.
+    pub fn fail_random_peer<R: Rng>(&mut self, rng: &mut R, min_active: usize) -> Option<PeerId> {
+        let active_peers = self.num_active_peers() - 1;
+        let failed_peers = self.num_failed_peers() + 1;
+        if 2 * failed_peers < active_peers && active_peers >= min_active {
+            let name = self.choose_name_to_fail(rng);
+            let status = self.0.get_mut(&name).unwrap();
+            *status = PeerStatus::Failed;
+            Some(name)
+        } else {
+            None
+        }
+    }
+
+    pub fn fail_peer(&mut self, peer: &PeerId) {
+        let status = self.0.get_mut(peer).unwrap();
+        *status = PeerStatus::Failed;
     }
 }
