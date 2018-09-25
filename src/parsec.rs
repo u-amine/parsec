@@ -662,7 +662,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn set_meta_votes(&mut self, event_hash: &Hash) -> Result<(), Error> {
-        let total_peers = self.peer_list.iter().count();
+        let total_peers = self.peer_list.voters().count();
         let mut meta_votes = BTreeMap::new();
         // If self-parent already has meta votes associated with it, derive this event's meta votes
         // from those ones.
