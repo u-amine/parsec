@@ -242,6 +242,40 @@ fn add_peers() {
     assert!(result.is_ok(), "{:?}", result);
 }
 
+#[test]
+fn remove_one_peer() {
+    let mut env = Environment::new(SEED);
+    let schedule = Schedule::new(
+        &mut env,
+        &ScheduleOptions {
+            genesis_size: 6,
+            peers_to_remove: 1,
+            ..Default::default()
+        },
+    );
+
+    let result = env.network.execute_schedule(schedule);
+    assert!(result.is_ok(), "{:?}", result);
+}
+
+#[test]
+fn remove_many_peers_at_once() {
+    let mut env = Environment::new(SEED);
+    let schedule = Schedule::new(
+        &mut env,
+        &ScheduleOptions {
+            genesis_size: 10,
+            peers_to_remove: 3,
+            // high probability - peers will be removed in close succession
+            prob_remove: 0.2,
+            ..Default::default()
+        },
+    );
+
+    let result = env.network.execute_schedule(schedule);
+    assert!(result.is_ok(), "{:?}", result);
+}
+
 proptest! {
     #![proptest_config(ProptestConfig {
         failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("regressions"))),
