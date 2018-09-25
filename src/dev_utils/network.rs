@@ -127,19 +127,22 @@ impl Network {
             let _ = self.msg_queue.insert(peer.clone(), rest);
             for entry in to_handle {
                 match entry.message {
-                    Message::Request(req, resp_delay) => {
-                        let response = unwrap!(
-                            self.peer_mut(peer)
-                                .parsec
-                                .handle_request(&entry.sender, req)
-                        );
-                        self.send_message(
-                            peer.clone(),
-                            &entry.sender,
-                            Message::Response(response),
-                            step + resp_delay,
-                        );
-                    }
+                    Message::Request(req, resp_delay) => match self
+                        .peer_mut(peer)
+                        .parsec
+                        .handle_request(&entry.sender, req)
+                    {
+                        Ok(response) => {
+                            self.send_message(
+                                peer.clone(),
+                                &entry.sender,
+                                Message::Response(response),
+                                step + resp_delay,
+                            );
+                        }
+                        Err(Error::UnknownPeer) | Err(Error::InvalidPeerState { .. }) => (),
+                        Err(e) => panic!("{:?}", e),
+                    },
                     Message::Response(resp) => {
                         unwrap!(
                             self.peer_mut(peer)
