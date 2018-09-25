@@ -15,6 +15,7 @@
 *.lock
 *.swp
 *.rsproj
+*.svg
 target/
 *.sublime-*
 .cargo/
