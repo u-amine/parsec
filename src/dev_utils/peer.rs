@@ -9,6 +9,7 @@
 use super::Observation;
 use block::Block;
 use mock::{PeerId, Transaction};
+use observation::Observation as ParsecObservation;
 use parsec::{self, Parsec};
 use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
@@ -17,6 +18,7 @@ use std::fmt::{self, Debug, Formatter};
 #[derive(Clone, Copy, PartialEq)]
 pub enum PeerStatus {
     Active,
+    Pending,
     Removed,
     Failed,
 }
@@ -55,7 +57,7 @@ impl Peer {
                 parsec::is_supermajority,
             ),
             blocks: vec![],
-            status: PeerStatus::Active,
+            status: PeerStatus::Pending,
             votes_to_make: vec![],
         }
     }
@@ -70,9 +72,20 @@ impl Peer {
             .retain(|obs| !parsec.have_voted_for(obs) && parsec.vote_for(obs.clone()).is_err());
     }
 
+    fn make_active_if_added(&mut self, block: &Block<Transaction, PeerId>) {
+        if self.status == PeerStatus::Pending {
+            if let ParsecObservation::Add(ref peer) = *block.payload() {
+                if self.id == *peer {
+                    self.status = PeerStatus::Active;
+                }
+            }
+        }
+    }
+
     pub fn poll(&mut self) {
         while let Some(block) = self.parsec.poll() {
-            self.blocks.push(block)
+            self.make_active_if_added(&block);
+            self.blocks.push(block);
         }
     }
 
@@ -101,11 +114,16 @@ impl PeerStatuses {
         )
     }
 
+    fn peers_by_status<F: Fn(&PeerStatus) -> bool>(
+        &self,
+        f: F,
+    ) -> impl Iterator<Item = (&PeerId, &PeerStatus)> {
+        self.0.iter().filter(move |&(_, status)| f(status))
+    }
+
     fn choose_name_to_remove<R: Rng>(&self, rng: &mut R) -> PeerId {
         let names: Vec<&PeerId> = self
-            .0
-            .iter()
-            .filter(|&(_, status)| *status == PeerStatus::Active || *status == PeerStatus::Failed)
+            .peers_by_status(|s| *s == PeerStatus::Active || *s == PeerStatus::Failed)
             .map(|(id, _)| id)
             .collect();
         (*rng.choose(&names).unwrap()).clone()
@@ -113,42 +131,30 @@ impl PeerStatuses {
 
     fn choose_name_to_fail<R: Rng>(&self, rng: &mut R) -> PeerId {
         let names: Vec<&PeerId> = self
-            .0
-            .iter()
-            .filter(|&(_, status)| *status == PeerStatus::Active)
+            .peers_by_status(|s| *s == PeerStatus::Active)
             .map(|(id, _)| id)
             .collect();
         (*rng.choose(&names).unwrap()).clone()
     }
 
     fn num_active_peers(&self) -> usize {
-        self.0
-            .values()
-            .filter(|&status| *status == PeerStatus::Active)
-            .count()
+        self.peers_by_status(|s| *s == PeerStatus::Active).count()
     }
 
     /// Returns an iterator through the list of the active peers
     pub fn active_peers(&self) -> impl Iterator<Item = &PeerId> {
-        self.0
-            .iter()
-            .filter(|&(_, status)| *status == PeerStatus::Active)
+        self.peers_by_status(|s| *s == PeerStatus::Active)
             .map(|(id, _)| id)
     }
 
     /// Returns an iterator through the list of the active peers
     pub fn present_peers(&self) -> impl Iterator<Item = &PeerId> {
-        self.0
-            .iter()
-            .filter(|&(_, status)| *status == PeerStatus::Active || *status == PeerStatus::Failed)
+        self.peers_by_status(|s| *s == PeerStatus::Active || *s == PeerStatus::Failed)
             .map(|(id, _)| id)
     }
 
     fn num_failed_peers(&self) -> usize {
-        self.0
-            .values()
-            .filter(|&status| *status == PeerStatus::Failed)
-            .count()
+        self.peers_by_status(|s| *s == PeerStatus::Failed).count()
     }
 
     /// Adds an active peer.

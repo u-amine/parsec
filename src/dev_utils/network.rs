@@ -202,7 +202,12 @@ impl Network {
                     self.msg_queue = BTreeMap::new();
                 }
                 ScheduleEvent::AddPeer(peer) => {
-                    let current_peers = self.peers.keys().cloned().collect();
+                    let current_peers = self
+                        .peers
+                        .values()
+                        .filter(|peer| peer.status == PeerStatus::Active)
+                        .map(|peer| peer.id.clone())
+                        .collect();
                     let _ = self.peers.insert(
                         peer.clone(),
                         Peer::new_joining(peer.clone(), &current_peers, &self.genesis),
