@@ -218,6 +218,7 @@ impl Network {
                     peer,
                     request_timing,
                 } => {
+                    self.peer_mut(&peer).make_votes();
                     self.handle_messages(&peer, global_step);
                     self.peer_mut(&peer).poll();
                     if let RequestTiming::DuringThisStep(req) = request_timing {
