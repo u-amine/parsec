@@ -17,7 +17,6 @@ use std::fs::File;
 use std::io::{self, Read};
 use std::iter;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::thread;
 
 /// The event graph and associated info that were parsed from the dumped dot file.
@@ -48,9 +47,6 @@ pub(crate) fn parse_test_dot_file(filename: &str) -> ParsedContents {
         dot_path.display()
     );
 
-    let svg = open_corresponding_svg(&dot_path);
-    try_check_svg_contents(&dot_path, svg);
-
     unwrap!(
         parse_dot_file(&dot_path),
         "Failed to parse {}",
@@ -60,40 +56,6 @@ pub(crate) fn parse_test_dot_file(filename: &str) -> ParsedContents {
 
 pub(crate) fn parse_peer_ids(input: &str) -> BTreeSet<PeerId> {
     parse_entries(input).map(PeerId::new).collect()
-}
-
-fn open_corresponding_svg(dot_path: &Path) -> File {
-    let mut svg_path = dot_path.to_owned();
-    assert!(svg_path.set_extension("dot.svg"));
-    unwrap!(
-        File::open(&svg_path),
-        "\nFailed to open SVG file for {0}.  Try running:\n    dot -Tsvg {0} -O\n",
-        dot_path.display()
-    )
-}
-
-fn try_check_svg_contents(dot_path: &Path, mut svg: File) {
-    // If we have "dot" available, check that the SVG contents are correct.
-    if let Ok(output) = Command::new("dot")
-        .args(&["-Tsvg", dot_path.to_string_lossy().as_ref()])
-        .output()
-    {
-        let dot_output = String::from_utf8_lossy(&output.stdout);
-
-        let mut svg_file_contents = String::new();
-        let _ = unwrap!(svg.read_to_string(&mut svg_file_contents));
-
-        // Some lines can be ordered slightly differently between each run of dot.
-        let mut ordered_dot_output = dot_output.lines().collect::<Vec<_>>();
-        ordered_dot_output.sort();
-        let mut ordered_svg_file_contents = svg_file_contents.lines().collect::<Vec<_>>();
-        ordered_svg_file_contents.sort();
-        assert!(
-            ordered_dot_output == ordered_svg_file_contents,
-            "\nThe contents of the SVG file for {0} don't match running\n    dot -Tsvg {0} -O\n\n",
-            dot_path.display()
-        );
-    }
 }
 
 #[derive(Clone, Debug)]
