@@ -9,6 +9,7 @@
 use super::peer::{Peer, PeerStatus};
 use super::schedule::{RequestTiming, Schedule, ScheduleEvent};
 use super::Observation;
+use error::Error;
 use gossip::{Request, Response};
 use mock::{PeerId, Transaction};
 use std::collections::{BTreeMap, BTreeSet};
@@ -222,14 +223,19 @@ impl Network {
                     self.handle_messages(&peer, global_step);
                     self.peer_mut(&peer).poll();
                     if let RequestTiming::DuringThisStep(req) = request_timing {
-                        let request =
-                            unwrap!(self.peer(&peer).parsec.create_gossip(Some(&req.recipient)));
-                        self.send_message(
-                            peer.clone(),
-                            &req.recipient,
-                            Message::Request(request, req.resp_delay),
-                            global_step + req.req_delay,
-                        );
+                        match self.peer(&peer).parsec.create_gossip(Some(&req.recipient)) {
+                            Ok(request) => {
+                                self.send_message(
+                                    peer.clone(),
+                                    &req.recipient,
+                                    Message::Request(request, req.resp_delay),
+                                    global_step + req.req_delay,
+                                );
+                            }
+                            Err(Error::InvalidPeerState { .. })
+                            | Err(Error::InvalidSelfState { .. }) => (),
+                            Err(e) => panic!("{:?}", e),
+                        }
                     }
                 }
                 ScheduleEvent::VoteFor(peer, observation) => {
