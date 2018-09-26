@@ -469,7 +469,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 &self.meta_votes,
                 &self.peer_list,
             );
-            self.clear_consensus_data(block.payload());
+            self.clear_consensus_data();
             let payload_hash = Hash::from(serialise(block.payload()).as_slice());
             info!(
                 "{:?} got consensus on block {} with payload {:?} and payload hash {:?}",
@@ -991,28 +991,15 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         })
     }
 
-    fn clear_consensus_data(&mut self, payload: &Observation<T, S::PublicId>) {
+    fn clear_consensus_data(&mut self) {
         // Clear all leftover data from previous consensus
         self.round_hashes = BTreeMap::new();
         self.meta_votes = BTreeMap::new();
+        self.interesting_events = BTreeMap::new();
 
-        let mut events_made_empty = vec![];
         for event in self.events.values_mut() {
             event.observations = BTreeSet::new();
-            let removed = event.interesting_content.remove(payload);
-            if removed && event.interesting_content.is_empty() {
-                events_made_empty.push(*event.hash())
-            }
-        }
-        for event_hash in &events_made_empty {
-            if let Ok(id) = self
-                .get_known_event(event_hash)
-                .map(|event| event.creator().clone())
-            {
-                if let Some(hashes) = self.interesting_events.get_mut(&id) {
-                    hashes.retain(|hash| hash != event_hash);
-                }
-            }
+            event.interesting_content = BTreeSet::new();
         }
     }
 
@@ -1024,19 +1011,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 let round_hash = RoundHash::new(peer_id, *latest_block_hash);
                 (peer_id.clone(), vec![round_hash])
             }).collect();
-        let events_hashes = self
-            .events_order
-            .iter()
-            // Start from the oldest event with a valid block considering all creators' events.
-            .skip_while(|hash| {
-                self.get_known_event(&hash)
-                    .ok()
-                    .map_or(true, |event| event.interesting_content.is_empty())
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        for event_hash in &events_hashes {
-            let _ = self.process_event(event_hash);
+        let events_hashes = self.events_order.to_vec();
+        for event_hash in events_hashes {
+            let _ = self.set_interesting_content(&event_hash);
+            let _ = self.process_event(&event_hash);
         }
     }
 
