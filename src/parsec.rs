@@ -565,7 +565,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 }).or_insert_with(|| iter::once(*event_hash).collect());
         }
         self.get_known_event_mut(event_hash)
-            .map(|ref mut event| event.interesting_content = interesting_content)
+            .map(|ref mut event| event.interesting_content.extend(interesting_content))
     }
 
     // Any payloads which this event sees as "interesting".  If this returns a non-empty set, then
