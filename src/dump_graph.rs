@@ -345,6 +345,8 @@ mod detail {
         if let Some(parent_hash) = parent_hash {
             if let Some(parent_pos) = positions.get(parent_hash) {
                 Some(*parent_pos)
+            } else if parent_hash == &Hash::all_zero() {
+                Some(index)
             } else {
                 None
             }

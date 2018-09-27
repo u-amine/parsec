@@ -354,13 +354,15 @@ impl Event<Transaction, PeerId> {
 
         let cause = match cause {
             "cause: Initial" => Cause::Initial,
+            // For the dot file contains only partial graph, we have to manually change the info of
+            // ancestor to null for some events. In that case, populate ancestors with empty hash.
             "cause: Request" => Cause::Request {
-                self_parent: unwrap!(self_parent),
-                other_parent: unwrap!(other_parent),
+                self_parent: self_parent.unwrap_or_else(Hash::all_zero),
+                other_parent: other_parent.unwrap_or_else(Hash::all_zero),
             },
             "cause: Response" => Cause::Response {
-                self_parent: unwrap!(self_parent),
-                other_parent: unwrap!(other_parent),
+                self_parent: self_parent.unwrap_or_else(Hash::all_zero),
+                other_parent: other_parent.unwrap_or_else(Hash::all_zero),
             },
             _ => {
                 let content = unwrap!(unwrap!(cause.split('(').nth(2)).split(')').next());
@@ -383,7 +385,7 @@ impl Event<Transaction, PeerId> {
                     panic!("wrong cause string: {:?}", cause);
                 };
                 Cause::Observation {
-                    self_parent: unwrap!(self_parent),
+                    self_parent: self_parent.unwrap_or_else(Hash::all_zero),
                     vote: Vote::new(creator, observation),
                 }
             }
