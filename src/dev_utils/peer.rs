@@ -215,3 +215,9 @@ impl PeerStatuses {
         *status = PeerStatus::Failed;
     }
 }
+
+impl Into<BTreeMap<PeerId, PeerStatus>> for PeerStatuses {
+    fn into(self) -> BTreeMap<PeerId, PeerStatus> {
+        self.0
+    }
+}

@@ -8,7 +8,7 @@
 
 use super::Environment;
 use super::Observation;
-use super::PeerStatuses;
+use super::{PeerStatus, PeerStatuses};
 #[cfg(feature = "dump-graphs")]
 use dump_graph::DIR;
 use mock::{PeerId, Transaction, NAMES};
@@ -448,7 +448,7 @@ impl ObservationSchedule {
     fn count_observations(&self) -> usize {
         self.schedule
             .iter()
-            .filter(|&(_, ref obs)| match *obs {
+            .filter(|&(_, ref event)| match *event {
                 ObservationEvent::Fail(_) => false,
                 _ => true,
             }).count()
@@ -458,6 +458,7 @@ impl ObservationSchedule {
 /// Stores the list of network events to be simulated.
 #[derive(Clone)]
 pub struct Schedule {
+    pub peers: BTreeMap<PeerId, PeerStatus>,
     pub num_observations: usize,
     pub events: Vec<ScheduleEvent>,
 }
@@ -530,6 +531,7 @@ impl Schedule {
         let mut obs_schedule = ObservationSchedule::gen(&mut env.rng, options);
         // the +1 below is to account for genesis
         let num_observations = obs_schedule.count_observations() + 1;
+
         let mut peers = PeerStatuses::new(&obs_schedule.genesis);
         let mut step = 0;
 
@@ -606,6 +608,7 @@ impl Schedule {
         }
 
         let result = Schedule {
+            peers: peers.into(),
             num_observations,
             events: schedule,
         };
