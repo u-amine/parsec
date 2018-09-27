@@ -321,7 +321,7 @@ impl Default for ScheduleOptions {
     }
 }
 
-enum ObservationEvent {
+pub enum ObservationEvent {
     Opaque(Transaction),
     AddPeer(PeerId),
     RemovePeer(PeerId),
@@ -344,7 +344,7 @@ impl ObservationEvent {
     }
 }
 
-struct ObservationSchedule {
+pub struct ObservationSchedule {
     pub genesis: BTreeSet<PeerId>,
     /// A `Vec` of pairs (step number, event), carrying information about what events happen at
     /// which steps
@@ -521,14 +521,22 @@ impl Schedule {
         }
     }
 
+    pub fn new(env: &mut Environment, options: &ScheduleOptions) -> Schedule {
+        let obs_schedule = ObservationSchedule::gen(&mut env.rng, options);
+        Self::from_observation_schedule(env, options, obs_schedule)
+    }
+
     /// Creates a new pseudo-random schedule based on the given options
     ///
     /// The `let_and_return` clippy lint is allowed since it is actually necessary to create the
     /// `result` variable so the result can be saved when the `dump-graphs` feature is used.
     #[cfg_attr(feature = "cargo-clippy", allow(let_and_return))]
-    pub fn new(env: &mut Environment, options: &ScheduleOptions) -> Schedule {
+    pub fn from_observation_schedule(
+        env: &mut Environment,
+        options: &ScheduleOptions,
+        mut obs_schedule: ObservationSchedule,
+    ) -> Schedule {
         let mut pending = PendingObservations::new(options);
-        let mut obs_schedule = ObservationSchedule::gen(&mut env.rng, options);
         // the +1 below is to account for genesis
         let num_observations = obs_schedule.count_observations() + 1;
 
