@@ -33,16 +33,16 @@ pub struct Network {
 }
 
 #[derive(Debug)]
-pub struct BlocksOrder<'a> {
-    peer: &'a PeerId,
-    order: Vec<&'a Observation>,
+pub struct BlocksOrder {
+    peer: PeerId,
+    order: Vec<Observation>,
 }
 
 #[derive(Debug)]
-pub enum ConsensusError<'a> {
+pub enum ConsensusError {
     DifferingBlocksOrder {
-        order_1: BlocksOrder<'a>,
-        order_2: BlocksOrder<'a>,
+        order_1: BlocksOrder,
+        order_2: BlocksOrder,
     },
     WrongBlocksNumber {
         expected: usize,
@@ -94,12 +94,12 @@ impl Network {
         {
             Err(ConsensusError::DifferingBlocksOrder {
                 order_1: BlocksOrder {
-                    peer: &first_peer.id,
-                    order: payloads,
+                    peer: first_peer.id.clone(),
+                    order: payloads.into_iter().cloned().collect(),
                 },
                 order_2: BlocksOrder {
-                    peer: &peer.id,
-                    order: peer.blocks_payloads(),
+                    peer: peer.id.clone(),
+                    order: peer.blocks_payloads().into_iter().cloned().collect(),
                 },
             })
         } else {
