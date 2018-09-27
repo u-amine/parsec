@@ -14,6 +14,7 @@ use error::Error;
 use gossip::{Request, Response};
 use mock::{PeerId, Transaction};
 use observation::Observation as ParsecObservation;
+use parsec::is_supermajority;
 use std::collections::{BTreeMap, BTreeSet};
 
 enum Message {
@@ -57,6 +58,10 @@ pub enum ConsensusError {
     InvalidSignatory {
         observation: Observation,
         signatory: PeerId,
+    },
+    TooFewSignatures {
+        observation: Observation,
+        signatures: BTreeSet<PeerId>,
     },
 }
 
@@ -238,15 +243,21 @@ impl Network {
         block: &Block<Transaction, PeerId>,
         section: &BTreeSet<PeerId>,
     ) -> Result<(), ConsensusError> {
-        if let Some(pub_id) = block
+        let signatories: BTreeSet<_> = block
             .proofs()
             .into_iter()
             .map(|proof| proof.public_id())
-            .find(|pub_id| !section.contains(pub_id))
-        {
+            .collect();
+        if let Some(&pub_id) = signatories.iter().find(|pub_id| !section.contains(pub_id)) {
             return Err(ConsensusError::InvalidSignatory {
                 observation: block.payload().clone(),
                 signatory: pub_id.clone(),
+            });
+        }
+        if !is_supermajority(&signatories, &section.into_iter().collect()) {
+            return Err(ConsensusError::TooFewSignatures {
+                observation: block.payload().clone(),
+                signatures: signatories.into_iter().cloned().collect(),
             });
         }
         Ok(())
