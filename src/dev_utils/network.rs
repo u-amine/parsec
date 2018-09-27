@@ -70,10 +70,14 @@ impl Network {
         }
     }
 
-    fn active_peers(&self) -> impl Iterator<Item = &Peer> {
+    fn peers_with_status(&self, status: PeerStatus) -> impl Iterator<Item = &Peer> {
         self.peers
             .values()
-            .filter(|&peer| peer.status == PeerStatus::Active)
+            .filter(move |&peer| peer.status == status)
+    }
+
+    fn active_peers(&self) -> impl Iterator<Item = &Peer> {
+        self.peers_with_status(PeerStatus::Active)
     }
 
     /// Returns true if all peers hold the same sequence of stable blocks.
@@ -170,7 +174,8 @@ impl Network {
     }
 
     fn consensus_complete(&self, num_observations: usize) -> bool {
-        self.active_peers().next().unwrap().blocks_payloads().len() == num_observations
+        self.peers_with_status(PeerStatus::Pending).next().is_none()
+            && self.active_peers().next().unwrap().blocks_payloads().len() == num_observations
             && self.blocks_all_in_sequence().is_ok()
     }
 

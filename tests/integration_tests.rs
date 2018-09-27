@@ -63,7 +63,9 @@ extern crate rand;
 
 use maidsafe_utilities::log;
 use parsec::dev_utils::proptest::{arbitrary_delay, ScheduleOptionsStrategy, ScheduleStrategy};
-use parsec::dev_utils::{DelayDistribution, Environment, RngChoice, Schedule, ScheduleOptions};
+use parsec::dev_utils::{
+    DelayDistribution, Environment, PeerStatus, RngChoice, Schedule, ScheduleOptions,
+};
 use proptest::prelude::ProptestConfig;
 use proptest::test_runner::FileFailurePersistence;
 use rand::Rng;
@@ -229,17 +231,33 @@ fn random_schedule_no_delays() {
 
 #[test]
 fn add_peers() {
+    let genesis_size = 4;
+    let peers_to_add = 2;
+
     let mut env = Environment::new(SEED);
     let schedule = Schedule::new(
         &mut env,
         &ScheduleOptions {
-            peers_to_add: 2,
+            genesis_size,
+            peers_to_add,
             ..Default::default()
         },
     );
 
-    let result = env.network.execute_schedule(schedule);
-    assert!(result.is_ok(), "{:?}", result);
+    {
+        let result = env.network.execute_schedule(schedule);
+        assert!(result.is_ok(), "{:?}", result);
+    }
+
+    assert_eq!(env.network.peers.len(), genesis_size + peers_to_add);
+    for peer in env.network.peers.values() {
+        assert_eq!(
+            peer.status,
+            PeerStatus::Active,
+            "{:?} is not Active",
+            peer.id
+        );
+    }
 }
 
 proptest! {

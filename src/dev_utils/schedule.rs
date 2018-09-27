@@ -361,6 +361,8 @@ impl ObservationSchedule {
         let mut num_observations: usize = 0;
         let mut added_peers: usize = 0;
         let mut removed_peers: usize = 0;
+        let mut opaque_count: usize = 0;
+
         // schedule genesis first
         let genesis_names = names_iter
             .by_ref()
@@ -373,9 +375,10 @@ impl ObservationSchedule {
         while num_observations
             < options.opaque_to_add + options.peers_to_add + options.peers_to_remove
         {
-            if rng.gen::<f64>() < options.prob_opaque {
+            if opaque_count < options.opaque_to_add && rng.gen::<f64>() < options.prob_opaque {
                 schedule.push((step, ObservationEvent::Opaque(rng.gen())));
                 num_observations += 1;
+                opaque_count += 1;
             }
             if added_peers < options.peers_to_add && rng.gen::<f64>() < options.prob_add {
                 let next_id = PeerId::new(names_iter.next().unwrap());
@@ -601,6 +604,7 @@ impl Schedule {
             Self::perform_step(&mut env.rng, step, &mut peers, None, &mut schedule, options);
             step += 1;
         }
+
         let result = Schedule {
             num_observations,
             events: schedule,
