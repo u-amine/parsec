@@ -1410,13 +1410,10 @@ mod functional_tests {
         let mut parsed_contents = parse_test_dot_file("add_fred.dot");
         // Split out the events Eric would send to Alice.  These are the last seven events listed in
         // `parsed_contents.events_order`, i.e. B_14, C_14, D_14, D_15, B_15, C_15, E_14, and E_15.
-        let index = parsed_contents.events_order.len() - 8;
-        let mut final_events: Vec<_> = parsed_contents
-            .events_order
-            .split_off(index)
-            .iter()
-            .map(|hash| unwrap!(parsed_contents.events.remove(hash)))
+        let mut final_events: Vec<_> = (0..8)
+            .map(|_| unwrap!(parsed_contents.remove_latest_event()))
             .collect();
+        final_events.reverse();
 
         let e_15 = unwrap!(final_events.pop());
         let e_14 = unwrap!(final_events.pop());
