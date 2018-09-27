@@ -27,12 +27,17 @@ use std::iter;
 
 pub type IsInterestingEventFn<P> = fn(voters: &BTreeSet<&P>, current_peers: &BTreeSet<&P>) -> bool;
 
+/// Returns whether `small` is more than two thirds of `large`
+pub fn is_more_than_two_thirds(small: usize, large: usize) -> bool {
+    3 * small > 2 * large
+}
+
 /// Function which can be used as `is_interesting_event` in
 /// [`Parsec::new()`](struct.Parsec.html#method.new) and which returns `true` if there are >2/3
 /// `voters` which are members of `current_peers`.
 pub fn is_supermajority<P: Ord>(voters: &BTreeSet<&P>, current_peers: &BTreeSet<&P>) -> bool {
     let valid_voter_count = current_peers.intersection(voters).count();
-    3 * valid_voter_count > 2 * current_peers.len()
+    is_more_than_two_thirds(valid_voter_count, current_peers.len())
 }
 
 /// The main object which manages creating and receiving gossip about network events from peers, and

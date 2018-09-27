@@ -6,6 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use parsec::is_more_than_two_thirds;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::iter;
@@ -414,7 +415,7 @@ impl MetaVoteCounts {
     }
 
     fn is_super_majority(&self, count: usize) -> bool {
-        3 * count > 2 * self.total_peers
+        is_more_than_two_thirds(count, self.total_peers)
     }
 
     fn at_least_one_third(&self, count: usize) -> bool {
