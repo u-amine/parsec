@@ -9,9 +9,11 @@
 use super::peer::{Peer, PeerStatus};
 use super::schedule::{RequestTiming, Schedule, ScheduleEvent};
 use super::Observation;
+use block::Block;
 use error::Error;
 use gossip::{Request, Response};
 use mock::{PeerId, Transaction};
+use observation::Observation as ParsecObservation;
 use std::collections::{BTreeMap, BTreeSet};
 
 enum Message {
@@ -51,6 +53,10 @@ pub enum ConsensusError {
     WrongPeers {
         expected: BTreeMap<PeerId, PeerStatus>,
         got: BTreeMap<PeerId, PeerStatus>,
+    },
+    InvalidSignatory {
+        observation: Observation,
+        signatory: PeerId,
     },
 }
 
@@ -218,6 +224,51 @@ impl Network {
         self.blocks_all_in_sequence()
     }
 
+    fn check_block_signatories(
+        block: &Block<Transaction, PeerId>,
+        section: &BTreeSet<PeerId>,
+    ) -> Result<(), ConsensusError> {
+        if let Some(pub_id) = block
+            .proofs()
+            .into_iter()
+            .map(|proof| proof.public_id())
+            .find(|pub_id| !section.contains(pub_id))
+        {
+            return Err(ConsensusError::InvalidSignatory {
+                observation: block.payload().clone(),
+                signatory: pub_id.clone(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Checks if the blocks are only signed by valid voters
+    fn check_blocks_signatories(&self) -> Result<(), ConsensusError> {
+        let blocks = self.active_peers().next().unwrap().blocks();
+        let mut valid_voters = BTreeSet::new();
+        for block in blocks {
+            match *block.payload() {
+                ParsecObservation::Genesis(ref g) => {
+                    // explicitly don't check signatories - the list of valid voters
+                    // should be empty at this point
+                    valid_voters = g.clone();
+                }
+                ParsecObservation::Add(ref p) => {
+                    Self::check_block_signatories(block, &valid_voters)?;
+                    let _ = valid_voters.insert(p.clone());
+                }
+                ParsecObservation::Remove(ref p) => {
+                    Self::check_block_signatories(block, &valid_voters)?;
+                    let _ = valid_voters.remove(p);
+                }
+                _ => {
+                    Self::check_block_signatories(block, &valid_voters)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Simulates the network according to the given schedule
     pub fn execute_schedule(&mut self, schedule: Schedule) -> Result<(), ConsensusError> {
         let Schedule {
@@ -287,6 +338,7 @@ impl Network {
                 break;
             }
         }
-        self.check_consensus(&peers, num_observations)
+        self.check_consensus(&peers, num_observations)?;
+        self.check_blocks_signatories()
     }
 }

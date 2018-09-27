@@ -89,6 +89,11 @@ impl Peer {
         }
     }
 
+    /// Returns self.blocks
+    pub fn blocks(&self) -> impl Iterator<Item = &Block<Transaction, PeerId>> {
+        self.blocks.iter()
+    }
+
     /// Returns the payloads of `self.blocks` in the order in which they were returned by `poll()`.
     pub fn blocks_payloads(&self) -> Vec<&Observation> {
         self.blocks.iter().map(Block::payload).collect()
