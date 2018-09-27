@@ -469,7 +469,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 &self.meta_votes,
                 &self.peer_list,
             );
-            self.clear_consensus_data(block.payload());
+            self.clear_consensus_data();
             let payload_hash = Hash::from(serialise(block.payload()).as_slice());
             info!(
                 "{:?} got consensus on block {} with payload {:?} and payload hash {:?}",
@@ -565,7 +565,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 }).or_insert_with(|| iter::once(*event_hash).collect());
         }
         self.get_known_event_mut(event_hash)
-            .map(|ref mut event| event.interesting_content = interesting_content)
+            .map(|ref mut event| event.interesting_content.extend(interesting_content))
     }
 
     // Any payloads which this event sees as "interesting".  If this returns a non-empty set, then
@@ -662,7 +662,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn set_meta_votes(&mut self, event_hash: &Hash) -> Result<(), Error> {
-        let total_peers = self.peer_list.iter().count();
+        let total_peers = self.peer_list.voters().count();
         let mut meta_votes = BTreeMap::new();
         // If self-parent already has meta votes associated with it, derive this event's meta votes
         // from those ones.
@@ -991,28 +991,15 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         })
     }
 
-    fn clear_consensus_data(&mut self, payload: &Observation<T, S::PublicId>) {
+    fn clear_consensus_data(&mut self) {
         // Clear all leftover data from previous consensus
         self.round_hashes = BTreeMap::new();
         self.meta_votes = BTreeMap::new();
+        self.interesting_events = BTreeMap::new();
 
-        let mut events_made_empty = vec![];
         for event in self.events.values_mut() {
             event.observations = BTreeSet::new();
-            let removed = event.interesting_content.remove(payload);
-            if removed && event.interesting_content.is_empty() {
-                events_made_empty.push(*event.hash())
-            }
-        }
-        for event_hash in &events_made_empty {
-            if let Ok(id) = self
-                .get_known_event(event_hash)
-                .map(|event| event.creator().clone())
-            {
-                if let Some(hashes) = self.interesting_events.get_mut(&id) {
-                    hashes.retain(|hash| hash != event_hash);
-                }
-            }
+            event.interesting_content = BTreeSet::new();
         }
     }
 
@@ -1024,19 +1011,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 let round_hash = RoundHash::new(peer_id, *latest_block_hash);
                 (peer_id.clone(), vec![round_hash])
             }).collect();
-        let events_hashes = self
-            .events_order
-            .iter()
-            // Start from the oldest event with a valid block considering all creators' events.
-            .skip_while(|hash| {
-                self.get_known_event(&hash)
-                    .ok()
-                    .map_or(true, |event| event.interesting_content.is_empty())
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        for event_hash in &events_hashes {
-            let _ = self.process_event(event_hash);
+        let events_hashes = self.events_order.to_vec();
+        for event_hash in events_hashes {
+            let _ = self.set_interesting_content(&event_hash);
+            let _ = self.process_event(&event_hash);
         }
     }
 
@@ -1432,13 +1410,10 @@ mod functional_tests {
         let mut parsed_contents = parse_test_dot_file("add_fred.dot");
         // Split out the events Eric would send to Alice.  These are the last seven events listed in
         // `parsed_contents.events_order`, i.e. B_14, C_14, D_14, D_15, B_15, C_15, E_14, and E_15.
-        let index = parsed_contents.events_order.len() - 8;
-        let mut final_events: Vec<_> = parsed_contents
-            .events_order
-            .split_off(index)
-            .iter()
-            .map(|hash| unwrap!(parsed_contents.events.remove(hash)))
+        let mut final_events: Vec<_> = (0..8)
+            .map(|_| unwrap!(parsed_contents.remove_latest_event()))
             .collect();
+        final_events.reverse();
 
         let e_15 = unwrap!(final_events.pop());
         let e_14 = unwrap!(final_events.pop());

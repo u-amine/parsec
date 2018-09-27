@@ -28,6 +28,19 @@ pub(crate) struct ParsedContents {
     pub peer_list: PeerList<PeerId>,
 }
 
+impl ParsedContents {
+    /// Remove and return the latest (newest) event from the `ParsedContents`,
+    /// if any.
+    pub fn remove_latest_event(&mut self) -> Option<Event<Transaction, PeerId>> {
+        let hash = self.events_order.pop()?;
+        let event = self.events.remove(&hash)?;
+
+        self.peer_list.remove_event(&event);
+
+        Some(event)
+    }
+}
+
 /// Read a dumped dot file and return with parsed event graph and associated info.
 pub(crate) fn parse_dot_file(full_path: &Path) -> io::Result<ParsedContents> {
     read(File::open(full_path)?)

@@ -153,6 +153,14 @@ impl<S: SecretId> PeerList<S> {
             Err(Error::UnknownPeer)
         }
     }
+
+    /// Removes the event from its creator.
+    #[cfg(test)]
+    pub fn remove_event<T: NetworkEvent>(&mut self, event: &Event<T, S::PublicId>) {
+        if let Some(peer) = self.peers.get_mut(event.creator()) {
+            let _ = peer.events.remove(&event.index());
+        }
+    }
 }
 
 impl<S: SecretId> Debug for PeerList<S> {

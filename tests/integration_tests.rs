@@ -232,6 +232,21 @@ mod test {
         assert!(result.is_ok(), "{:?}", result);
     }
 
+    #[test]
+    fn add_peers() {
+        let mut env = Environment::new(SEED);
+        let schedule = Schedule::new(
+            &mut env,
+            &ScheduleOptions {
+                peers_to_add: 2,
+                ..Default::default()
+            },
+        );
+
+        let result = env.network.execute_schedule(schedule);
+        assert!(result.is_ok(), "{:?}", result);
+    }
+
     proptest! {
         #![proptest_config(ProptestConfig {
             failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("regressions"))),

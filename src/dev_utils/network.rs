@@ -9,6 +9,7 @@
 use super::peer::{Peer, PeerStatus};
 use super::schedule::{RequestTiming, Schedule, ScheduleEvent};
 use super::Observation;
+use error::Error;
 use gossip::{Request, Response};
 use mock::{PeerId, Transaction};
 use std::collections::{BTreeMap, BTreeSet};
@@ -126,19 +127,22 @@ impl Network {
             let _ = self.msg_queue.insert(peer.clone(), rest);
             for entry in to_handle {
                 match entry.message {
-                    Message::Request(req, resp_delay) => {
-                        let response = unwrap!(
-                            self.peer_mut(peer)
-                                .parsec
-                                .handle_request(&entry.sender, req)
-                        );
-                        self.send_message(
-                            peer.clone(),
-                            &entry.sender,
-                            Message::Response(response),
-                            step + resp_delay,
-                        );
-                    }
+                    Message::Request(req, resp_delay) => match self
+                        .peer_mut(peer)
+                        .parsec
+                        .handle_request(&entry.sender, req)
+                    {
+                        Ok(response) => {
+                            self.send_message(
+                                peer.clone(),
+                                &entry.sender,
+                                Message::Response(response),
+                                step + resp_delay,
+                            );
+                        }
+                        Err(Error::UnknownPeer) | Err(Error::InvalidPeerState { .. }) => (),
+                        Err(e) => panic!("{:?}", e),
+                    },
                     Message::Response(resp) => {
                         unwrap!(
                             self.peer_mut(peer)
@@ -201,7 +205,12 @@ impl Network {
                     self.msg_queue = BTreeMap::new();
                 }
                 ScheduleEvent::AddPeer(peer) => {
-                    let current_peers = self.peers.keys().cloned().collect();
+                    let current_peers = self
+                        .peers
+                        .values()
+                        .filter(|peer| peer.status == PeerStatus::Active)
+                        .map(|peer| peer.id.clone())
+                        .collect();
                     let _ = self.peers.insert(
                         peer.clone(),
                         Peer::new_joining(peer.clone(), &current_peers, &self.genesis),
@@ -218,17 +227,23 @@ impl Network {
                     peer,
                     request_timing,
                 } => {
+                    self.peer_mut(&peer).make_votes();
                     self.handle_messages(&peer, global_step);
                     self.peer_mut(&peer).poll();
                     if let RequestTiming::DuringThisStep(req) = request_timing {
-                        let request =
-                            unwrap!(self.peer(&peer).parsec.create_gossip(Some(&req.recipient)));
-                        self.send_message(
-                            peer.clone(),
-                            &req.recipient,
-                            Message::Request(request, req.resp_delay),
-                            global_step + req.req_delay,
-                        );
+                        match self.peer(&peer).parsec.create_gossip(Some(&req.recipient)) {
+                            Ok(request) => {
+                                self.send_message(
+                                    peer.clone(),
+                                    &req.recipient,
+                                    Message::Request(request, req.resp_delay),
+                                    global_step + req.req_delay,
+                                );
+                            }
+                            Err(Error::InvalidPeerState { .. })
+                            | Err(Error::InvalidSelfState { .. }) => (),
+                            Err(e) => panic!("{:?}", e),
+                        }
                     }
                 }
                 ScheduleEvent::VoteFor(peer, observation) => {
