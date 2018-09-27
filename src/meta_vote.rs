@@ -6,7 +6,10 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use hash::Hash;
+use id::PublicId;
 use parsec::is_more_than_two_thirds;
+use round_hash::RoundHash;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::iter;
@@ -420,5 +423,148 @@ impl MetaVoteCounts {
 
     fn at_least_one_third(&self, count: usize) -> bool {
         3 * count >= self.total_peers
+    }
+}
+
+pub(super) type MetaVotes<P> = BTreeMap<Hash, BTreeMap<P, Vec<MetaVote>>>;
+
+struct MetaElection<P: PublicId> {
+    // hash of the block that was last stable when this meta-election started
+    block_hash: Hash,
+    meta_votes: MetaVotes<P>,
+    // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
+    // the one for round `x` is held at index `x`.
+    round_hashes: BTreeMap<P, Vec<RoundHash>>,
+}
+
+impl<P: PublicId> MetaElection<P> {
+    fn new(block_hash: Hash) -> Self {
+        MetaElection {
+            block_hash,
+            meta_votes: BTreeMap::new(),
+            round_hashes: BTreeMap::new(),
+        }
+    }
+}
+
+pub(super) struct MetaElections<P: PublicId> {
+    meta_elections: Vec<MetaElection<P>>,
+}
+
+impl<'a, P: 'a + PublicId> MetaElections<P> {
+    pub(super) fn new() -> Self {
+        MetaElections {
+            meta_elections: iter::once(MetaElection::<P>::new(Hash::all_zero())).collect(),
+        }
+    }
+
+    pub(super) fn meta_votes_from_current_election(
+        &self,
+        event_hash: &Hash,
+    ) -> Option<&BTreeMap<P, Vec<MetaVote>>> {
+        self.meta_elections
+            .last()
+            .and_then(|election| election.meta_votes.get(event_hash))
+    }
+
+    pub(super) fn round_hashes_from_current_election(
+        &self,
+        peer_id: &P,
+    ) -> Option<&Vec<RoundHash>> {
+        self.meta_elections
+            .last()
+            .and_then(|election| election.round_hashes.get(peer_id))
+    }
+
+    pub(super) fn consensus_history(&self) -> impl Iterator<Item = &Hash> {
+        // The block_hash of the first round of election is all_zero, so need to be skipped.
+        self.meta_elections
+            .iter()
+            .skip(1)
+            .map(|election| &election.block_hash)
+    }
+
+    pub(super) fn new_election(&mut self, payload_hash: Hash) {
+        self.meta_elections
+            .push(MetaElection::<P>::new(payload_hash))
+    }
+
+    pub(super) fn insert_into_current_election(
+        &mut self,
+        event_hash: Hash,
+        meta_votes: BTreeMap<P, Vec<MetaVote>>,
+    ) {
+        let election = self.current_election_mut();
+        let _ = election.meta_votes.insert(event_hash, meta_votes);
+    }
+
+    pub(super) fn restart_last_election_round_hashes<I: Iterator<Item = &'a P>>(
+        &mut self,
+        peer_ids: I,
+    ) {
+        let election = self.current_election_mut();
+        let latest_block_hash = election.block_hash;
+        election.round_hashes = peer_ids
+            .map(|peer_id| {
+                let round_hash = RoundHash::new(peer_id, latest_block_hash);
+                (peer_id.clone(), vec![round_hash])
+            }).collect();
+    }
+
+    pub(super) fn update_current_election_round_hashes(&mut self, event_hash: &Hash) {
+        let election = self.current_election_mut();
+        if let Some(meta_votes) = election.meta_votes.get(event_hash) {
+            for (peer_id, event_votes) in meta_votes.iter() {
+                for meta_vote in event_votes {
+                    if let Some(hashes) = election.round_hashes.get_mut(&peer_id) {
+                        while hashes.len() < meta_vote.round + 1 {
+                            let next_round_hash = hashes[hashes.len() - 1].increment_round();
+                            hashes.push(next_round_hash);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pub(super) fn initialise_round_hashes<I: Iterator<Item = &'a P>>(&mut self, peer_ids: I) {
+        let election = self.current_election_mut();
+        let initial_hash = Hash::from([].as_ref());
+        for peer_id in peer_ids {
+            let round_hash = RoundHash::new(peer_id, initial_hash);
+            let _ = election
+                .round_hashes
+                .insert(peer_id.clone(), vec![round_hash]);
+        }
+    }
+
+    pub(super) fn last_meta_votes(&self) -> &MetaVotes<P> {
+        if let Some(election) = self.meta_elections.last() {
+            &election.meta_votes
+        } else {
+            panic!("MetaElections is empty!")
+        }
+    }
+
+    fn current_election_mut(&mut self) -> &mut MetaElection<P> {
+        if let Some(election) = self.meta_elections.last_mut() {
+            election
+        } else {
+            panic!("MetaElections is empty!")
+        }
+    }
+}
+
+#[cfg(test)]
+impl<P: PublicId> MetaElections<P> {
+    pub(super) fn new_from_parsed(votes: MetaVotes<P>) -> Self {
+        let election = MetaElection {
+            block_hash: Hash::all_zero(),
+            meta_votes: votes,
+            round_hashes: BTreeMap::new(),
+        };
+        MetaElections {
+            meta_elections: iter::once(election).collect(),
+        }
     }
 }
