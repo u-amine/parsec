@@ -8,7 +8,7 @@
 
 use super::Environment;
 use super::Observation;
-use super::PeerStatuses;
+use super::{PeerStatus, PeerStatuses};
 #[cfg(feature = "dump-graphs")]
 use dump_graph::DIR;
 use mock::{PeerId, Transaction, NAMES};
@@ -361,6 +361,8 @@ impl ObservationSchedule {
         let mut num_observations: usize = 0;
         let mut added_peers: usize = 0;
         let mut removed_peers: usize = 0;
+        let mut opaque_count: usize = 0;
+
         // schedule genesis first
         let genesis_names = names_iter
             .by_ref()
@@ -373,9 +375,10 @@ impl ObservationSchedule {
         while num_observations
             < options.opaque_to_add + options.peers_to_add + options.peers_to_remove
         {
-            if rng.gen::<f64>() < options.prob_opaque {
+            if opaque_count < options.opaque_to_add && rng.gen::<f64>() < options.prob_opaque {
                 schedule.push((step, ObservationEvent::Opaque(rng.gen())));
                 num_observations += 1;
+                opaque_count += 1;
             }
             if added_peers < options.peers_to_add && rng.gen::<f64>() < options.prob_add {
                 let next_id = PeerId::new(names_iter.next().unwrap());
@@ -445,7 +448,7 @@ impl ObservationSchedule {
     fn count_observations(&self) -> usize {
         self.schedule
             .iter()
-            .filter(|&(_, ref obs)| match *obs {
+            .filter(|&(_, ref event)| match *event {
                 ObservationEvent::Fail(_) => false,
                 _ => true,
             }).count()
@@ -455,6 +458,7 @@ impl ObservationSchedule {
 /// Stores the list of network events to be simulated.
 #[derive(Clone)]
 pub struct Schedule {
+    pub peers: BTreeMap<PeerId, PeerStatus>,
     pub num_observations: usize,
     pub events: Vec<ScheduleEvent>,
 }
@@ -527,6 +531,7 @@ impl Schedule {
         let mut obs_schedule = ObservationSchedule::gen(&mut env.rng, options);
         // the +1 below is to account for genesis
         let num_observations = obs_schedule.count_observations() + 1;
+
         let mut peers = PeerStatuses::new(&obs_schedule.genesis);
         let mut step = 0;
 
@@ -601,7 +606,9 @@ impl Schedule {
             Self::perform_step(&mut env.rng, step, &mut peers, None, &mut schedule, options);
             step += 1;
         }
+
         let result = Schedule {
+            peers: peers.into(),
             num_observations,
             events: schedule,
         };

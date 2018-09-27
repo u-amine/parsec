@@ -15,7 +15,7 @@ use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum PeerStatus {
     Active,
     Pending,
@@ -213,5 +213,11 @@ impl PeerStatuses {
     pub fn fail_peer(&mut self, peer: &PeerId) {
         let status = self.0.get_mut(peer).unwrap();
         *status = PeerStatus::Failed;
+    }
+}
+
+impl Into<BTreeMap<PeerId, PeerStatus>> for PeerStatuses {
+    fn into(self) -> BTreeMap<PeerId, PeerStatus> {
+        self.0
     }
 }

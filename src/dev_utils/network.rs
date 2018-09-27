@@ -48,6 +48,10 @@ pub enum ConsensusError<'a> {
         expected: usize,
         got: usize,
     },
+    WrongPeers {
+        expected: BTreeMap<PeerId, PeerStatus>,
+        got: BTreeMap<PeerId, PeerStatus>,
+    },
 }
 
 impl Network {
@@ -70,10 +74,14 @@ impl Network {
         }
     }
 
-    fn active_peers(&self) -> impl Iterator<Item = &Peer> {
+    fn peers_with_status(&self, status: PeerStatus) -> impl Iterator<Item = &Peer> {
         self.peers
             .values()
-            .filter(|&peer| peer.status == PeerStatus::Active)
+            .filter(move |&peer| peer.status == status)
+    }
+
+    fn active_peers(&self) -> impl Iterator<Item = &Peer> {
+        self.peers_with_status(PeerStatus::Active)
     }
 
     /// Returns true if all peers hold the same sequence of stable blocks.
@@ -169,26 +177,51 @@ impl Network {
         false
     }
 
-    fn consensus_complete(&self, num_observations: usize) -> bool {
-        self.active_peers().next().unwrap().blocks_payloads().len() == num_observations
-            && self.blocks_all_in_sequence().is_ok()
+    fn consensus_complete(
+        &self,
+        expected_peers: &BTreeMap<PeerId, PeerStatus>,
+        num_expected_observations: usize,
+    ) -> bool {
+        self.check_consensus(expected_peers, num_expected_observations)
+            .is_ok()
     }
 
     /// Checks whether there is a right number of blocks and the blocks are in an agreeing order
-    fn check_consensus(&self, expected_len: usize) -> Result<(), ConsensusError> {
-        let len = self.active_peers().next().unwrap().blocks_payloads().len();
-        if len != expected_len {
+    fn check_consensus(
+        &self,
+        expected_peers: &BTreeMap<PeerId, PeerStatus>,
+        num_expected_observations: usize,
+    ) -> Result<(), ConsensusError> {
+        // Check the number of consensused blocks.
+        let got = unwrap!(self.active_peers().next()).blocks_payloads().len();
+        if num_expected_observations != got {
             return Err(ConsensusError::WrongBlocksNumber {
-                expected: expected_len,
-                got: len,
+                expected: num_expected_observations,
+                got,
             });
         }
+
+        // Check peers.
+        let got = self
+            .peers
+            .values()
+            .map(|peer| (peer.id.clone(), peer.status))
+            .collect();
+        if *expected_peers != got {
+            return Err(ConsensusError::WrongPeers {
+                expected: expected_peers.clone(),
+                got,
+            });
+        }
+
+        // Check everybody has the same blocks in the same order.
         self.blocks_all_in_sequence()
     }
 
     /// Simulates the network according to the given schedule
     pub fn execute_schedule(&mut self, schedule: Schedule) -> Result<(), ConsensusError> {
         let Schedule {
+            peers,
             num_observations,
             events,
         } = schedule;
@@ -250,10 +283,10 @@ impl Network {
                     self.peer_mut(&peer).vote_for(&observation);
                 }
             }
-            if self.consensus_broken() || self.consensus_complete(num_observations) {
+            if self.consensus_broken() || self.consensus_complete(&peers, num_observations) {
                 break;
             }
         }
-        self.check_consensus(num_observations)
+        self.check_consensus(&peers, num_observations)
     }
 }
