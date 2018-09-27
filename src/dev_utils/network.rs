@@ -169,18 +169,28 @@ impl Network {
         }
     }
 
-    fn consensus_broken(&self) -> bool {
+    fn check_consensus_broken(&self) -> Result<(), ConsensusError> {
         let mut block_order = BTreeMap::new();
         for peer in self.active_peers() {
             for (index, block) in peer.blocks_payloads().into_iter().enumerate() {
-                let old_index = block_order.insert(block, index);
-                if old_index.map(|idx| idx != index).unwrap_or(false) {
-                    // old index exists and isn't equal to the new one
-                    return true;
+                if let Some((old_peer, old_index)) = block_order.insert(block, (peer, index)) {
+                    if old_index != index {
+                        // old index exists and isn't equal to the new one
+                        return Err(ConsensusError::DifferingBlocksOrder {
+                            order_1: BlocksOrder {
+                                peer: peer.id.clone(),
+                                order: peer.blocks_payloads().into_iter().cloned().collect(),
+                            },
+                            order_2: BlocksOrder {
+                                peer: old_peer.id.clone(),
+                                order: old_peer.blocks_payloads().into_iter().cloned().collect(),
+                            },
+                        });
+                    }
                 }
             }
         }
-        false
+        Ok(())
     }
 
     fn consensus_complete(
@@ -334,7 +344,8 @@ impl Network {
                     self.peer_mut(&peer).vote_for(&observation);
                 }
             }
-            if self.consensus_broken() || self.consensus_complete(&peers, num_observations) {
+            self.check_consensus_broken()?;
+            if self.consensus_complete(&peers, num_observations) {
                 break;
             }
         }
