@@ -63,7 +63,10 @@ extern crate rand;
 
 use maidsafe_utilities::log;
 use parsec::dev_utils::proptest::{arbitrary_delay, ScheduleOptionsStrategy, ScheduleStrategy};
-use parsec::dev_utils::{DelayDistribution, Environment, RngChoice, Schedule, ScheduleOptions};
+use parsec::dev_utils::{
+    DelayDistribution, Environment, ObservationSchedule, RngChoice, Schedule, ScheduleOptions,
+};
+use parsec::mock::{PeerId, Transaction, NAMES};
 use proptest::prelude::ProptestConfig;
 use proptest::test_runner::FileFailurePersistence;
 use rand::Rng;
@@ -237,6 +240,73 @@ fn add_peers() {
             ..Default::default()
         },
     );
+
+    let result = env.network.execute_schedule(schedule);
+    assert!(result.is_ok(), "{:?}", result);
+}
+
+#[test]
+fn remove_one_peer() {
+    let mut env = Environment::new(SEED);
+    let schedule = Schedule::new(
+        &mut env,
+        &ScheduleOptions {
+            genesis_size: 6,
+            peers_to_remove: 1,
+            ..Default::default()
+        },
+    );
+
+    let result = env.network.execute_schedule(schedule);
+    assert!(result.is_ok(), "{:?}", result);
+}
+
+#[test]
+fn remove_many_peers_at_once() {
+    use parsec::dev_utils::ObservationEvent::*;
+
+    let mut env = Environment::new(SEED);
+    let obs_schedule = ObservationSchedule {
+        genesis: NAMES.iter().take(10).cloned().map(PeerId::new).collect(),
+        schedule: vec![
+            (50, RemovePeer(PeerId::new("Judy"))),
+            (50, RemovePeer(PeerId::new("Iris"))),
+            (50, RemovePeer(PeerId::new("Hank"))),
+            (500, Opaque(Transaction::new("whatever"))),
+        ],
+    };
+    let schedule =
+        Schedule::from_observation_schedule(&mut env, &ScheduleOptions::default(), obs_schedule);
+
+    let result = env.network.execute_schedule(schedule);
+    assert!(result.is_ok(), "{:?}", result);
+}
+
+#[test]
+fn fail_add_remove() {
+    use parsec::dev_utils::ObservationEvent::*;
+
+    let mut env = Environment::new(SEED);
+    let obs_schedule = ObservationSchedule {
+        genesis: NAMES.iter().take(7).cloned().map(PeerId::new).collect(),
+        schedule: vec![
+            // In this test we start with 7 peers.
+            // One fails and one drops, which leaves us with 5 out of 7, and later out of 6,
+            // active - just enough to be a supermajority.
+            // Then, we add one peer, and drop one again. Then active peers try to reach
+            // consensus on an opaque payload.
+            // If this succeeds, this proves that the added peer became a full voter. Were this
+            // not the case, we would be left with 4 out of 6 voters, which would stall the
+            // section.
+            (10, Fail(PeerId::new("Alice"))),
+            (20, RemovePeer(PeerId::new("Bob"))),
+            (200, AddPeer(PeerId::new("Hank"))),
+            (700, RemovePeer(PeerId::new("Carol"))),
+            (850, Opaque(Transaction::new("whatever"))),
+        ],
+    };
+    let schedule =
+        Schedule::from_observation_schedule(&mut env, &ScheduleOptions::default(), obs_schedule);
 
     let result = env.network.execute_schedule(schedule);
     assert!(result.is_ok(), "{:?}", result);
