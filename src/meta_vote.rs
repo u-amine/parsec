@@ -6,6 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use parsec::is_more_than_two_thirds;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 use std::iter;
@@ -212,7 +213,7 @@ impl MetaVote {
                 return None;
             }
             let counts = MetaVoteCounts::new(parent, others, total_peers);
-            if counts.is_super_majority(counts.aux_values_set()) {
+            if counts.is_supermajority(counts.aux_values_set()) {
                 let coin_toss = coin_tosses.get(&parent.round);
                 let mut next = parent.clone();
                 Self::increase_step(&mut next, &counts, coin_toss.cloned());
@@ -251,10 +252,10 @@ impl MetaVote {
     }
 
     fn calculate_new_bin_values(meta_vote: &mut MetaVote, counts: &mut MetaVoteCounts) {
-        if counts.is_super_majority(counts.estimates_true) && meta_vote.bin_values.insert(true) {
+        if counts.is_supermajority(counts.estimates_true) && meta_vote.bin_values.insert(true) {
             counts.bin_values_true += 1;
         }
-        if counts.is_super_majority(counts.estimates_false) && meta_vote.bin_values.insert(false) {
+        if counts.is_supermajority(counts.estimates_false) && meta_vote.bin_values.insert(false) {
             counts.bin_values_false += 1;
         }
     }
@@ -286,14 +287,14 @@ impl MetaVote {
     fn calculate_new_decision(meta_vote: &mut MetaVote, counts: &MetaVoteCounts) {
         let opt_decision = match meta_vote.step {
             Step::ForcedTrue => if meta_vote.bin_values.contains(true)
-                && counts.is_super_majority(counts.aux_values_true)
+                && counts.is_supermajority(counts.aux_values_true)
             {
                 Some(true)
             } else {
                 counts.decision
             },
             Step::ForcedFalse => if meta_vote.bin_values.contains(false)
-                && counts.is_super_majority(counts.aux_values_false)
+                && counts.is_supermajority(counts.aux_values_false)
             {
                 Some(false)
             } else {
@@ -320,25 +321,25 @@ impl MetaVote {
         // Set the estimates as per the concrete coin toss rules.
         match new_meta_vote.step {
             Step::ForcedTrue => {
-                if counts.is_super_majority(counts.aux_values_false) {
+                if counts.is_supermajority(counts.aux_values_false) {
                     new_meta_vote.estimates = BoolSet::from_bool(false);
-                } else if !counts.is_super_majority(counts.aux_values_true) {
+                } else if !counts.is_supermajority(counts.aux_values_true) {
                     new_meta_vote.estimates = BoolSet::from_bool(true);
                 }
                 new_meta_vote.step = Step::ForcedFalse;
             }
             Step::ForcedFalse => {
-                if counts.is_super_majority(counts.aux_values_true) {
+                if counts.is_supermajority(counts.aux_values_true) {
                     new_meta_vote.estimates = BoolSet::from_bool(true);
-                } else if !counts.is_super_majority(counts.aux_values_false) {
+                } else if !counts.is_supermajority(counts.aux_values_false) {
                     new_meta_vote.estimates = BoolSet::from_bool(false);
                 }
                 new_meta_vote.step = Step::GenuineFlip;
             }
             Step::GenuineFlip => {
-                if counts.is_super_majority(counts.aux_values_true) {
+                if counts.is_supermajority(counts.aux_values_true) {
                     new_meta_vote.estimates = BoolSet::from_bool(true);
-                } else if counts.is_super_majority(counts.aux_values_false) {
+                } else if counts.is_supermajority(counts.aux_values_false) {
                     new_meta_vote.estimates = BoolSet::from_bool(false);
                 } else if let Some(coin_toss_result) = coin_toss {
                     new_meta_vote.estimates = BoolSet::from_bool(coin_toss_result);
@@ -413,8 +414,8 @@ impl MetaVoteCounts {
         self.aux_values_true + self.aux_values_false
     }
 
-    fn is_super_majority(&self, count: usize) -> bool {
-        3 * count > 2 * self.total_peers
+    fn is_supermajority(&self, count: usize) -> bool {
+        is_more_than_two_thirds(count, self.total_peers)
     }
 
     fn at_least_one_third(&self, count: usize) -> bool {

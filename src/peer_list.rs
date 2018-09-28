@@ -13,6 +13,7 @@ use id::SecretId;
 #[cfg(test)]
 use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
+use parsec::is_more_than_two_thirds;
 use serialise;
 use std::collections::btree_map::{self, BTreeMap, Entry};
 use std::fmt::{self, Debug, Formatter};
@@ -106,7 +107,7 @@ impl<S: SecretId> PeerList<S> {
     /// Checks whether the input count becomes the super majority of the members
     /// that can vote.
     pub fn is_super_majority(&self, count: usize) -> bool {
-        3 * count > 2 * self.voters().count()
+        is_more_than_two_thirds(count, self.voters().count())
     }
 
     /// Returns the hash of the last event created by this peer. Returns `None` if cannot find.

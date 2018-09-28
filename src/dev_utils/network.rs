@@ -9,9 +9,12 @@
 use super::peer::{Peer, PeerStatus};
 use super::schedule::{RequestTiming, Schedule, ScheduleEvent};
 use super::Observation;
+use block::Block;
 use error::Error;
 use gossip::{Request, Response};
 use mock::{PeerId, Transaction};
+use observation::Observation as ParsecObservation;
+use parsec::is_supermajority;
 use std::collections::{BTreeMap, BTreeSet};
 
 enum Message {
@@ -33,16 +36,16 @@ pub struct Network {
 }
 
 #[derive(Debug)]
-pub struct BlocksOrder<'a> {
-    peer: &'a PeerId,
-    order: Vec<&'a Observation>,
+pub struct BlocksOrder {
+    peer: PeerId,
+    order: Vec<Observation>,
 }
 
 #[derive(Debug)]
-pub enum ConsensusError<'a> {
+pub enum ConsensusError {
     DifferingBlocksOrder {
-        order_1: BlocksOrder<'a>,
-        order_2: BlocksOrder<'a>,
+        order_1: BlocksOrder,
+        order_2: BlocksOrder,
     },
     WrongBlocksNumber {
         expected: usize,
@@ -51,6 +54,14 @@ pub enum ConsensusError<'a> {
     WrongPeers {
         expected: BTreeMap<PeerId, PeerStatus>,
         got: BTreeMap<PeerId, PeerStatus>,
+    },
+    InvalidSignatory {
+        observation: Observation,
+        signatory: PeerId,
+    },
+    TooFewSignatures {
+        observation: Observation,
+        signatures: BTreeSet<PeerId>,
     },
 }
 
@@ -94,12 +105,12 @@ impl Network {
         {
             Err(ConsensusError::DifferingBlocksOrder {
                 order_1: BlocksOrder {
-                    peer: &first_peer.id,
-                    order: payloads,
+                    peer: first_peer.id.clone(),
+                    order: payloads.into_iter().cloned().collect(),
                 },
                 order_2: BlocksOrder {
-                    peer: &peer.id,
-                    order: peer.blocks_payloads(),
+                    peer: peer.id.clone(),
+                    order: peer.blocks_payloads().into_iter().cloned().collect(),
                 },
             })
         } else {
@@ -163,18 +174,28 @@ impl Network {
         }
     }
 
-    fn consensus_broken(&self) -> bool {
+    fn check_consensus_broken(&self) -> Result<(), ConsensusError> {
         let mut block_order = BTreeMap::new();
         for peer in self.active_peers() {
             for (index, block) in peer.blocks_payloads().into_iter().enumerate() {
-                let old_index = block_order.insert(block, index);
-                if old_index.map(|idx| idx != index).unwrap_or(false) {
-                    // old index exists and isn't equal to the new one
-                    return true;
+                if let Some((old_peer, old_index)) = block_order.insert(block, (peer, index)) {
+                    if old_index != index {
+                        // old index exists and isn't equal to the new one
+                        return Err(ConsensusError::DifferingBlocksOrder {
+                            order_1: BlocksOrder {
+                                peer: peer.id.clone(),
+                                order: peer.blocks_payloads().into_iter().cloned().collect(),
+                            },
+                            order_2: BlocksOrder {
+                                peer: old_peer.id.clone(),
+                                order: old_peer.blocks_payloads().into_iter().cloned().collect(),
+                            },
+                        });
+                    }
                 }
             }
         }
-        false
+        Ok(())
     }
 
     fn consensus_complete(
@@ -216,6 +237,57 @@ impl Network {
 
         // Check everybody has the same blocks in the same order.
         self.blocks_all_in_sequence()
+    }
+
+    fn check_block_signatories(
+        block: &Block<Transaction, PeerId>,
+        section: &BTreeSet<PeerId>,
+    ) -> Result<(), ConsensusError> {
+        let signatories: BTreeSet<_> = block
+            .proofs()
+            .into_iter()
+            .map(|proof| proof.public_id())
+            .collect();
+        if let Some(&pub_id) = signatories.iter().find(|pub_id| !section.contains(pub_id)) {
+            return Err(ConsensusError::InvalidSignatory {
+                observation: block.payload().clone(),
+                signatory: pub_id.clone(),
+            });
+        }
+        if !is_supermajority(&signatories, &section.into_iter().collect()) {
+            return Err(ConsensusError::TooFewSignatures {
+                observation: block.payload().clone(),
+                signatures: signatories.into_iter().cloned().collect(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Checks if the blocks are only signed by valid voters
+    fn check_blocks_signatories(&self) -> Result<(), ConsensusError> {
+        let blocks = self.active_peers().next().unwrap().blocks();
+        let mut valid_voters = BTreeSet::new();
+        for block in blocks {
+            match *block.payload() {
+                ParsecObservation::Genesis(ref g) => {
+                    // explicitly don't check signatories - the list of valid voters
+                    // should be empty at this point
+                    valid_voters = g.clone();
+                }
+                ParsecObservation::Add(ref p) => {
+                    Self::check_block_signatories(block, &valid_voters)?;
+                    let _ = valid_voters.insert(p.clone());
+                }
+                ParsecObservation::Remove(ref p) => {
+                    Self::check_block_signatories(block, &valid_voters)?;
+                    let _ = valid_voters.remove(p);
+                }
+                _ => {
+                    Self::check_block_signatories(block, &valid_voters)?;
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Simulates the network according to the given schedule
@@ -283,10 +355,12 @@ impl Network {
                     self.peer_mut(&peer).vote_for(&observation);
                 }
             }
-            if self.consensus_broken() || self.consensus_complete(&peers, num_observations) {
+            self.check_consensus_broken()?;
+            if self.consensus_complete(&peers, num_observations) {
                 break;
             }
         }
-        self.check_consensus(&peers, num_observations)
+        self.check_consensus(&peers, num_observations)?;
+        self.check_blocks_signatories()
     }
 }
