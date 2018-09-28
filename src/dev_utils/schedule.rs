@@ -20,6 +20,7 @@ use std::fmt;
 use std::fs::File;
 #[cfg(feature = "dump-graphs")]
 use std::io::Write;
+use std::iter;
 use std::mem;
 
 /// This struct holds the data necessary to make a simulated request when a node executes a local
@@ -545,12 +546,14 @@ impl Schedule {
 
         // genesis has to be first
         let mut schedule = vec![ScheduleEvent::Genesis(obs_schedule.genesis.clone())];
+        let mut observations_made = vec![];
 
         // if votes before gossip enabled, insert all votes
         if options.votes_before_gossip {
             let opaque_transactions = obs_schedule.extract_opaque();
             for obs in opaque_transactions {
                 pending.peers_make_observation(&mut env.rng, peers.active_peers(), step, &obs);
+                observations_made.push(obs);
             }
         }
 
@@ -566,7 +569,21 @@ impl Schedule {
                             step,
                             &ParsecObservation::Add(new_peer.clone()),
                         );
-                        schedule.push(ScheduleEvent::AddPeer(new_peer));
+                        schedule.push(ScheduleEvent::AddPeer(new_peer.clone()));
+                        // vote for all observations that were made before this peer joined
+                        // this prevents situations in which peers joining reach consensus before
+                        // some other observations they haven't seen, which cause those
+                        // observations to no longer have a supermajority of votes and never get
+                        // consensused; this is something that can validly happen in a real
+                        // network, but causes problems with evaluating test results
+                        for obs in &observations_made {
+                            pending.peers_make_observation(
+                                &mut env.rng,
+                                iter::once(&new_peer),
+                                step,
+                                obs,
+                            );
+                        }
                     }
                     ObservationEvent::RemovePeer(peer) => {
                         peers.remove_peer(&peer);
@@ -579,12 +596,14 @@ impl Schedule {
                         schedule.push(ScheduleEvent::RemovePeer(peer));
                     }
                     ObservationEvent::Opaque(payload) => {
+                        let observation = ParsecObservation::OpaquePayload(payload);
                         pending.peers_make_observation(
                             &mut env.rng,
                             peers.active_peers(),
                             step,
-                            &ParsecObservation::OpaquePayload(payload),
+                            &observation,
                         );
+                        observations_made.push(observation);
                     }
                     ObservationEvent::Fail(peer) => {
                         peers.fail_peer(&peer);
