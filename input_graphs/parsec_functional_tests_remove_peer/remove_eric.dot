@@ -5,32 +5,32 @@ digraph GossipGraph {
 /// peer_states: {Alice: "PeerState(VOTE|SEND|RECV)", Bob: "PeerState(VOTE|SEND|RECV)", Carol: "PeerState(VOTE|SEND|RECV)", Dave: "PeerState(VOTE|SEND|RECV)", Eric: "PeerState(VOTE|SEND|RECV)"}
 /// { 59f84c..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 15, Bob: 21, Carol: 17, Dave: 20, Eric: 16}
 /// }
 /// { f1cecc..
 /// cause: Request
-/// interesting_content: {Remove(Eric)}
+/// interesting_content: [Remove(Eric)]
 /// last_ancestors: {Alice: 14, Bob: 16, Carol: 17, Dave: 18, Eric: 14}
 /// }
 /// { 5984ee..
 /// cause: Request
-/// interesting_content: {Remove(Eric)}
+/// interesting_content: [Remove(Eric)]
 /// last_ancestors: {Alice: 12, Bob: 21, Carol: 15, Dave: 20, Eric: 16}
 /// }
 /// { 54df49..
 /// cause: Response
-/// interesting_content: {Remove(Eric)}
+/// interesting_content: [Remove(Eric)]
 /// last_ancestors: {Alice: 12, Bob: 16, Carol: 17, Dave: 18, Eric: 14}
 /// }
 /// { aaaac9..
 /// cause: Request
-/// interesting_content: {Remove(Eric)}
+/// interesting_content: [Remove(Eric)]
 /// last_ancestors: {Alice: 10, Bob: 15, Carol: 11, Dave: 20, Eric: 10}
 /// }
 /// { e2ab10..
 /// cause: Response
-/// interesting_content: {Remove(Eric)}
+/// interesting_content: [Remove(Eric)]
 /// last_ancestors: {Alice: 12, Bob: 20, Carol: 15, Dave: 20, Eric: 16}
 /// }
     style=invis

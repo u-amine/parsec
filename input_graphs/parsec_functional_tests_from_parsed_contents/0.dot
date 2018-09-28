@@ -5,262 +5,262 @@ digraph GossipGraph {
 /// peer_states: {Alice: "PeerState(VOTE|SEND|RECV)", Bob: "PeerState(VOTE|SEND|RECV)", Carol: "PeerState(VOTE|SEND|RECV)", Dave: "PeerState(VOTE|SEND|RECV)"}
 /// { 0979c6..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 7, Bob: 8, Carol: 8, Dave: 6}
 /// }
 /// { 0c619d..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 5, Bob: 4, Carol: 1, Dave: 3}
 /// }
 /// { 0e4dd4..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 10, Bob: 12, Carol: 10, Dave: 9}
 /// }
 /// { 1c241c..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 4, Bob: 4, Carol: 1, Dave: 3}
 /// }
 /// { 1efad0..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 4, Bob: 5, Carol: 3, Dave: 3}
 /// }
 /// { 2383c3..
 /// cause: Response
-/// interesting_content: {OpaquePayload(l1SxY)}
+/// interesting_content: [OpaquePayload(l1SxY)]
 /// last_ancestors: {Alice: 5, Bob: 4, Carol: 6, Dave: 7}
 /// }
 /// { 305ffe..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 8, Bob: 11, Carol: 10, Dave: 9}
 /// }
 /// { 364413..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 8, Bob: 8, Carol: 8, Dave: 6}
 /// }
 /// { 3aef1e..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 9, Bob: 8, Carol: 8, Dave: 8}
 /// }
 /// { 3b2b82..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 6, Bob: 4, Carol: 3, Dave: 6}
 /// }
 /// { 3c6f58..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 11, Bob: 12, Carol: 10, Dave: 9}
 /// }
 /// { 3f0cc2..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 8, Bob: 11, Carol: 8, Dave: 9}
 /// }
 /// { 4065c2..
 /// cause: Request
-/// interesting_content: {OpaquePayload(l1SxY)}
+/// interesting_content: [OpaquePayload(l1SxY)]
 /// last_ancestors: {Alice: 7, Bob: 7, Carol: 6, Dave: 6}
 /// }
 /// { 44999b..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 7, Bob: 8, Carol: 6, Dave: 6}
 /// }
 /// { 4d531f..
 /// cause: Observation(OpaquePayload(l1SxY))
-/// interesting_content: {OpaquePayload(l1SxY)}
+/// interesting_content: [OpaquePayload(l1SxY)]
 /// last_ancestors: {Alice: 4, Bob: 4, Carol: 5, Dave: 5}
 /// }
 /// { 4deee0..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 8, Bob: 11, Carol: 10, Dave: 10}
 /// }
 /// { 4e2559..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 4, Bob: 4, Carol: 3, Dave: 3}
 /// }
 /// { 50c6a5..
 /// cause: Initial
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Carol: 0}
 /// }
 /// { 610448..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 3, Bob: 1, Carol: 2, Dave: 1}
 /// }
 /// { 646aea..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 12, Bob: 14, Carol: 11, Dave: 11}
 /// }
 /// { 6730ec..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 4, Bob: 4, Carol: 4, Dave: 5}
 /// }
 /// { 690131..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 0, Bob: 1, Dave: 1}
 /// }
 /// { 6eed11..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 3, Bob: 1, Carol: 1, Dave: 1}
 /// }
 /// { 7fbc90..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 4, Bob: 4, Carol: 3, Dave: 5}
 /// }
 /// { 8602c4..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 10, Bob: 13, Carol: 10, Dave: 11}
 /// }
 /// { 86c3ea..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 0, Bob: 1}
 /// }
 /// { 8975ce..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 1, Bob: 1}
 /// }
 /// { 901a99..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 4, Bob: 1, Carol: 1, Dave: 3}
 /// }
 /// { 977b68..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 4, Bob: 1, Carol: 1, Dave: 4}
 /// }
 /// { 9a3882..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 8, Bob: 8, Carol: 8, Dave: 8}
 /// }
 /// { 9b3b26..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 7, Bob: 9, Carol: 8, Dave: 6}
 /// }
 /// { 9bff8f..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 10, Bob: 12, Carol: 10, Dave: 11}
 /// }
 /// { 9df17d..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 0, Bob: 1, Carol: 1, Dave: 1}
 /// }
 /// { a1d14a..
 /// cause: Observation(OpaquePayload(EQCJS))
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 2, Bob: 1}
 /// }
 /// { a6bffb..
 /// cause: Observation(OpaquePayload(l1SxY))
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 0, Bob: 1, Carol: 1, Dave: 3}
 /// }
 /// { abe89f..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 5, Bob: 4, Carol: 6, Dave: 6}
 /// }
 /// { bb6802..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 5, Bob: 7, Carol: 7, Dave: 6}
 /// }
 /// { bc5605..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 5, Bob: 4, Carol: 3, Dave: 6}
 /// }
 /// { c28b29..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 8, Bob: 11, Carol: 8, Dave: 8}
 /// }
 /// { c2dd4f..
 /// cause: Initial
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Dave: 0}
 /// }
 /// { c677f6..
 /// cause: Observation(OpaquePayload(l1SxY))
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 0, Bob: 3, Dave: 1}
 /// }
 /// { c723a1..
 /// cause: Observation(OpaquePayload(EQCJS))
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 7, Bob: 10, Carol: 8, Dave: 6}
 /// }
 /// { d1cbea..
 /// cause: Observation(OpaquePayload(CC4Oj))
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 4, Bob: 6, Carol: 3, Dave: 3}
 /// }
 /// { e060b4..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 0, Bob: 1, Carol: 1, Dave: 2}
 /// }
 /// { e8a333..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 0, Bob: 2, Dave: 1}
 /// }
 /// { ec806d..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 10, Bob: 14, Carol: 11, Dave: 11}
 /// }
 /// { ecd748..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 10, Bob: 11, Carol: 11, Dave: 9}
 /// }
 /// { f0baba..
 /// cause: Request
-/// interesting_content: {OpaquePayload(l1SxY)}
+/// interesting_content: [OpaquePayload(l1SxY)]
 /// last_ancestors: {Alice: 5, Bob: 7, Carol: 6, Dave: 6}
 /// }
 /// { f1e228..
 /// cause: Initial
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 0}
 /// }
 /// { f2e3bb..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 10, Bob: 11, Carol: 10, Dave: 9}
 /// }
 /// { f73660..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 8, Bob: 8, Carol: 9, Dave: 6}
 /// }
 /// { f93793..
 /// cause: Initial
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Bob: 0}
 /// }
     style=invis
@@ -404,7 +404,7 @@ D: [ { 0/0, est:{f} bin:{f} aux:{f} dec:{} }
  "1c241c.." [fillcolor=white, label="B_4"]
  "1efad0.." [fillcolor=white, label="B_5"]
  "2383c3.." [fillcolor=white, label="D_7
-{OpaquePayload(l1SxY)}"]
+[OpaquePayload(l1SxY)]"]
  "2383c3.." [shape=rectangle, style=filled, fillcolor=crimson]
  "305ffe.." [ shape=rectangle, fillcolor=white, label="C_10
 A: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
@@ -435,12 +435,12 @@ B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
 C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
 D: [ { 0/0, est:{f} bin:{f} aux:{f} dec:{} }]"]
  "4065c2.." [fillcolor=white, label="A_7
-{OpaquePayload(l1SxY)}"]
+[OpaquePayload(l1SxY)]"]
  "4065c2.." [shape=rectangle, style=filled, fillcolor=crimson]
  "44999b.." [fillcolor=white, label="B_8"]
  "4d531f.." [fillcolor=white, label="C_5
 OpaquePayload(l1SxY)
-{OpaquePayload(l1SxY)}"]
+[OpaquePayload(l1SxY)]"]
  "4d531f.." [shape=rectangle, style=filled, fillcolor=crimson]
  "4deee0.." [ shape=rectangle, fillcolor=white, label="D_10
 A: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
@@ -531,7 +531,7 @@ C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
 D: [ { 0/0, est:{f} bin:{f} aux:{f} dec:{} }
 { 0/1, est:{f} bin:{} aux:{} dec:{} }]"]
  "f0baba.." [fillcolor=white, label="B_7
-{OpaquePayload(l1SxY)}"]
+[OpaquePayload(l1SxY)]"]
  "f0baba.." [shape=rectangle, style=filled, fillcolor=crimson]
  "f1e228.." [fillcolor=white, label="A_0"]
  "f2e3bb.." [ shape=rectangle, fillcolor=white, label="A_10

@@ -77,7 +77,7 @@ struct ParsedEvent {
     cause: String,
     self_parent: Option<String>,
     other_parent: Option<String>,
-    interesting_content: BTreeSet<Observation<Transaction, PeerId>>,
+    interesting_content: Vec<Observation<Transaction, PeerId>>,
     last_ancestors: BTreeMap<PeerId, u64>,
     observations: BTreeSet<PeerId>,
 }
@@ -109,18 +109,18 @@ impl ParsedEvent {
     }
 }
 
-fn parse_interesting_content(input: &str) -> BTreeSet<Observation<Transaction, PeerId>> {
+fn parse_interesting_content(input: &str) -> Vec<Observation<Transaction, PeerId>> {
     let mut input = input;
 
     skip_whitespace(&mut input);
     assert!(skip_string(&mut input, "interesting_content:"));
     skip_whitespace(&mut input);
-    assert!(skip_string(&mut input, "{"));
+    assert!(skip_string(&mut input, "["));
 
-    let mut result = BTreeSet::new();
+    let mut result = vec![];
 
-    while !skip_string(&mut input, "}") {
-        let _ = result.insert(parse_observation(&mut input));
+    while !skip_string(&mut input, "]") {
+        result.push(parse_observation(&mut input));
         let _ = skip_string(&mut input, ",");
     }
 

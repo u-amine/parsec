@@ -37,7 +37,7 @@ pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
     // Index of each peer's latest event that is an ancestor of this event.
     last_ancestors: BTreeMap<P, u64>,
     // Payloads of all the votes deemed interesting by this event
-    pub interesting_content: BTreeSet<Observation<T, P>>,
+    pub interesting_content: Vec<Observation<T, P>>,
     // The set of peers for which this event can strongly-see an event by that peer which carries a
     // valid block.  If there are a supermajority of peers here, this event is an "observer".
     pub observations: BTreeSet<P>,
@@ -130,7 +130,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             hash,
             index,
             last_ancestors,
-            interesting_content: BTreeSet::default(),
+            interesting_content: vec![],
             observations: BTreeSet::default(),
         }))
     }
@@ -240,7 +240,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             hash: Hash::from(serialised_content.as_slice()),
             index,
             last_ancestors,
-            interesting_content: BTreeSet::default(),
+            interesting_content: vec![],
             observations: BTreeSet::default(),
         }
     }
@@ -348,7 +348,7 @@ impl Event<Transaction, PeerId> {
         other_parent: Option<Hash>,
         index: u64,
         last_ancestors: BTreeMap<PeerId, u64>,
-        interesting_content: BTreeSet<Observation<Transaction, PeerId>>,
+        interesting_content: Vec<Observation<Transaction, PeerId>>,
     ) -> Self {
         use dev_utils::parse_peer_ids;
 
