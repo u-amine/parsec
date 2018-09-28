@@ -60,6 +60,8 @@ extern crate parsec;
 #[macro_use]
 extern crate proptest;
 extern crate rand;
+#[macro_use]
+extern crate unwrap;
 
 use maidsafe_utilities::log;
 use parsec::dev_utils::proptest::{arbitrary_delay, ScheduleOptionsStrategy, ScheduleStrategy};
@@ -241,8 +243,32 @@ fn add_peers() {
         },
     );
 
-    let result = env.network.execute_schedule(schedule);
-    assert!(result.is_ok(), "{:?}", result);
+    unwrap!(env.network.execute_schedule(schedule));
+}
+
+#[test]
+fn add_peers_and_vote() {
+    use parsec::dev_utils::ObservationEvent::*;
+
+    let mut names = NAMES.iter();
+    let mut env = Environment::new(SEED);
+
+    let obs_schedule = ObservationSchedule {
+        genesis: names.by_ref().take(4).cloned().map(PeerId::new).collect(),
+        schedule: vec![
+            // 1. Add a peer and then a transaction a bit later.
+            (50, AddPeer(PeerId::new(unwrap!(names.next())))),
+            (200, Opaque(Transaction::new("one"))),
+            // 2. Add a peer and a transaction at the same time.
+            (400, AddPeer(PeerId::new(unwrap!(names.next())))),
+            (400, Opaque(Transaction::new("two"))),
+        ],
+    };
+
+    let schedule =
+        Schedule::from_observation_schedule(&mut env, &ScheduleOptions::default(), obs_schedule);
+
+    unwrap!(env.network.execute_schedule(schedule));
 }
 
 #[test]
