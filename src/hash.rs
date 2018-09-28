@@ -39,8 +39,8 @@ impl Debug for Hash {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         write!(
             formatter,
-            "{:02x}{:02x}{:02x}..",
-            self.0[0], self.0[1], self.0[2]
+            "{:02x}{:02x}{:02x}{:02x}{:02x}..",
+            self.0[0], self.0[1], self.0[2], self.0[3], self.0[4]
         )
     }
 }
