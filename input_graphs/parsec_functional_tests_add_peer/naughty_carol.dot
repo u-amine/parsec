@@ -5,377 +5,377 @@ digraph GossipGraph {
 /// peer_states: {Alice: "PeerState(VOTE|SEND|RECV)", Bob: "PeerState(VOTE|SEND|RECV)", Carol: "PeerState(VOTE|SEND|RECV)", Dave: "PeerState(VOTE|SEND|RECV)"}
 /// { 07092c..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 5, Bob: 4, Carol: 4, Dave: 5}
 /// }
 /// { 0d47f9..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 17, Bob: 14, Carol: 17, Dave: 16}
 /// }
 /// { 0f1b09..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 17, Bob: 16, Carol: 17, Dave: 18}
 /// }
 /// { 0f773d..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 9, Bob: 8, Carol: 10, Dave: 10}
 /// }
 /// { 142b66..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 12, Bob: 10, Carol: 10, Dave: 12}
 /// }
 /// { 1664f5..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 11, Bob: 11, Carol: 12, Dave: 10}
 /// }
 /// { 1c2555..
 /// cause: Observation(Add(Fred))
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 4, Bob: 4, Carol: 6, Dave: 3}
 /// }
 /// { 1ec013..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 16, Bob: 14, Carol: 15, Dave: 14}
 /// }
 /// { 2037dc..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 17, Bob: 14, Carol: 15, Dave: 17}
 /// }
 /// { 256ed2..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 4, Bob: 4, Carol: 4, Dave: 5}
 /// }
 /// { 29fc7e..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 17, Bob: 16, Carol: 18, Dave: 16}
 /// }
 /// { 2b3614..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Bob: 2, Dave: 2}
 /// }
 /// { 2c6018..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 9, Bob: 8, Carol: 10, Dave: 9}
 /// }
 /// { 310a11..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 7, Bob: 6, Carol: 7, Dave: 5}
 /// }
 /// { 31a39d..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 7, Bob: 4, Carol: 4, Dave: 5}
 /// }
 /// { 3953c1..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 17, Bob: 16, Carol: 18, Dave: 19}
 /// }
 /// { 3ce5f5..
 /// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Carol: 1}
 /// }
 /// { 3da3d3..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 11, Bob: 10, Carol: 12, Dave: 10}
 /// }
 /// { 3e12d3..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 15, Bob: 15, Carol: 15, Dave: 16}
 /// }
 /// { 3f0191..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 7, Bob: 6, Carol: 8, Dave: 5}
 /// }
 /// { 409398..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 2, Bob: 2, Carol: 2, Dave: 1}
 /// }
 /// { 4120c9..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 7, Bob: 7, Carol: 7, Dave: 7}
 /// }
 /// { 41b699..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 2, Bob: 2, Dave: 1}
 /// }
 /// { 468e9e..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 14, Bob: 12, Carol: 13, Dave: 12}
 /// }
 /// { 4a89b9..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 11, Bob: 8, Carol: 10, Dave: 10}
 /// }
 /// { 4e696d..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 9, Bob: 8, Carol: 7, Dave: 7}
 /// }
 /// { 4fbfde..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 12, Bob: 12, Carol: 12, Dave: 13}
 /// }
 /// { 50c6a5..
 /// cause: Initial
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Carol: 0}
 /// }
 /// { 55e209..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 2, Bob: 4, Carol: 2, Dave: 3}
 /// }
 /// { 560d21..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 17, Bob: 16, Carol: 17, Dave: 16}
 /// }
 /// { 56d49a..
 /// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 1}
 /// }
 /// { 581aec..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 9, Bob: 8, Carol: 9, Dave: 9}
 /// }
 /// { 624572..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 8, Bob: 4, Carol: 7, Dave: 5}
 /// }
 /// { 66a869..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 4, Bob: 4, Carol: 4, Dave: 3}
 /// }
 /// { 66ea23..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 17, Bob: 16, Carol: 19, Dave: 19}
 /// }
 /// { 690e2c..
 /// cause: Observation(Add(Fred))
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 6, Bob: 4, Carol: 4, Dave: 5}
 /// }
 /// { 6e43c9..
 /// cause: Observation(Add(Fred))
-/// interesting_content: {Add(Fred)}
+/// interesting_content: [Add(Fred)]
 /// last_ancestors: {Alice: 12, Bob: 12, Carol: 12, Dave: 14}
 /// }
 /// { 71eb29..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 12, Bob: 12, Carol: 12, Dave: 12}
 /// }
 /// { 779eaa..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 11, Bob: 8, Carol: 10, Dave: 11}
 /// }
 /// { 800530..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 12, Bob: 10, Carol: 10, Dave: 10}
 /// }
 /// { 80ccef..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 14, Bob: 12, Carol: 15, Dave: 15}
 /// }
 /// { 81d17e..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 7, Bob: 4, Carol: 4, Dave: 6}
 /// }
 /// { 8b486f..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 4, Bob: 4, Carol: 5, Dave: 3}
 /// }
 /// { 8cff1c..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 2, Bob: 3, Dave: 1}
 /// }
 /// { 8ffec2..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 17, Bob: 14, Carol: 15, Dave: 16}
 /// }
 /// { 93f42f..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 14, Bob: 12, Carol: 14, Dave: 12}
 /// }
 /// { 9b0c34..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 3, Bob: 2, Carol: 2, Dave: 1}
 /// }
 /// { 9b3f14..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 2, Bob: 2, Carol: 2, Dave: 3}
 /// }
 /// { 9fbed3..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 2, Bob: 2, Carol: 3, Dave: 3}
 /// }
 /// { a1ebbe..
 /// cause: Request
-/// interesting_content: {Add(Fred)}
+/// interesting_content: [Add(Fred)]
 /// last_ancestors: {Alice: 15, Bob: 14, Carol: 15, Dave: 14}
 /// }
 /// { a3b0c4..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 9, Bob: 9, Carol: 7, Dave: 7}
 /// }
 /// { a8246a..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 13, Bob: 10, Carol: 10, Dave: 12}
 /// }
 /// { ab37e5..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 2, Bob: 4, Carol: 2, Dave: 4}
 /// }
 /// { bb4ca7..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 11, Bob: 10, Carol: 10, Dave: 10}
 /// }
 /// { c04cde..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 15, Bob: 12, Carol: 16, Dave: 14}
 /// }
 /// { c156bd..
 /// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Dave: 1}
 /// }
 /// { c2dd4f..
 /// cause: Initial
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Dave: 0}
 /// }
 /// { c5704e..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Bob: 2, Dave: 1}
 /// }
 /// { c68956..
 /// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Bob: 1}
 /// }
 /// { c704a8..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 12, Bob: 12, Carol: 13, Dave: 12}
 /// }
 /// { cbe4a7..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 10, Bob: 8, Carol: 9, Dave: 7}
 /// }
 /// { d3a463..
 /// cause: Request
-/// interesting_content: {Add(Fred)}
+/// interesting_content: [Add(Fred)]
 /// last_ancestors: {Alice: 15, Bob: 12, Carol: 15, Dave: 14}
 /// }
 /// { d3e30c..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 7, Bob: 8, Carol: 7, Dave: 7}
 /// }
 /// { d751dc..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 15, Bob: 14, Carol: 15, Dave: 16}
 /// }
 /// { dae544..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 12, Bob: 13, Carol: 13, Dave: 12}
 /// }
 /// { dd447e..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 2, Bob: 4, Carol: 4, Dave: 3}
 /// }
 /// { e091c7..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 7, Bob: 4, Carol: 7, Dave: 5}
 /// }
 /// { e3faaa..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 7, Bob: 8, Carol: 7, Dave: 8}
 /// }
 /// { eb12e8..
 /// cause: Request
-/// interesting_content: {Add(Fred)}
+/// interesting_content: [Add(Fred)]
 /// last_ancestors: {Alice: 14, Bob: 12, Carol: 15, Dave: 14}
 /// }
 /// { ec6315..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 9, Bob: 8, Carol: 9, Dave: 7}
 /// }
 /// { f1e228..
 /// cause: Initial
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 0}
 /// }
 /// { f52700..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 9, Bob: 8, Carol: 11, Dave: 10}
 /// }
 /// { f86edd..
 /// cause: Request
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 7, Bob: 6, Carol: 7, Dave: 7}
 /// }
 /// { f93793..
 /// cause: Initial
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Bob: 0}
 /// }
 /// { fdbe91..
 /// cause: Response
-/// interesting_content: {}
+/// interesting_content: []
 /// last_ancestors: {Alice: 2, Bob: 5, Carol: 4, Dave: 3}
 /// }
     style=invis
@@ -627,7 +627,7 @@ Add(Fred)"]
  "690e2c.." [shape=rectangle, style=filled, fillcolor=cyan]
  "6e43c9.." [fillcolor=white, label="D_14
 Add(Fred)
-{Add(Fred)}"]
+[Add(Fred)]"]
  "6e43c9.." [shape=rectangle, style=filled, fillcolor=crimson]
  "71eb29.." [fillcolor=white, label="B_12"]
  "779eaa.." [fillcolor=white, label="D_11"]
@@ -646,7 +646,7 @@ D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
  "9b3f14.." [fillcolor=white, label="D_3"]
  "9fbed3.." [fillcolor=white, label="C_3"]
  "a1ebbe.." [fillcolor=white, label="B_14
-{Add(Fred)}"]
+[Add(Fred)]"]
  "a1ebbe.." [shape=rectangle, style=filled, fillcolor=crimson]
  "a3b0c4.." [fillcolor=white, label="B_9"]
  "a8246a.." [fillcolor=white, label="A_13"]
@@ -664,7 +664,7 @@ Genesis({Alice, Bob, Carol, Dave})"]
  "c704a8.." [fillcolor=white, label="C_13"]
  "cbe4a7.." [fillcolor=white, label="A_10"]
  "d3a463.." [fillcolor=white, label="A_15
-{Add(Fred)}"]
+[Add(Fred)]"]
  "d3a463.." [shape=rectangle, style=filled, fillcolor=crimson]
  "d3e30c.." [fillcolor=white, label="B_8"]
  "d751dc.." [ shape=rectangle, fillcolor=white, label="D_16
@@ -677,7 +677,7 @@ D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
  "e091c7.." [fillcolor=white, label="C_7"]
  "e3faaa.." [fillcolor=white, label="D_8"]
  "eb12e8.." [fillcolor=white, label="C_15
-{Add(Fred)}"]
+[Add(Fred)]"]
  "eb12e8.." [shape=rectangle, style=filled, fillcolor=crimson]
  "ec6315.." [fillcolor=white, label="C_9"]
  "f1e228.." [fillcolor=white, label="A_0"]

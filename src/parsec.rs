@@ -573,9 +573,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn interesting_content(
         &self,
         event_hash: &Hash,
-    ) -> Result<BTreeSet<Observation<T, S::PublicId>>, Error> {
+    ) -> Result<Vec<Observation<T, S::PublicId>>, Error> {
         let event = self.get_known_event(event_hash)?;
-        Ok(self
+        let indexed_payloads_map: BTreeMap<_, _> = self
             .peer_list
             .iter()
             .flat_map(|(_peer_id, peer)| {
@@ -585,11 +585,32 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                         .and_then(|event| event.vote().map(|vote| vote.payload()))
                 })
             }).filter(|&this_payload| !self.payload_is_already_carried(event, this_payload))
-            .filter(|&this_payload| {
-                let voters = self.ancestors_carrying_payload(event, this_payload);
+            .filter_map(|this_payload| {
+                let voters_indices = self.ancestors_carrying_payload(event, this_payload);
                 let all_peers = self.peer_list.voter_ids().collect();
-                (self.is_interesting_event)(&voters, &all_peers)
-            }).cloned()
+                if (self.is_interesting_event)(
+                    &voters_indices.keys().cloned().collect(),
+                    &all_peers,
+                ) {
+                    Some((
+                        this_payload.clone(),
+                        voters_indices
+                            .get(event.creator())
+                            .cloned()
+                            // sometimes the interesting event's creator won't have voted for the
+                            // payload that became interesting - in such a case we would like it
+                            // sorted at the end of the "queue"
+                            .unwrap_or(::std::u64::MAX),
+                    ))
+                } else {
+                    None
+                }
+            }).collect();
+        let mut indexed_payloads: Vec<_> = indexed_payloads_map.into_iter().collect();
+        indexed_payloads.sort_by_key(|&(_, index)| index);
+        Ok(indexed_payloads
+            .into_iter()
+            .map(|(payload, _index)| payload)
             .collect())
     }
 
@@ -614,30 +635,31 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         &self,
         event: &Event<T, S::PublicId>,
         payload: &Observation<T, S::PublicId>,
-    ) -> BTreeSet<&S::PublicId> {
+    ) -> BTreeMap<&S::PublicId, u64> {
         let payload_already_reached_consensus = self
             .consensus_history
             .iter()
             .any(|payload_hash| *payload_hash == Hash::from(serialise(&payload).as_slice()));
         if payload_already_reached_consensus {
-            return BTreeSet::new();
+            return BTreeMap::new();
         }
-        let sees_vote_for_same_payload =
-            |(_index, event_hash)| match self.get_known_event(event_hash) {
+        let sees_vote_for_same_payload = |pair: &(&u64, &Hash)| {
+            let (_index, event_hash) = *pair;
+            match self.get_known_event(event_hash) {
                 Ok(that_event) => {
                     Some(payload) == that_event.vote().map(|vote| vote.payload())
                         && event.sees(that_event)
                 }
                 Err(_) => false,
-            };
+            }
+        };
         self.peer_list
             .iter()
             .filter_map(|(peer_id, peer)| {
-                if peer.events.iter().any(sees_vote_for_same_payload) {
-                    Some(peer_id)
-                } else {
-                    None
-                }
+                peer.events
+                    .iter()
+                    .find(sees_vote_for_same_payload)
+                    .map(|(index, _hash)| (peer_id, *index))
             }).collect()
     }
 
@@ -939,24 +961,19 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             if decided_meta_votes.clone().count() < self.peer_list.voters().count() {
                 None
             } else {
-                let elected_valid_blocks = decided_meta_votes
+                let payloads = decided_meta_votes
                     .filter_map(|(id, vote)| {
                         if vote.decision == Some(true) {
                             self.interesting_events
                                 .get(&id)
                                 .and_then(|hashes| hashes.front())
                                 .and_then(|hash| self.get_known_event(&hash).ok())
-                                .map(|oldest_event| oldest_event.interesting_content.clone())
+                                .and_then(|oldest_event| oldest_event.interesting_content.first())
+                                .cloned()
                         } else {
                             None
                         }
-                    }).collect::<Vec<BTreeSet<Observation<T, S::PublicId>>>>();
-                // This is sorted by peer_ids, which should avoid ties when picking the event
-                // with the most represented payload.
-                let payloads = elected_valid_blocks
-                    .iter()
-                    .flat_map(|payloads_carried| payloads_carried)
-                    .collect::<Vec<_>>();
+                    }).collect::<Vec<_>>();
 
                 let copied_payloads = payloads.clone();
                 copied_payloads
@@ -978,7 +995,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                             .iter()
                             .filter_map(|(_hash, event)| {
                                 event.vote().and_then(|vote| {
-                                    if vote.payload() == winning_payload {
+                                    if *vote.payload() == winning_payload {
                                         Some((event.creator().clone(), vote.clone()))
                                     } else {
                                         None
@@ -999,7 +1016,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         for event in self.events.values_mut() {
             event.observations = BTreeSet::new();
-            event.interesting_content = BTreeSet::new();
+            event.interesting_content = vec![];
         }
     }
 
