@@ -263,17 +263,20 @@ fn remove_one_peer() {
 
 #[test]
 fn remove_many_peers_at_once() {
+    use parsec::dev_utils::ObservationEvent::*;
+
     let mut env = Environment::new(SEED);
-    let schedule = Schedule::new(
-        &mut env,
-        &ScheduleOptions {
-            genesis_size: 10,
-            peers_to_remove: 3,
-            // high probability - peers will be removed in close succession
-            prob_remove: 0.2,
-            ..Default::default()
-        },
-    );
+    let obs_schedule = ObservationSchedule {
+        genesis: NAMES.iter().take(10).cloned().map(PeerId::new).collect(),
+        schedule: vec![
+            (50, RemovePeer(PeerId::new("Judy"))),
+            (50, RemovePeer(PeerId::new("Iris"))),
+            (50, RemovePeer(PeerId::new("Hank"))),
+            (500, Opaque(Transaction::new("whatever"))),
+        ],
+    };
+    let schedule =
+        Schedule::from_observation_schedule(&mut env, &ScheduleOptions::default(), obs_schedule);
 
     let result = env.network.execute_schedule(schedule);
     assert!(result.is_ok(), "{:?}", result);
@@ -302,7 +305,8 @@ fn fail_add_remove() {
             (850, Opaque(Transaction::new("whatever"))),
         ],
     };
-    let schedule = Schedule::from_observation_schedule(&mut env, &Default::default(), obs_schedule);
+    let schedule =
+        Schedule::from_observation_schedule(&mut env, &ScheduleOptions::default(), obs_schedule);
 
     let result = env.network.execute_schedule(schedule);
     assert!(result.is_ok(), "{:?}", result);
