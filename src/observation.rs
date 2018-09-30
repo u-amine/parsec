@@ -41,5 +41,7 @@ pub enum Malice {
     DuplicateVote(Hash, Hash),
     /// Event should be carrying a vote for `Observation::Genesis`, but doesn't
     MissingGenesis(Hash),
+    /// Event carries a vote for `Observation::Genesis` which doesn't correspond to what we know.
+    IncorrectGenesis(Hash),
     // TODO: add other malice variants
 }
