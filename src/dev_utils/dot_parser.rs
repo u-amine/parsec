@@ -29,8 +29,20 @@ pub(crate) struct ParsedContents {
 }
 
 impl ParsedContents {
-    /// Remove and return the latest (newest) event from the `ParsedContents`,
-    /// if any.
+    /// Create empty `ParsedContents`.
+    pub fn new(our_id: PeerId) -> Self {
+        let peer_list = PeerList::new(our_id.clone());
+
+        ParsedContents {
+            our_id,
+            events: BTreeMap::new(),
+            events_order: Vec::new(),
+            meta_votes: BTreeMap::new(),
+            peer_list,
+        }
+    }
+
+    /// Remove and return the latest (newest) event from the `ParsedContents`, if any.
     pub fn remove_latest_event(&mut self) -> Option<Event<Transaction, PeerId>> {
         let hash = self.events_order.pop()?;
         let event = self.events.remove(&hash)?;
@@ -38,6 +50,16 @@ impl ParsedContents {
         self.peer_list.remove_event(&event);
 
         Some(event)
+    }
+
+    /// Insert event into the `ParsedContents`. Note this does not perform any validations whatsoever,
+    /// so this is useful for simulating all kinds of invalid or malicious situations.
+    pub fn add_event(&mut self, event: Event<Transaction, PeerId>) {
+        unwrap!(self.peer_list.add_event(&event));
+
+        let hash = *event.hash();
+        let _ = self.events.insert(hash, event);
+        self.events_order.push(hash);
     }
 }
 
@@ -347,6 +369,7 @@ fn parse_event_graph(contents: &str) -> BTreeMap<String, ParsedEvent> {
     parsing_events
 }
 
+#[derive(Debug)]
 struct ParsedMetaVotes {
     event_index: u64,
     meta_votes: BTreeMap<PeerId, Vec<MetaVote>>,
@@ -376,6 +399,7 @@ fn parse_meta_votes(contents: &str) -> BTreeMap<String, ParsedMetaVotes> {
     } else {
         return BTreeMap::new();
     };
+
     let mut parsing_mvs: BTreeMap<String, ParsedMetaVotes> = BTreeMap::new();
     let mut event_name = String::default();
     let mut peer_id = PeerId::new("");

@@ -170,6 +170,12 @@ impl<S: SecretId> PeerList<S> {
             .into_iter()
             .flat_map(|peer| peer.events.values())
     }
+
+    /// Hashes of our events in insertion order.
+    #[cfg(test)]
+    pub fn our_events(&self) -> impl DoubleEndedIterator<Item = &Hash> {
+        self.peer_events(self.our_id.public_id())
+    }
 }
 
 impl<S: SecretId> Debug for PeerList<S> {

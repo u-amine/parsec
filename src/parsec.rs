@@ -87,7 +87,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .add_peer(peer_id.clone(), PeerState::active());
         }
 
-        parsec.initialise_round_hashes();
+        parsec.initialise_round_hashes(&Hash::from([].as_ref()));
 
         // Add initial event.
         let event = Event::new_initial(&parsec.peer_list);
@@ -158,7 +158,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             parsec.peer_list.add_peer(peer_id.clone(), PeerState::SEND);
         }
 
-        parsec.initialise_round_hashes();
+        parsec.initialise_round_hashes(&Hash::from([].as_ref()));
 
         let initial_event = Event::new_initial(&parsec.peer_list);
         if let Err(error) = parsec.add_event(initial_event) {
@@ -732,12 +732,14 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Ok(())
     }
 
-    fn initialise_round_hashes(&mut self) {
-        let initial_hash = Hash::from([].as_ref());
-        for (peer_id, _) in self.peer_list.iter() {
-            let round_hash = RoundHash::new(peer_id, initial_hash);
-            let _ = self.round_hashes.insert(peer_id.clone(), vec![round_hash]);
-        }
+    fn initialise_round_hashes(&mut self, initial_hash: &Hash) {
+        self.round_hashes = self
+            .peer_list
+            .all_ids()
+            .map(|peer_id| {
+                let round_hash = RoundHash::new(peer_id, *initial_hash);
+                (peer_id.clone(), vec![round_hash])
+            }).collect();
     }
 
     fn update_round_hashes(&mut self, event_hash: &Hash) {
@@ -1027,13 +1029,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn restart_consensus(&mut self, latest_block_hash: &Hash) {
-        self.round_hashes = self
-            .peer_list
-            .all_ids()
-            .map(|peer_id| {
-                let round_hash = RoundHash::new(peer_id, *latest_block_hash);
-                (peer_id.clone(), vec![round_hash])
-            }).collect();
+        self.initialise_round_hashes(latest_block_hash);
+
         let events_hashes = self.events_order.to_vec();
         for event_hash in events_hashes {
             let _ = self.set_interesting_content(&event_hash);
@@ -1653,5 +1650,147 @@ mod functional_tests {
             Error::InvalidSelfState { .. },
             eric.create_gossip(Some(&PeerId::new("Alice")))
         );
+    }
+
+    #[test]
+    fn handle_malice_genesis_event_not_after_initial() {
+        let alice_contents = parse_test_dot_file("alice.dot");
+        let alice_id = alice_contents.peer_list.our_id().clone();
+        let genesis: BTreeSet<_> = alice_contents.peer_list.all_ids().cloned().collect();
+        let mut alice = Parsec::from_parsed_contents(alice_contents);
+
+        // Simulate Dave creating unexpected genesis.
+        let dave_id = PeerId::new("Dave");
+        let mut dave_contents = ParsedContents::new(dave_id.clone());
+
+        dave_contents
+            .peer_list
+            .add_peer(dave_id.clone(), PeerState::active());
+        add_genesis_group(&mut dave_contents.peer_list, &genesis);
+
+        let d_0 = Event::<Transaction, _>::new_initial(&dave_contents.peer_list);
+        let d_0_hash = *d_0.hash();
+        dave_contents.add_event(d_0);
+
+        let d_1 = Event::<Transaction, _>::new_from_observation(
+            d_0_hash,
+            Observation::OpaquePayload(Transaction::new("dave's malicious vote")),
+            &dave_contents.events,
+            &dave_contents.peer_list,
+        );
+        dave_contents.add_event(d_1);
+
+        let d_2 = Event::<Transaction, _>::new_from_observation(
+            *unwrap!(dave_contents.events_order.last()),
+            Observation::Genesis(genesis),
+            &dave_contents.events,
+            &dave_contents.peer_list,
+        );
+        let d_2_hash = *d_2.hash();
+        dave_contents.add_event(d_2);
+
+        let dave = Parsec::from_parsed_contents(dave_contents);
+
+        // Dave sends malicious gossip to Alice.
+        let request = unwrap!(dave.create_gossip(Some(&alice_id)));
+        unwrap!(alice.handle_request(&dave_id, request));
+
+        // Verify that Alice detected the malice and accused Dave.
+        let (offender, hash) = unwrap!(
+            our_votes(&alice)
+                .filter_map(|payload| match *payload {
+                    Observation::Accusation {
+                        ref offender,
+                        malice: Malice::UnexpectedGenesis(hash),
+                    } => Some((offender.clone(), hash)),
+                    _ => None,
+                }).next()
+        );
+
+        assert_eq!(offender, dave_id);
+        assert_eq!(hash, d_2_hash);
+    }
+
+    #[test]
+    fn handle_malice_genesis_event_creator_not_genesis_member() {
+        let alice_contents = parse_test_dot_file("alice.dot");
+        let alice_id = alice_contents.peer_list.our_id().clone();
+        let genesis: BTreeSet<_> = alice_contents.peer_list.all_ids().cloned().collect();
+
+        let mut alice = Parsec::from_parsed_contents(alice_contents);
+        reprocess_events(&mut alice); // This is needed so the AddPeer(Eric) is consensused.
+
+        // Simulate Eric creating unexpected genesis.
+        let eric_id = PeerId::new("Eric");
+        let mut eric_contents = ParsedContents::new(eric_id.clone());
+
+        eric_contents
+            .peer_list
+            .add_peer(eric_id.clone(), PeerState::active());
+        add_genesis_group(&mut eric_contents.peer_list, &genesis);
+
+        let e_0 = Event::<Transaction, _>::new_initial(&eric_contents.peer_list);
+        let e_0_hash = *e_0.hash();
+        eric_contents.add_event(e_0);
+
+        let e_1 = Event::<Transaction, _>::new_from_observation(
+            e_0_hash,
+            Observation::Genesis(genesis),
+            &eric_contents.events,
+            &eric_contents.peer_list,
+        );
+        let e_1_hash = *e_1.hash();
+        eric_contents.add_event(e_1);
+
+        let eric = Parsec::from_parsed_contents(eric_contents);
+
+        // Eric sends malicious gossip to Alice.
+        let request = unwrap!(eric.create_gossip(Some(&alice_id)));
+        unwrap!(alice.handle_request(&eric_id, request));
+
+        // Verify that Alice detected the malice and accused Eric.
+        let (offender, hash) = unwrap!(
+            our_votes(&alice)
+                .filter_map(|payload| match *payload {
+                    Observation::Accusation {
+                        ref offender,
+                        malice: Malice::UnexpectedGenesis(hash),
+                    } => Some((offender.clone(), hash)),
+                    _ => None,
+                }).next()
+        );
+
+        assert_eq!(offender, eric_id);
+        assert_eq!(hash, e_1_hash);
+    }
+
+    // Returns iterator over all votes cast by the given node.
+    fn our_votes<T: NetworkEvent, S: SecretId>(
+        parsec: &Parsec<T, S>,
+    ) -> impl Iterator<Item = &Observation<T, S::PublicId>> {
+        parsec
+            .peer_list
+            .our_events()
+            .filter_map(move |hash| parsec.events.get(hash))
+            .filter_map(|event| event.vote())
+            .map(|vote| vote.payload())
+    }
+
+    // Reprocess all events.
+    fn reprocess_events<T: NetworkEvent, S: SecretId>(parsec: &mut Parsec<T, S>) {
+        parsec.clear_consensus_data();
+        parsec.restart_consensus(&Hash::from([].as_ref()));
+    }
+
+    // Add the peers to the `PeerList` as the genesis group.
+    fn add_genesis_group<'a, S, I>(peer_list: &mut PeerList<S>, genesis: I)
+    where
+        S: SecretId,
+        S::PublicId: 'a,
+        I: IntoIterator<Item = &'a S::PublicId>,
+    {
+        for peer_id in genesis {
+            peer_list.add_peer(peer_id.clone(), PeerState::active());
+        }
     }
 }
