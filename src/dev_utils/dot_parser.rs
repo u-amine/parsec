@@ -210,10 +210,8 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
 
     while !parsing_events.is_empty() {
         let ordered_event = next_ordered_event(&parsing_events);
-        if ordered_event.is_empty() {
-            assert!(parsing_events.is_empty());
-            break;
-        }
+        assert!(!ordered_event.is_empty());
+
         let event = unwrap!(parsing_events.remove(&ordered_event));
         let mv = unwrap!(parsing_mvs.remove(&ordered_event));
 
