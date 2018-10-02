@@ -327,8 +327,8 @@ fn fail_add_remove() {
             (10, Fail(PeerId::new("Alice"))),
             (20, RemovePeer(PeerId::new("Bob"))),
             (200, AddPeer(PeerId::new("Hank"))),
-            (700, RemovePeer(PeerId::new("Carol"))),
-            (850, Opaque(Transaction::new("whatever"))),
+            (1000, RemovePeer(PeerId::new("Carol"))),
+            (1500, Opaque(Transaction::new("whatever"))),
         ],
     };
     let schedule =
