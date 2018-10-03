@@ -133,7 +133,7 @@ fn multiple_votes_during_gossip() {
 }
 
 #[test]
-fn duplicate_votes_before_gossip() {
+fn duplicate_vote_is_reduced_to_single() {
     let mut env = Environment::new(SEED);
 
     let schedule = Schedule::new(
