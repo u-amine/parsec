@@ -39,5 +39,7 @@ pub enum Malice {
     UnexpectedGenesis(Hash),
     /// Two or more votes with the same observation by the same creator.
     DuplicateVote(Hash, Hash),
+    /// Event should be carrying a vote for `Observation::Genesis`, but doesn't
+    MissingGenesis(Hash),
     // TODO: add other malice variants
 }

@@ -1170,6 +1170,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             malices.push(malice)
         }
 
+        if self.detect_missing_genesis(event) {
+            malices.push(Malice::MissingGenesis(*event.hash()));
+        }
+
         // TODO: detect other forms of malice here
 
         malices
@@ -1222,6 +1226,38 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             // More than two duplicates. Accusation should have already been raised,
             // don't raise it again.
             None
+        }
+    }
+
+    fn genesis_group(&self) -> Option<&BTreeSet<S::PublicId>> {
+        self.events_order
+            .iter()
+            .filter_map(|hash| self.get_known_event(hash).ok())
+            .filter_map(|ev| {
+                if let Some(&Observation::Genesis(ref gen)) = ev.vote().map(|v| v.payload()) {
+                    Some(gen)
+                } else {
+                    None
+                }
+            }).next()
+    }
+
+    // Detect when the first event by a peer belonging to genesis doesn't carry genesis
+    fn detect_missing_genesis(&self, event: &Event<T, S::PublicId>) -> bool {
+        if event.index() != 1 {
+            return false;
+        }
+        if let Some(&Observation::Genesis(_)) = event.vote().map(|v| v.payload()) {
+            return false;
+        }
+
+        if let Some(gen) = self.genesis_group() {
+            gen.contains(event.creator())
+        } else {
+            // we don't yet have an event with a genesis observation - means we are at a very early
+            // stage and our peer list should be freshly initialised with the genesis group
+            let genesis: BTreeSet<_> = self.peer_list.voter_ids().collect();
+            genesis.contains(event.creator())
         }
     }
 }
