@@ -162,6 +162,14 @@ impl<S: SecretId> PeerList<S> {
             let _ = peer.events.remove(&event.index());
         }
     }
+
+    /// Hashes of events of the given creator, in insertion order.
+    pub fn peer_events(&self, peer_id: &S::PublicId) -> impl DoubleEndedIterator<Item = &Hash> {
+        self.peers
+            .get(peer_id)
+            .into_iter()
+            .flat_map(|peer| peer.events.values())
+    }
 }
 
 impl<S: SecretId> Debug for PeerList<S> {

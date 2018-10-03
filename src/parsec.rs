@@ -1162,8 +1162,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn detect_malice(&self, event: &Event<T, S::PublicId>) -> Vec<Malice> {
         let mut malices = Vec::new();
 
-        if self.detect_unexpected_genesis(event) {
-            malices.push(Malice::UnexpectedGenesis(*event.hash()));
+        if let Some(malice) = self.detect_unexpected_genesis(event) {
+            malices.push(malice);
+        }
+
+        if let Some(malice) = self.detect_duplicate_vote(event) {
+            malices.push(malice)
         }
 
         // TODO: detect other forms of malice here
@@ -1172,24 +1176,53 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     // Detect whether the event carries unexpected `Observation::Genesis`.
-    fn detect_unexpected_genesis(&self, event: &Event<T, S::PublicId>) -> bool {
-        let payload = if let Some(payload) = event.vote().map(|v| v.payload()) {
-            payload
-        } else {
-            return false;
-        };
-
+    fn detect_unexpected_genesis(&self, event: &Event<T, S::PublicId>) -> Option<Malice> {
+        let payload = event.vote().map(|v| v.payload())?;
         let genesis_group = if let Observation::Genesis(ref group) = *payload {
             group
         } else {
-            return false;
+            return None;
         };
 
         // - the creator is not member of the genesis group, or
         // - the self-parent of the event is not initial event
-        !genesis_group.contains(event.creator()) || self
+        if !genesis_group.contains(event.creator()) || self
             .self_parent(event)
             .map_or(true, |self_parent| !self_parent.is_initial())
+        {
+            Some(Malice::UnexpectedGenesis(*event.hash()))
+        } else {
+            None
+        }
+    }
+
+    // Detect that if the event carries a vote, there is already one or more
+    // votes with the same observation by the same creator.
+    fn detect_duplicate_vote(&self, event: &Event<T, S::PublicId>) -> Option<Malice> {
+        let payload = event.vote().map(|v| v.payload())?;
+
+        let mut duplicates = self
+            .peer_list
+            .peer_events(event.creator())
+            .rev()
+            .filter(|hash| {
+                self.get_known_event(hash)
+                    .ok()
+                    .and_then(|event| event.vote())
+                    .map_or(false, |vote| vote.payload() == payload)
+            }).take(3);
+
+        let hash0 = duplicates.next()?;
+        let hash1 = duplicates.next()?;
+
+        if duplicates.next().is_none() {
+            // Exactly two duplicates, raise the accusation.
+            Some(Malice::DuplicateVote(*hash0, *hash1))
+        } else {
+            // More than two duplicates. Accusation should have already been raised,
+            // don't raise it again.
+            None
+        }
     }
 }
 

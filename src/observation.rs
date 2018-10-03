@@ -37,5 +37,7 @@ pub enum Observation<T: NetworkEvent, P: PublicId> {
 pub enum Malice {
     /// Event carries a vote for `Observation::Genesis`, but shouldn't.
     UnexpectedGenesis(Hash),
+    /// Two or more votes with the same observation by the same creator.
+    DuplicateVote(Hash, Hash),
     // TODO: add other malice variants
 }
