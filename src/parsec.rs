@@ -95,7 +95,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             );
         }
 
-        // Add event carying genesis observation.
+        // Add event carrying genesis observation.
         let genesis_observation = Observation::Genesis(genesis_group.clone());
         let self_parent_hash = parsec.our_last_event_hash();
         let event = Event::new_from_observation(
@@ -469,7 +469,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             dump_graph::to_file(
                 self.our_pub_id(),
                 &self.events,
-                &self.meta_elections.last_meta_votes(),
+                &self.meta_elections.current_meta_votes(),
                 &self.peer_list,
             );
             self.clear_consensus_data();
@@ -1009,7 +1009,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     fn restart_consensus(&mut self) {
         self.meta_elections
-            .restart_last_election_round_hashes(self.peer_list.all_ids());
+            .restart_current_election_round_hashes(self.peer_list.all_ids());
         let events_hashes = self.events_order.to_vec();
         for event_hash in events_hashes {
             let _ = self.set_interesting_content(&event_hash);
@@ -1257,7 +1257,7 @@ impl<T: NetworkEvent, S: SecretId> Drop for Parsec<T, S> {
             dump_graph::to_file(
                 self.our_pub_id(),
                 &self.events,
-                &self.meta_elections.last_meta_votes(),
+                &self.meta_elections.current_meta_votes(),
                 &self.peer_list,
             );
         }
@@ -1321,7 +1321,7 @@ mod functional_tests {
                 events,
                 events_order: parsec.events_order.clone(),
                 consensused_blocks: parsec.consensused_blocks.clone(),
-                meta_votes: parsec.meta_elections.last_meta_votes().clone(),
+                meta_votes: parsec.meta_elections.current_meta_votes().clone(),
             }
         }
     }
@@ -1489,7 +1489,7 @@ mod functional_tests {
         assert_eq!(parsed_contents_comparison.events_order, parsec.events_order);
         assert_eq!(
             &parsed_contents_comparison.meta_votes,
-            parsec.meta_elections.last_meta_votes()
+            parsec.meta_elections.current_meta_votes()
         );
 
         let parsed_contents_other = parse_test_dot_file("1.dot");
@@ -1497,7 +1497,7 @@ mod functional_tests {
         assert_ne!(parsed_contents_other.events_order, parsec.events_order);
         assert_ne!(
             &parsed_contents_other.meta_votes,
-            parsec.meta_elections.last_meta_votes()
+            parsec.meta_elections.current_meta_votes()
         );
     }
 
