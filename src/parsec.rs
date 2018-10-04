@@ -24,6 +24,7 @@ use round_hash::RoundHash;
 use serialise;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::iter;
+use vote::Vote;
 
 pub type IsInterestingEventFn<P> = fn(voters: &BTreeSet<&P>, current_peers: &BTreeSet<&P>) -> bool;
 
@@ -1174,6 +1175,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             malices.push(Malice::MissingGenesis(*event.hash()));
         }
 
+        if self.detect_incorrect_genesis(event) {
+            malices.push(Malice::IncorrectGenesis(*event.hash()));
+        }
+
         // TODO: detect other forms of malice here
 
         malices
@@ -1181,7 +1186,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     // Detect whether the event carries unexpected `Observation::Genesis`.
     fn detect_unexpected_genesis(&self, event: &Event<T, S::PublicId>) -> Option<Malice> {
-        let payload = event.vote().map(|v| v.payload())?;
+        let payload = event.vote().map(Vote::payload)?;
         let genesis_group = if let Observation::Genesis(ref group) = *payload {
             group
         } else {
@@ -1203,7 +1208,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     // Detect that if the event carries a vote, there is already one or more
     // votes with the same observation by the same creator.
     fn detect_duplicate_vote(&self, event: &Event<T, S::PublicId>) -> Option<Malice> {
-        let payload = event.vote().map(|v| v.payload())?;
+        let payload = event.vote().map(Vote::payload)?;
 
         let mut duplicates = self
             .peer_list
@@ -1229,17 +1234,23 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
     }
 
-    fn genesis_group(&self) -> Option<&BTreeSet<S::PublicId>> {
-        self.events_order
+    fn genesis_group(&self) -> BTreeSet<&S::PublicId> {
+        if let Some(genesis_group) = self
+            .events_order
             .iter()
             .filter_map(|hash| self.get_known_event(hash).ok())
             .filter_map(|ev| {
-                if let Some(&Observation::Genesis(ref gen)) = ev.vote().map(|v| v.payload()) {
-                    Some(gen)
+                if let Some(&Observation::Genesis(ref gen)) = ev.vote().map(Vote::payload) {
+                    Some(gen.iter().collect())
                 } else {
                     None
                 }
             }).next()
+        {
+            genesis_group
+        } else {
+            self.peer_list.voter_ids().collect()
+        }
     }
 
     // Detect when the first event by a peer belonging to genesis doesn't carry genesis
@@ -1247,17 +1258,19 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         if event.index() != 1 {
             return false;
         }
-        if let Some(&Observation::Genesis(_)) = event.vote().map(|v| v.payload()) {
+        if let Some(&Observation::Genesis(_)) = event.vote().map(Vote::payload) {
             return false;
         }
 
-        if let Some(gen) = self.genesis_group() {
-            gen.contains(event.creator())
+        self.genesis_group().contains(event.creator())
+    }
+
+    // Detect if the event carries an `Observation::Genesis` that doesn't match what we'd expect.
+    fn detect_incorrect_genesis(&self, event: &Event<T, S::PublicId>) -> bool {
+        if let Some(Observation::Genesis(ref group)) = event.vote().map(Vote::payload) {
+            group.iter().collect::<BTreeSet<_>>() != self.genesis_group()
         } else {
-            // we don't yet have an event with a genesis observation - means we are at a very early
-            // stage and our peer list should be freshly initialised with the genesis group
-            let genesis: BTreeSet<_> = self.peer_list.voter_ids().collect();
-            genesis.contains(event.creator())
+            false
         }
     }
 }
