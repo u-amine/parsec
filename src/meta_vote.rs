@@ -501,11 +501,7 @@ impl<'a, P: 'a + PublicId> MetaElections<P> {
         peer_ids: I,
     ) {
         let latest_block_hash = self.current.block_hash;
-        self.current.round_hashes = peer_ids
-            .map(|peer_id| {
-                let round_hash = RoundHash::new(peer_id, latest_block_hash);
-                (peer_id.clone(), vec![round_hash])
-            }).collect();
+        self.initialise_current_election_round_hashes(peer_ids, &latest_block_hash);
     }
 
     pub(super) fn update_current_election_round_hashes(&mut self, event_hash: &Hash) {
@@ -530,18 +526,23 @@ impl<'a, P: 'a + PublicId> MetaElections<P> {
     }
 
     pub(super) fn initialise_round_hashes<I: Iterator<Item = &'a P>>(&mut self, peer_ids: I) {
-        let initial_hash = Hash::from([].as_ref());
-        for peer_id in peer_ids {
-            let round_hash = RoundHash::new(peer_id, initial_hash);
-            let _ = self
-                .current
-                .round_hashes
-                .insert(peer_id.clone(), vec![round_hash]);
-        }
+        self.initialise_current_election_round_hashes(peer_ids, &Hash::from([].as_ref()));
     }
 
     pub(super) fn current_meta_votes(&self) -> &MetaVotes<P> {
         &self.current.meta_votes
+    }
+
+    fn initialise_current_election_round_hashes<I: Iterator<Item = &'a P>>(
+        &mut self,
+        peer_ids: I,
+        initial_hash: &Hash,
+    ) {
+        self.current.round_hashes = peer_ids
+            .map(|peer_id| {
+                let round_hash = RoundHash::new(peer_id, *initial_hash);
+                (peer_id.clone(), vec![round_hash])
+            }).collect();
     }
 }
 
