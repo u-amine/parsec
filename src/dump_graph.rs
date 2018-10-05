@@ -67,19 +67,19 @@ mod detail {
     use std::fmt::Debug;
     use std::fs::{self, File};
     use std::io::{self, Write};
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::process::Command;
     use std::thread;
 
     lazy_static! {
-        static ref ROOT_DIR: PathBuf = {
-            env::temp_dir().join("parsec_graphs").join(
-                rand::thread_rng()
-                    .gen_ascii_chars()
-                    .take(6)
-                    .collect::<String>(),
-            )
+        static ref ROOT_DIR_PREFIX: PathBuf = { env::temp_dir().join("parsec_graphs") };
+        static ref ROOT_DIR_SUFFIX: String = {
+            rand::thread_rng()
+                .gen_ascii_chars()
+                .take(6)
+                .collect::<String>()
         };
+        static ref ROOT_DIR: PathBuf = { ROOT_DIR_PREFIX.join(&*ROOT_DIR_SUFFIX) };
     }
 
     thread_local!(/// The directory to which test data is dumped
@@ -167,6 +167,9 @@ mod detail {
         {
             let _ = child.wait();
         }
+
+        // Create symlink so it's easier to find the latest graphs.
+        let _ = symlink_dir(&*ROOT_DIR, ROOT_DIR_PREFIX.join("latest"));
     }
 
     fn first_char<D: Debug>(id: &D) -> Option<char> {
@@ -445,5 +448,17 @@ mod detail {
             .map(|(peer_id, peer)| (peer_id, format!("{:?}", peer.state)))
             .collect::<BTreeMap<_, _>>();
         writeln!(writer, "/// peer_states: {:?}", peer_states)
+    }
+
+    #[cfg(unix)]
+    fn symlink_dir<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) -> io::Result<()> {
+        use std::os::unix::fs::symlink;
+        symlink(src, dst)
+    }
+
+    #[cfg(windows)]
+    fn symlink_dir<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) -> io::Result<()> {
+        use std::os::windows::fs::symlink_dir;
+        symlink_dir(src, dst)
     }
 }
