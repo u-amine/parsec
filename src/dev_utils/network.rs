@@ -307,7 +307,7 @@ impl Network {
                     self.peers = peers;
                     self.genesis = genesis_group;
                     // do a full reset while we're at it
-                    self.msg_queue = BTreeMap::new();
+                    self.msg_queue.clear();
                 }
                 ScheduleEvent::AddPeer(peer) => {
                     let current_peers = self

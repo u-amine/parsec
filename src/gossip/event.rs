@@ -36,7 +36,7 @@ pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
     index: u64,
     // Index of each peer's latest event that is an ancestor of this event.
     last_ancestors: BTreeMap<P, u64>,
-    // Payloads of all the votes deemed interesting by this event
+    // Payloads of all the votes deemed interesting by this event.
     pub interesting_content: Vec<Observation<T, P>>,
     // The set of peers for which this event can strongly-see an event by that peer which carries a
     // valid block.  If there are a supermajority of peers here, this event is an "observer".
@@ -97,9 +97,9 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     // Creates an event from a `PackedEvent`.
     //
     // Returns:
-    //   * `Ok(None)` if the event already exists
-    //   * `Err(Error::SignatureFailure)` if signature validation fails
-    //   * `Err(Error::UnknownParent)` if the event indicates it should have an ancestor, but the
+    //   - `Ok(None)` if the event already exists
+    //   - `Err(Error::SignatureFailure)` if signature validation fails
+    //   - `Err(Error::UnknownParent)` if the event indicates it should have an ancestor, but the
     //     ancestor isn't in `events`.
     pub(crate) fn unpack<S: SecretId<PublicId = P>>(
         packed_event: PackedEvent<T, P>,
@@ -131,7 +131,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             index,
             last_ancestors,
             interesting_content: vec![],
-            observations: BTreeSet::default(),
+            observations: BTreeSet::new(),
         }))
     }
 
@@ -230,7 +230,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
                 "{:?} constructed an invalid event.",
                 peer_list.our_id().public_id()
             );
-            (0, BTreeMap::default())
+            (0, BTreeMap::new())
         };
 
         // `interesting_content` and `observations` still need to be set correctly by the caller.
@@ -241,7 +241,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             index,
             last_ancestors,
             interesting_content: vec![],
-            observations: BTreeSet::default(),
+            observations: BTreeSet::new(),
         }
     }
 
@@ -262,8 +262,8 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
                 return Err(Error::UnknownParent);
             }
         } else {
-            // This must be an initial event, i.e. having index 0
-            let mut last_ancestors = BTreeMap::default();
+            // This must be an initial event, i.e. having index 0.
+            let mut last_ancestors = BTreeMap::new();
             let _ = last_ancestors.insert(content.creator.clone(), 0);
             return Ok((0, last_ancestors));
         };
@@ -340,7 +340,7 @@ impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
 
 #[cfg(test)]
 impl Event<Transaction, PeerId> {
-    // Creates a new event using the input parameters directly
+    // Creates a new event using the input parameters directly.
     pub(crate) fn new_from_dot_input(
         creator: &PeerId,
         cause: &str,
@@ -371,7 +371,7 @@ impl Event<Transaction, PeerId> {
                 } else if cause.contains("OpaquePayload") {
                     Observation::OpaquePayload(Transaction::new(content))
                 } else if cause.contains("Genesis") {
-                    // `content` will contain e.g. "{Alice, Bob, Carol, Dave, Eric}"
+                    // `content` will contain e.g. "{Alice, Bob, Carol, Dave, Eric}".
                     let peer_ids = content[1..content.len() - 1]
                         .split(", ")
                         .map(PeerId::new)

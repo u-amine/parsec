@@ -22,12 +22,11 @@ use std::ops::{BitOr, BitOrAssign};
 pub(crate) struct PeerList<S: SecretId> {
     our_id: S,
     peers: BTreeMap<S::PublicId, Peer>,
-    // Map of Hash(peer_id) => peer_id
+    // Map of Hash(peer_id) => peer_id.
     peer_id_hashes: Vec<(Hash, S::PublicId)>,
 }
 
 impl<S: SecretId> PeerList<S> {
-    /// Constructor of `PeerList`.
     pub fn new(our_id: S) -> Self {
         PeerList {
             our_id,
@@ -36,7 +35,6 @@ impl<S: SecretId> PeerList<S> {
         }
     }
 
-    /// Returns `our_id`.
     pub fn our_id(&self) -> &S {
         &self.our_id
     }
@@ -51,7 +49,7 @@ impl<S: SecretId> PeerList<S> {
         self.voters().map(|(id, _)| id)
     }
 
-    /// Returns an unsorted map of Hash(peer_id) => peer_id
+    /// Returns an unsorted map of Hash(peer_id) => peer_id.
     pub fn peer_id_hashes(&self) -> &Vec<(Hash, S::PublicId)> {
         &self.peer_id_hashes
     }
@@ -61,7 +59,7 @@ impl<S: SecretId> PeerList<S> {
         self.peers.iter()
     }
 
-    /// Returns an iterator of peers that can vote
+    /// Returns an iterator of peers that can vote.
     pub fn voters(&self) -> impl Iterator<Item = (&S::PublicId, &Peer)> {
         self.peers.iter().filter(|(_, peer)| peer.state.can_vote())
     }
@@ -77,8 +75,8 @@ impl<S: SecretId> PeerList<S> {
         self.peer_state(self.our_id.public_id())
     }
 
-    /// Adds a peer in the given state into the map. If the peer has already been
-    /// added, merge its state with the one given.
+    /// Adds a peer in the given state into the map. If the peer has already been added, merges its
+    /// state with the one given.
     pub fn add_peer(&mut self, peer_id: S::PublicId, state: PeerState) {
         match self.peers.entry(peer_id.clone()) {
             Entry::Occupied(mut entry) => {
@@ -104,8 +102,7 @@ impl<S: SecretId> PeerList<S> {
         }
     }
 
-    /// Checks whether the input count becomes the super majority of the members
-    /// that can vote.
+    /// Checks whether the input count becomes the super majority of the members that can vote.
     pub fn is_super_majority(&self, count: usize) -> bool {
         is_more_than_two_thirds(count, self.voters().count())
     }
@@ -195,7 +192,7 @@ impl<S: SecretId> Debug for PeerList<S> {
 
 #[cfg(test)]
 impl PeerList<PeerId> {
-    // Creates a new PeerList using the input parameters directly
+    // Creates a new PeerList using the input parameters directly.
     pub(super) fn new_from_dot_input(
         our_id: PeerId,
         events_graph: &BTreeMap<Hash, Event<Transaction, PeerId>>,
@@ -237,17 +234,13 @@ impl PeerList<PeerId> {
 
 /// Peer state is a bitflag with these flags:
 ///
-/// - `VOTE`: if enabled, the peer can vote, which means they are counted towards
-///           the supermajority.
-/// - `SEND`: if enabled, the peer can send gossips. For us it means we can
-///           send gossips to others. For others it means we can receive gossips
-///           from them.
-/// - `RECV`: if enabled, the peer can receive gossips. For us, it means we
-///           can receive gossips from others. For others it means we can send
-///           gossips to them.
+/// - `VOTE`: if enabled, the peer can vote, which means they are counted towards the supermajority.
+/// - `SEND`: if enabled, the peer can send gossips. For us it means we can send gossips to others.
+///           For others it means we can receive gossips from them.
+/// - `RECV`: if enabled, the peer can receive gossips. For us, it means we can receive gossips from
+///           others. For others it means we can send gossips to them.
 ///
-/// If all three are enabled, the state is called `active`. If none is enabled,
-/// it's `inactive`.
+/// If all three are enabled, the state is called `active`. If none is enabled, it's `inactive`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct PeerState(u8);
 
