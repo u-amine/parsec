@@ -43,5 +43,7 @@ pub enum Malice {
     MissingGenesis(Hash),
     /// Event carries a vote for `Observation::Genesis` which doesn't correspond to what we know.
     IncorrectGenesis(Hash),
+    /// Event carries other_parent older than first ancestor of self_parent.
+    StaleOtherParent(Hash),
     // TODO: add other malice variants
 }

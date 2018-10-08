@@ -168,7 +168,6 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         self.content.self_parent()
     }
 
-    #[cfg(any(test, feature = "dump-graphs"))]
     pub fn other_parent(&self) -> Option<&Hash> {
         self.content.other_parent()
     }
