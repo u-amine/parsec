@@ -473,37 +473,42 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .update_current_election_round_hashes(event_hash);
 
         if let Some(block) = self.next_stable_block(event_hash) {
-            dump_graph::to_file(
-                self.our_pub_id(),
-                &self.events,
-                &self.meta_elections.current_meta_votes(),
-                &self.peer_list,
-            );
-            self.clear_consensus_data();
-
             let payload_hash = block.create_payload_hash();
-            info!(
-                "{:?} got consensus on block {} with payload {:?} and payload hash {:?}",
-                self.our_pub_id(),
-                self.meta_elections.consensus_history().count(),
-                block.payload(),
-                payload_hash
-            );
-            self.meta_elections.new_election(payload_hash);
+            let payload = block.payload().clone();
 
-            let observation = block.payload().clone();
+            self.output_consensus_info(&payload, &payload_hash);
+            self.clear_consensus_data();
+            self.meta_elections.new_election(payload_hash);
             self.consensused_blocks.push_back(block);
 
-            if !self.handle_consensus(observation) {
+            if !self.handle_self_consensus(payload) {
                 return Ok(());
             }
 
             self.restart_consensus();
         }
+
         Ok(())
     }
 
-    fn handle_consensus(&mut self, observation: Observation<T, S::PublicId>) -> bool {
+    fn output_consensus_info(&self, payload: &Observation<T, S::PublicId>, payload_hash: &Hash) {
+        dump_graph::to_file(
+            self.our_pub_id(),
+            &self.events,
+            &self.meta_elections.current_meta_votes(),
+            &self.peer_list,
+        );
+
+        info!(
+            "{:?} got consensus on block {} with payload {:?} and payload hash {:?}",
+            self.our_pub_id(),
+            self.meta_elections.consensus_history().count(),
+            payload,
+            payload_hash
+        );
+    }
+
+    fn handle_self_consensus(&mut self, observation: Observation<T, S::PublicId>) -> bool {
         match observation {
             Observation::Genesis(_) => {
                 // TODO: handle malice
@@ -574,7 +579,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 }).or_insert_with(|| iter::once(*event_hash).collect());
         }
         self.get_known_event_mut(event_hash)
-            .map(|ref mut event| event.interesting_content.extend(interesting_content))
+            .map(|event| event.interesting_content.extend(interesting_content))
     }
 
     // Any payloads which this event sees as "interesting".  If this returns a non-empty set, then
@@ -686,7 +691,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .collect()
         };
         self.get_known_event_mut(event_hash)
-            .map(|ref mut event| event.observations = observations)
+            .map(|event| event.observations = observations)
     }
 
     fn set_meta_votes(&mut self, event_hash: &Hash) -> Result<()> {
@@ -933,69 +938,69 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         other_votes
     }
 
-    fn next_stable_block(&mut self, event_hash: &Hash) -> Option<Block<T, S::PublicId>> {
-        self.meta_elections
-            .meta_votes_from_current_election(event_hash)
-            .and_then(|last_meta_votes| {
-                let decided_meta_votes = last_meta_votes.iter().filter_map(|(id, event_votes)| {
-                    let vote = event_votes.last();
-                    vote.and_then(|v| {
-                        if v.decision.is_some() {
-                            Some((id, v))
-                        } else {
-                            None
-                        }
-                    })
-                });
-                if decided_meta_votes.clone().count() < self.peer_list.voters().count() {
-                    None
-                } else {
-                    let payloads = decided_meta_votes
-                        .filter_map(|(id, vote)| {
-                            if vote.decision == Some(true) {
-                                self.interesting_events
-                                    .get(&id)
-                                    .and_then(|hashes| hashes.front())
-                                    .and_then(|hash| self.get_known_event(&hash).ok())
-                                    .and_then(|oldest_event| {
-                                        oldest_event.interesting_content.first()
-                                    }).cloned()
-                            } else {
-                                None
-                            }
-                        }).collect::<Vec<_>>();
+    fn next_stable_block(&self, event_hash: &Hash) -> Option<Block<T, S::PublicId>> {
+        let last_meta_votes = self
+            .meta_elections
+            .meta_votes_from_current_election(event_hash)?;
 
-                    let copied_payloads = payloads.clone();
-                    copied_payloads
-                        .iter()
-                        .max_by(|lhs_payload, rhs_payload| {
-                            let lhs_count = payloads
-                                .iter()
-                                .filter(|payload_carried| lhs_payload == payload_carried)
-                                .count();
-                            let rhs_count = payloads
-                                .iter()
-                                .filter(|payload_carried| rhs_payload == payload_carried)
-                                .count();
-                            lhs_count.cmp(&rhs_count)
-                        }).cloned()
-                        .and_then(|winning_payload| {
-                            let votes = self
-                                .events
-                                .iter()
-                                .filter_map(|(_hash, event)| {
-                                    event.vote().and_then(|vote| {
-                                        if *vote.payload() == winning_payload {
-                                            Some((event.creator().clone(), vote.clone()))
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                }).collect();
-                            Block::new(winning_payload.clone(), &votes).ok()
-                        })
+        let decided_meta_votes = last_meta_votes.iter().filter_map(|(id, event_votes)| {
+            if let Some(v) = event_votes.last().and_then(|v| v.decision) {
+                Some((id, v))
+            } else {
+                None
+            }
+        });
+
+        if decided_meta_votes.clone().count() < self.peer_list.voters().count() {
+            return None;
+        }
+
+        let payloads: Vec<_> = decided_meta_votes
+            .filter_map(|(id, decision)| {
+                if decision {
+                    self.interesting_events
+                        .get(&id)
+                        .and_then(|hashes| hashes.front())
+                        .and_then(|hash| self.get_known_event(&hash).ok())
+                        .and_then(|oldest_event| oldest_event.interesting_content.first())
+                        .cloned()
+                } else {
+                    None
                 }
-            })
+            }).collect();
+
+        let winning_payload = payloads
+            .iter()
+            .max_by(|lhs_payload, rhs_payload| {
+                let lhs_count = payloads
+                    .iter()
+                    .filter(|payload_carried| lhs_payload == payload_carried)
+                    .count();
+                let rhs_count = payloads
+                    .iter()
+                    .filter(|payload_carried| rhs_payload == payload_carried)
+                    .count();
+                lhs_count.cmp(&rhs_count)
+            }).cloned()?;
+
+        self.create_block(winning_payload)
+    }
+
+    fn create_block(&self, payload: Observation<T, S::PublicId>) -> Option<Block<T, S::PublicId>> {
+        let votes = self
+            .events
+            .values()
+            .filter_map(|event| {
+                event.vote().and_then(|vote| {
+                    if *vote.payload() == payload {
+                        Some((event.creator().clone(), vote.clone()))
+                    } else {
+                        None
+                    }
+                })
+            }).collect();
+
+        Block::new(payload, &votes).ok()
     }
 
     fn clear_consensus_data(&mut self) {

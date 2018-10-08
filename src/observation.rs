@@ -9,6 +9,7 @@
 use hash::Hash;
 use id::PublicId;
 use network_event::NetworkEvent;
+use serialise;
 use std::collections::BTreeSet;
 
 /// An enum of the various network events for which a peer can vote.
@@ -30,6 +31,13 @@ pub enum Observation<T: NetworkEvent, P: PublicId> {
     },
     /// Vote for an event which is opaque to Parsec.
     OpaquePayload(T),
+}
+
+impl<T: NetworkEvent, P: PublicId> Observation<T, P> {
+    /// Compute hash of this `Observation`.
+    pub fn create_hash(&self) -> Hash {
+        Hash::from(serialise(self).as_slice())
+    }
 }
 
 /// Type of malicious behaviour.
