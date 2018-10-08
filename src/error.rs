@@ -30,14 +30,14 @@ quick_error! {
         UnknownPeer {
             display("The peer_id is not known to our node's peer_list.")
         }
-        /// Peer is known to us, but has unexpected state
+        /// Peer is known to us, but has unexpected state.
         InvalidPeerState {
             required: PeerState,
             actual: PeerState,
         } {
             display("The peer is in invalid state (required: {:?}, actual: {:?}).", required, actual)
         }
-        /// Our node is in unexpected state
+        /// Our node is in unexpected state.
         InvalidSelfState {
             required: PeerState,
             actual: PeerState

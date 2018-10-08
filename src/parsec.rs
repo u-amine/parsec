@@ -23,11 +23,12 @@ use peer_list::{PeerList, PeerState};
 use serialise;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::iter;
+use std::u64;
 use vote::Vote;
 
 pub type IsInterestingEventFn<P> = fn(voters: &BTreeSet<&P>, current_peers: &BTreeSet<&P>) -> bool;
 
-/// Returns whether `small` is more than two thirds of `large`
+/// Returns whether `small` is more than two thirds of `large`.
 pub fn is_more_than_two_thirds(small: usize, large: usize) -> bool {
     3 * small > 2 * large
 }
@@ -52,7 +53,7 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     events: BTreeMap<Hash, Event<T, S::PublicId>>,
     // The sequence in which all gossip events were added to this `Parsec`.
     events_order: Vec<Hash>,
-    // The hashes of events for each peer that have a non-empty set of `interesting_content`
+    // The hashes of events for each peer that have a non-empty set of `interesting_content`.
     interesting_events: BTreeMap<S::PublicId, VecDeque<Hash>>,
     // Consensused network events that have not been returned via `poll()` yet.
     consensused_blocks: VecDeque<Block<T, S::PublicId>>,
@@ -63,7 +64,6 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
 
 impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// Creates a new `Parsec` for a peer with the given ID and genesis peer IDs (ours included).
-    /// Version to be used in production
     pub fn from_genesis(
         our_id: S,
         genesis_group: &BTreeSet<S::PublicId>,
@@ -216,10 +216,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.confirm_self_state(PeerState::SEND)?;
 
         if let Some(recipient_id) = peer_id {
-            // We require `PeerState::VOTE` in addition to `PeerState::RECV` here,
-            // Because if the peer does not have `PeerState::VOTE`, it means we haven't
-            // yet reached consensus on adding them to the section so we shouldn't contact
-            // them yet.
+            // We require `PeerState::VOTE` in addition to `PeerState::RECV` here, because if the
+            // peer does not have `PeerState::VOTE`, it means we haven't yet reached consensus on
+            // adding them to the section so we shouldn't contact them yet.
             self.confirm_peer_state(recipient_id, PeerState::VOTE | PeerState::RECV)?;
 
             if self.peer_list.last_event_hash(recipient_id).is_some() {
@@ -290,8 +289,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.consensused_blocks.pop_front()
     }
 
-    /// Check if we can vote (that is, we have reached a consensus on us being
-    /// full member of the section)
+    /// Check if we can vote (that is, we have reached a consensus on us being full member of the
+    /// section).
     pub fn can_vote(&self) -> bool {
         self.peer_list.peer_state(self.our_pub_id()).can_vote()
     }
@@ -389,8 +388,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn is_observer(&self, event: &Event<T, S::PublicId>) -> bool {
-        // an event is an observer if it has a supermajority of observations and its self-parent
-        // does not
+        // An event is an observer if it has a supermajority of observations and its self-parent
+        // does not.
         self.has_supermajority_observations(event) && self.self_parent(event).map_or_else(
             || {
                 log_or_panic!("{:?} has observations, but no self-parent", event);
@@ -408,8 +407,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.confirm_self_state(PeerState::RECV)?;
         self.confirm_peer_state(src, PeerState::SEND)?;
 
-        // We have received at least one gossip from the sender, so they can now
-        // receive gossips from us as well.
+        // We have received at least one gossip from the sender, so they can now receive gossips
+        // from us as well.
         self.peer_list.add_peer(src.clone(), PeerState::RECV);
 
         for packed_event in packed_events {
@@ -502,28 +501,26 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 // TODO: handle malice
             }
             Observation::Add(peer_id) => {
-                // - If we are already full member of the section, we can start
-                //   sending gossips to the new peer from this moment.
-                // - If we are the new peer, we must wait for the other members
-                //   to send gossips to us first.
+                // - If we are already full member of the section, we can start sending gossips to
+                //   the new peer from this moment.
+                // - If we are the new peer, we must wait for the other members to send gossips to
+                //   us first.
                 //
-                // To distinguish between the two, we check whether everyone we
-                // reached consensus on adding also reached consensus on adding us.
+                // To distinguish between the two, we check whether everyone we reached consensus on
+                // adding also reached consensus on adding us.
                 let recv = self
                     .peer_list
                     .iter()
                     .filter(|&(id, peer)| {
-                        // Peers that can vote, which means we have reached consensus
-                        // on adding them.
+                        // Peers that can vote, which means we got consensus on adding them.
                         peer.state.can_vote() &&
-                        // Excluding the peer begin added.
+                        // Excluding the peer being added.
                         *id != peer_id &&
                         // And excluding us.
                         *id != *self.our_pub_id()
                     }).all(|(_, peer)| {
-                        // Peers that can receive, which implies they've already
-                        // sent us at least one message which implies they've already
-                        // reached consensus on adding us.
+                        // Peers that can receive, which implies they've already sent us at least
+                        // one message which implies they've already reached consensus on adding us.
                         peer.state.can_recv()
                     });
 
@@ -601,10 +598,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                         voters_indices
                             .get(event.creator())
                             .cloned()
-                            // sometimes the interesting event's creator won't have voted for the
+                            // Sometimes the interesting event's creator won't have voted for the
                             // payload that became interesting - in such a case we would like it
                             // sorted at the end of the "queue"
-                            .unwrap_or(::std::u64::MAX),
+                            .unwrap_or(u64::MAX),
                     ))
                 } else {
                     None
@@ -758,7 +755,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             // We're waiting for the coin toss result already.
             if parent_vote.round == 0 {
                 // This should never happen as estimates get cleared only in increase step when the
-                // step is Step::GenuineFlip and the round gets incremented
+                // step is Step::GenuineFlip and the round gets incremented.
                 log_or_panic!(
                     "{:?} missing parent vote estimates at round 0.",
                     self.our_pub_id()
@@ -867,8 +864,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     // Returns the meta votes for the given peer, created by `creator`, since the given round and
-    // step.
-    // Starts iterating down the creator's events starting from `creator_event_index`.
+    // step.  Starts iterating down the creator's events starting from `creator_event_index`.
     fn meta_votes_since_round_and_step(
         &self,
         creator: &S::PublicId,
@@ -998,11 +994,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn clear_consensus_data(&mut self) {
-        // Clear all leftover data from previous consensus
-        self.interesting_events = BTreeMap::new();
+        // Clear all leftover data from previous consensus.
+        self.interesting_events.clear();
 
         for event in self.events.values_mut() {
-            event.observations = BTreeSet::new();
+            event.observations.clear();
             event.interesting_content = vec![];
         }
     }
@@ -1017,8 +1013,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
     }
 
-    // Returns the number of peers through which there is a directed path in the gossip graph
-    // from event X (descendant) to event Y (ancestor).
+    // Returns the number of peers through which there is a directed path in the gossip graph from
+    // event X (descendant) to event Y (ancestor).
     fn n_peers_with_directed_paths(
         &self,
         x: &Event<T, S::PublicId>,
@@ -1181,8 +1177,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
     }
 
-    // Detect that if the event carries a vote, there is already one or more
-    // votes with the same observation by the same creator.
+    // Detect that if the event carries a vote, there is already one or more votes with the same
+    // observation by the same creator.
     fn detect_duplicate_vote(&self, event: &Event<T, S::PublicId>) -> Option<Malice> {
         let payload = event.vote().map(Vote::payload)?;
 
@@ -1204,8 +1200,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             // Exactly two duplicates, raise the accusation.
             Some(Malice::DuplicateVote(*hash0, *hash1))
         } else {
-            // More than two duplicates. Accusation should have already been raised,
-            // don't raise it again.
+            // More than two duplicates. Accusation should have already been raised, don't raise it
+            // again.
             None
         }
     }
@@ -1229,7 +1225,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
     }
 
-    // Detect when the first event by a peer belonging to genesis doesn't carry genesis
+    // Detect when the first event by a peer belonging to genesis doesn't carry genesis.
     fn detect_missing_genesis(&self, event: &Event<T, S::PublicId>) -> bool {
         if event.index() != 1 {
             return false;
