@@ -1838,6 +1838,76 @@ mod functional_tests {
     }
 
     #[test]
+    fn handle_malice_missing_genesis_event() {
+        let alice_id = PeerId::new("Alice");
+        let dave_id = PeerId::new("Dave");
+
+        // Create Alice where the first event is not a genesis event (malice)
+        let mut alice_contents = ParsedContents::new(alice_id.clone());
+        alice_contents
+            .peer_list
+            .add_peer(alice_id.clone(), PeerState::active());
+        alice_contents
+            .peer_list
+            .add_peer(dave_id.clone(), PeerState::active());
+        let a_0 = Event::<Transaction, _>::new_initial(&alice_contents.peer_list);
+        let a_0_hash = *a_0.hash();
+        alice_contents.add_event(a_0);
+        let a_1 = Event::<Transaction, _>::new_from_observation(
+            a_0_hash,
+            Observation::OpaquePayload(Transaction::new("Foo")),
+            &alice_contents.events,
+            &alice_contents.peer_list,
+        );
+        let a_1_hash = *a_1.hash();
+        alice_contents.add_event(a_1);
+        let alice = Parsec::from_parsed_contents(alice_contents);
+
+        // Create Dave where the first event is a geneneis event containing both Alice and Dave.
+        let mut dave_contents = ParsedContents::new(dave_id.clone());
+        dave_contents
+            .peer_list
+            .add_peer(alice_id.clone(), PeerState::active());
+        dave_contents
+            .peer_list
+            .add_peer(dave_id.clone(), PeerState::active());
+        let d_0 = Event::<Transaction, _>::new_initial(&dave_contents.peer_list);
+        let d_0_hash = *d_0.hash();
+        dave_contents.add_event(d_0);
+        let genesis: BTreeSet<_> = dave_contents.peer_list.all_ids().cloned().collect();
+        let d_1 = Event::<Transaction, _>::new_from_observation(
+            d_0_hash,
+            Observation::Genesis(genesis),
+            &dave_contents.events,
+            &dave_contents.peer_list,
+        );
+        dave_contents.add_event(d_1);
+        let mut dave = Parsec::from_parsed_contents(dave_contents);
+        assert!(!dave.events.contains_key(&a_0_hash));
+        assert!(!dave.events.contains_key(&a_1_hash));
+
+        // Send gossip from Alice to Dave.
+        let message = unwrap!(alice.create_gossip(Some(&dave_id)));
+        unwrap!(dave.handle_request(&alice_id, message));
+        assert!(dave.events.contains_key(&a_0_hash));
+        assert!(dave.events.contains_key(&a_1_hash));
+
+        // Verify that Dave detected and accused Alice for malice.
+        let (offender, hash) = unwrap!(
+            our_votes(&dave)
+                .filter_map(|payload| match payload {
+                    Observation::Accusation {
+                        ref offender,
+                        malice: Malice::MissingGenesis(hash),
+                    } => Some((offender, hash)),
+                    _ => None,
+                }).next()
+        );
+        assert_eq!(*offender, alice_id);
+        assert_eq!(*hash, a_1_hash);
+    }
+
+    #[test]
     fn handle_malice_duplicate_votes() {
         // Carol has already voted for "ABCD".  Create two new duplicate votes by Carol for this
         // opaque payload.
