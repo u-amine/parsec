@@ -383,6 +383,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         event.self_parent().and_then(|hash| self.events.get(hash))
     }
 
+    fn other_parent<'a>(
+        &'a self,
+        event: &Event<T, S::PublicId>,
+    ) -> Option<&'a Event<T, S::PublicId>> {
+        event.other_parent().and_then(|hash| self.events.get(hash))
+    }
+
     fn has_supermajority_observations(&self, event: &Event<T, S::PublicId>) -> bool {
         self.peer_list.is_super_majority(event.observations.len())
     }
@@ -1114,6 +1121,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.detect_unexpected_genesis(event);
         self.detect_missing_genesis(event);
         self.detect_duplicate_vote(event);
+        self.detect_stale_other_parent(event);
 
         // TODO: detect other forms of malice here
 
@@ -1224,6 +1232,31 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             event.creator().clone(),
             Malice::DuplicateVote(*event.hash(), other_hash),
         );
+    }
+
+    // Detect if the event's other_parent older than first ancestor of self_parent.
+    fn detect_stale_other_parent(&mut self, event: &Event<T, S::PublicId>) {
+        let (other_parent_index, other_parent_creator) =
+            if let Some(other_parent) = self.other_parent(event) {
+                (other_parent.index(), other_parent.creator().clone())
+            } else {
+                return;
+            };
+        let self_parent_ancestor_index = if let Some(index) = event
+            .self_parent()
+            .and_then(|hash| self.events.get(hash))
+            .and_then(|self_parent| self_parent.last_ancestors().get(&other_parent_creator))
+        {
+            *index
+        } else {
+            return;
+        };
+        if other_parent_index < self_parent_ancestor_index {
+            self.accuse(
+                event.creator().clone(),
+                Malice::StaleOtherParent(*event.hash()),
+            );
+        }
     }
 
     fn genesis_group(&self) -> BTreeSet<&S::PublicId> {
