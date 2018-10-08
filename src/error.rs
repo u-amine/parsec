@@ -7,6 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use peer_list::PeerState;
+use std::result;
 
 quick_error! {
     /// Parsec error variants.
@@ -66,3 +67,6 @@ quick_error! {
         }
     }
 }
+
+/// A specialised `Result` type for Parsec.
+pub type Result<T> = result::Result<T, Error>;

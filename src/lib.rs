@@ -110,7 +110,7 @@ pub mod mock;
 pub use block::Block;
 #[cfg(feature = "dump-graphs")]
 pub use dump_graph::DIR;
-pub use error::Error;
+pub use error::{Error, Result};
 pub use gossip::{Request, Response};
 pub use id::{Proof, PublicId, SecretId};
 pub use network_event::NetworkEvent;
