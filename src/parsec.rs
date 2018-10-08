@@ -1230,7 +1230,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         self.accuse(
             event.creator().clone(),
-            Malice::DuplicateVote(*event.hash(), other_hash),
+            Malice::DuplicateVote(other_hash, *event.hash()),
         );
     }
 
@@ -1344,6 +1344,7 @@ impl Parsec<Transaction, PeerId> {
 mod functional_tests {
     use super::*;
     use dev_utils::parse_test_dot_file;
+    use gossip::{find_event_by_short_name, Event};
     use meta_vote::MetaVotes;
     use mock::{self, Transaction};
     use peer_list::PeerState;
@@ -1795,6 +1796,54 @@ mod functional_tests {
 
         assert_eq!(offender, eric_id);
         assert_eq!(hash, e_1_hash);
+    }
+
+    #[test]
+    fn handle_malice_duplicate_votes() {
+        // Carol has already voted for "ABCD".  Create two new duplicate votes by Carol for this
+        // opaque payload.
+        let mut carol = Parsec::from_parsed_contents(parse_test_dot_file("carol.dot"));
+        let first_duplicate = Event::new_from_observation(
+            carol.our_last_event_hash(),
+            Observation::OpaquePayload(Transaction::new("ABCD")),
+            &carol.events,
+            &carol.peer_list,
+        );
+        let first_duplicate_clone = Event::new_from_observation(
+            carol.our_last_event_hash(),
+            Observation::OpaquePayload(Transaction::new("ABCD")),
+            &carol.events,
+            &carol.peer_list,
+        );
+
+        let first_duplicate_hash = *first_duplicate.hash();
+        let _ = carol.events.insert(first_duplicate_hash, first_duplicate);
+        let second_duplicate = Event::new_from_observation(
+            first_duplicate_hash,
+            Observation::OpaquePayload(Transaction::new("ABCD")),
+            &carol.events,
+            &carol.peer_list,
+        );
+
+        // Check that the first duplicate triggers an accusation by Alice, but that the duplicate is
+        // still added to the graph.
+        let mut alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
+        let carols_valid_vote_hash =
+            *unwrap!(find_event_by_short_name(alice.events.values(), "C_7")).hash();
+        unwrap!(alice.add_event(first_duplicate_clone));
+        let expected_accusations = vec![(
+            carol.our_pub_id().clone(),
+            Malice::DuplicateVote(carols_valid_vote_hash, first_duplicate_hash),
+        )];
+        assert_eq!(alice.pending_accusations, expected_accusations);
+        assert!(alice.events.contains_key(&first_duplicate_hash));
+
+        // Check that the second one doesn't trigger any further accusation, but is also added to
+        // the graph.
+        let second_duplicate_hash = *second_duplicate.hash();
+        unwrap!(alice.add_event(second_duplicate));
+        assert_eq!(alice.pending_accusations, expected_accusations);
+        assert!(alice.events.contains_key(&second_duplicate_hash));
     }
 
     // Returns iterator over all votes cast by the given node.

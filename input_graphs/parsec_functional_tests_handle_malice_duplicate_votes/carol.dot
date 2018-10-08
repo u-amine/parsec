@@ -1,0 +1,659 @@
+digraph GossipGraph {
+  splines=false
+  rankdir=BT
+/// our_id: Carol
+/// peer_states: {Alice: "PeerState(VOTE|SEND|RECV)", Bob: "PeerState(VOTE|SEND|RECV)", Carol: "PeerState(VOTE|SEND|RECV)", Dave: "PeerState(VOTE|SEND|RECV)"}
+/// { 043b416f7c..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 3, Bob: 6, Carol: 6, Dave: 8}
+/// }
+/// { 0584b2a969..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 13, Bob: 17, Carol: 17, Dave: 14}
+/// }
+/// { 1d6c12d64e..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 6, Bob: 6, Carol: 11, Dave: 13}
+/// }
+/// { 1d712a6024..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 3, Bob: 4, Carol: 6, Dave: 10}
+/// }
+/// { 1e5726b2f2..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 2, Bob: 4, Carol: 2, Dave: 1}
+/// }
+/// { 1ec6628195..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 10, Bob: 8, Carol: 14, Dave: 13}
+/// }
+/// { 20cced65d4..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 3, Bob: 9, Carol: 8, Dave: 10}
+/// }
+/// { 2548da4030..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 3, Bob: 4, Carol: 4, Dave: 1}
+/// }
+/// { 2971a7cd10..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 2, Bob: 3, Carol: 2, Dave: 1}
+/// }
+/// { 30d7e4394d..
+/// cause: Initial
+/// interesting_content: []
+/// last_ancestors: {Alice: 0}
+/// }
+/// { 3602524c3b..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 6, Bob: 7, Carol: 12, Dave: 13}
+/// }
+/// { 36099e4269..
+/// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
+/// interesting_content: []
+/// last_ancestors: {Carol: 1}
+/// }
+/// { 36969f0186..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 4, Bob: 2, Carol: 2, Dave: 1}
+/// }
+/// { 3ccf0eb0e3..
+/// cause: Observation(OpaquePayload(ABCD))
+/// interesting_content: []
+/// last_ancestors: {Alice: 3, Bob: 4, Carol: 7, Dave: 3}
+/// }
+/// { 41ea2d2535..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 2, Bob: 4, Carol: 3, Dave: 1}
+/// }
+/// { 41fd26fd48..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 3, Bob: 6, Carol: 10, Dave: 9}
+/// }
+/// { 4541f98755..
+/// cause: Initial
+/// interesting_content: []
+/// last_ancestors: {Dave: 0}
+/// }
+/// { 493d2a5a3b..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 10, Bob: 14, Carol: 17, Dave: 13}
+/// }
+/// { 49587bd907..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 3, Bob: 4, Carol: 8, Dave: 8}
+/// }
+/// { 511fb75f3e..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 10, Bob: 14, Carol: 16, Dave: 13}
+/// }
+/// { 526960e082..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 6, Bob: 2, Carol: 2, Dave: 6}
+/// }
+/// { 5bf7f8ac00..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 2, Bob: 2, Dave: 1}
+/// }
+/// { 6035e98417..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 3, Bob: 4, Carol: 6, Dave: 8}
+/// }
+/// { 682aa6684e..
+/// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
+/// interesting_content: []
+/// last_ancestors: {Bob: 1}
+/// }
+/// { 6ee7798933..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 3, Bob: 4, Carol: 5, Dave: 2}
+/// }
+/// { 76f80f1a8d..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 3, Bob: 7, Carol: 6, Dave: 8}
+/// }
+/// { 7aafb8df6a..
+/// cause: Observation(OpaquePayload(ABCD))
+/// interesting_content: []
+/// last_ancestors: {Alice: 2, Carol: 1, Dave: 7}
+/// }
+/// { 85c91ec9a0..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 6, Bob: 8, Carol: 13, Dave: 13}
+/// }
+/// { 8ced4dd981..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 11, Bob: 8, Carol: 14, Dave: 14}
+/// }
+/// { 8e3bc55854..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 13, Bob: 14, Carol: 14, Dave: 14}
+/// }
+/// { 8fdd8d213e..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 3, Bob: 6, Carol: 6, Dave: 11}
+/// }
+/// { 90733e9f80..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 3, Bob: 1, Carol: 2, Dave: 1}
+/// }
+/// { 9956ff7c9f..
+/// cause: Request
+/// interesting_content: [OpaquePayload(ABCD)]
+/// last_ancestors: {Alice: 6, Bob: 6, Carol: 8, Dave: 13}
+/// }
+/// { 9ba98ecb39..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 15, Bob: 17, Carol: 19, Dave: 14}
+/// }
+/// { 9bf701c3b0..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 10, Bob: 14, Carol: 14, Dave: 13}
+/// }
+/// { a118c218d3..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 2, Dave: 1}
+/// }
+/// { a2377c2f1e..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 6, Bob: 6, Carol: 6, Dave: 12}
+/// }
+/// { a35a75dc06..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 9, Bob: 8, Carol: 8, Dave: 14}
+/// }
+/// { a6176ea05b..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Carol: 1, Dave: 3}
+/// }
+/// { af91fcff5e..
+/// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
+/// interesting_content: []
+/// last_ancestors: {Dave: 1}
+/// }
+/// { b7c6b3f70f..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 7, Bob: 12, Carol: 14, Dave: 13}
+/// }
+/// { bb8acb898c..
+/// cause: Request
+/// interesting_content: [OpaquePayload(ABCD)]
+/// last_ancestors: {Alice: 3, Bob: 6, Carol: 9, Dave: 8}
+/// }
+/// { bd9383be13..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 9, Bob: 8, Carol: 8, Dave: 12}
+/// }
+/// { be91fdf2c9..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 7, Bob: 8, Carol: 15, Dave: 13}
+/// }
+/// { c174a57326..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 10, Bob: 15, Carol: 16, Dave: 13}
+/// }
+/// { c1ba0a0530..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 13, Bob: 17, Carol: 19, Dave: 14}
+/// }
+/// { c34b4c2fcb..
+/// cause: Request
+/// interesting_content: [OpaquePayload(ABCD)]
+/// last_ancestors: {Alice: 3, Bob: 8, Carol: 8, Dave: 8}
+/// }
+/// { c563683ebf..
+/// cause: Observation(OpaquePayload(ABCD))
+/// interesting_content: []
+/// last_ancestors: {Alice: 7, Bob: 2, Carol: 2, Dave: 6}
+/// }
+/// { c61999e610..
+/// cause: Observation(OpaquePayload(ABCD))
+/// interesting_content: []
+/// last_ancestors: {Alice: 2, Bob: 5, Carol: 2, Dave: 1}
+/// }
+/// { cc1bd95a30..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 5, Bob: 2, Carol: 2, Dave: 5}
+/// }
+/// { cfa85dfc68..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 6, Bob: 10, Carol: 8, Dave: 13}
+/// }
+/// { d1a43a79c9..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 13, Bob: 16, Carol: 16, Dave: 14}
+/// }
+/// { d45f13f080..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 2, Carol: 1, Dave: 6}
+/// }
+/// { d5890228eb..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 7, Bob: 8, Carol: 14, Dave: 13}
+/// }
+/// { d8b1f9a84e..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 2, Carol: 1, Dave: 4}
+/// }
+/// { dbada52656..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 6, Bob: 11, Carol: 9, Dave: 13}
+/// }
+/// { dc8296fe22..
+/// cause: Initial
+/// interesting_content: []
+/// last_ancestors: {Bob: 0}
+/// }
+/// { dd4079bcb1..
+/// cause: Response
+/// interesting_content: [OpaquePayload(ABCD)]
+/// last_ancestors: {Alice: 8, Bob: 6, Carol: 6, Dave: 12}
+/// }
+/// { decd277ed4..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 12, Bob: 14, Carol: 14, Dave: 14}
+/// }
+/// { e2873d8612..
+/// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
+/// interesting_content: []
+/// last_ancestors: {Alice: 1}
+/// }
+/// { e33eca991f..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Carol: 1, Dave: 2}
+/// }
+/// { e3c1a438da..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 3, Bob: 4, Carol: 6, Dave: 9}
+/// }
+/// { ea46f50e17..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 13, Bob: 17, Carol: 18, Dave: 14}
+/// }
+/// { f227b3b612..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 2, Carol: 1, Dave: 5}
+/// }
+/// { fa13ad61fd..
+/// cause: Initial
+/// interesting_content: []
+/// last_ancestors: {Carol: 0}
+/// }
+/// { fbb0f444d5..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Bob: 1, Carol: 2}
+/// }
+/// { fcd06a5bfe..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 3, Bob: 4, Carol: 6, Dave: 3}
+/// }
+/// { fd03b5208a..
+/// cause: Request
+/// interesting_content: []
+/// last_ancestors: {Alice: 14, Bob: 17, Carol: 17, Dave: 14}
+/// }
+/// { ffe0f30040..
+/// cause: Response
+/// interesting_content: []
+/// last_ancestors: {Alice: 9, Bob: 13, Carol: 14, Dave: 13}
+/// }
+    style=invis
+  subgraph cluster_Alice {
+    label=Alice
+    Alice [style=invis]
+    Alice -> "30d7e4394d.." [style=invis]
+    "30d7e4394d.." -> "e2873d8612.." [minlen=1]
+    "e2873d8612.." -> "a118c218d3.." [minlen=1]
+    "a118c218d3.." -> "90733e9f80.." [minlen=1]
+    "90733e9f80.." -> "36969f0186.." [minlen=1]
+    "36969f0186.." -> "cc1bd95a30.." [minlen=2]
+    "cc1bd95a30.." -> "526960e082.." [minlen=1]
+    "526960e082.." -> "c563683ebf.." [minlen=1]
+    "c563683ebf.." -> "dd4079bcb1.." [minlen=7]
+    "dd4079bcb1.." -> "bd9383be13.." [minlen=1]
+    "bd9383be13.." -> "1ec6628195.." [minlen=4]
+    "1ec6628195.." -> "8ced4dd981.." [minlen=1]
+    "8ced4dd981.." -> "decd277ed4.." [minlen=2]
+    "decd277ed4.." -> "8e3bc55854.." [minlen=1]
+    "8e3bc55854.." -> "fd03b5208a.." [minlen=3]
+    "fd03b5208a.." -> "9ba98ecb39.." [minlen=2]
+
+
+  }
+  "af91fcff5e.." -> "a118c218d3.." [constraint=false]
+  "fbb0f444d5.." -> "90733e9f80.." [constraint=false]
+  "5bf7f8ac00.." -> "36969f0186.." [constraint=false]
+  "f227b3b612.." -> "cc1bd95a30.." [constraint=false]
+  "d45f13f080.." -> "526960e082.." [constraint=false]
+  "a2377c2f1e.." -> "dd4079bcb1.." [constraint=false]
+  "c34b4c2fcb.." -> "bd9383be13.." [constraint=false]
+  "d5890228eb.." -> "1ec6628195.." [constraint=false]
+  "a35a75dc06.." -> "8ced4dd981.." [constraint=false]
+  "9bf701c3b0.." -> "decd277ed4.." [constraint=false]
+  "9bf701c3b0.." -> "8e3bc55854.." [constraint=false]
+  "0584b2a969.." -> "fd03b5208a.." [constraint=false]
+  "c1ba0a0530.." -> "9ba98ecb39.." [constraint=false]
+
+    style=invis
+  subgraph cluster_Dave {
+    label=Dave
+    Dave [style=invis]
+    Dave -> "4541f98755.." [style=invis]
+    "4541f98755.." -> "af91fcff5e.." [minlen=1]
+    "af91fcff5e.." -> "e33eca991f.." [minlen=1]
+    "e33eca991f.." -> "a6176ea05b.." [minlen=1]
+    "a6176ea05b.." -> "d8b1f9a84e.." [minlen=1]
+    "d8b1f9a84e.." -> "f227b3b612.." [minlen=1]
+    "f227b3b612.." -> "d45f13f080.." [minlen=1]
+    "d45f13f080.." -> "7aafb8df6a.." [minlen=1]
+    "7aafb8df6a.." -> "6035e98417.." [minlen=3]
+    "6035e98417.." -> "e3c1a438da.." [minlen=1]
+    "e3c1a438da.." -> "1d712a6024.." [minlen=1]
+    "1d712a6024.." -> "8fdd8d213e.." [minlen=1]
+    "8fdd8d213e.." -> "a2377c2f1e.." [minlen=1]
+    "a2377c2f1e.." -> "9956ff7c9f.." [minlen=1]
+    "9956ff7c9f.." -> "a35a75dc06.." [minlen=2]
+
+
+  }
+  "36099e4269.." -> "e33eca991f.." [constraint=false]
+  "36099e4269.." -> "a6176ea05b.." [constraint=false]
+  "a118c218d3.." -> "d8b1f9a84e.." [constraint=false]
+  "a118c218d3.." -> "f227b3b612.." [constraint=false]
+  "a118c218d3.." -> "d45f13f080.." [constraint=false]
+  "fcd06a5bfe.." -> "6035e98417.." [constraint=false]
+  "fcd06a5bfe.." -> "e3c1a438da.." [constraint=false]
+  "1e5726b2f2.." -> "1d712a6024.." [constraint=false]
+  "043b416f7c.." -> "8fdd8d213e.." [constraint=false]
+  "526960e082.." -> "a2377c2f1e.." [constraint=false]
+  "49587bd907.." -> "9956ff7c9f.." [constraint=false]
+  "bd9383be13.." -> "a35a75dc06.." [constraint=false]
+
+    style=invis
+  subgraph cluster_Bob {
+    label=Bob
+    Bob [style=invis]
+    Bob -> "dc8296fe22.." [style=invis]
+    "dc8296fe22.." -> "682aa6684e.." [minlen=1]
+    "682aa6684e.." -> "5bf7f8ac00.." [minlen=2]
+    "5bf7f8ac00.." -> "2971a7cd10.." [minlen=1]
+    "2971a7cd10.." -> "1e5726b2f2.." [minlen=1]
+    "1e5726b2f2.." -> "c61999e610.." [minlen=1]
+    "c61999e610.." -> "043b416f7c.." [minlen=5]
+    "043b416f7c.." -> "76f80f1a8d.." [minlen=1]
+    "76f80f1a8d.." -> "c34b4c2fcb.." [minlen=1]
+    "c34b4c2fcb.." -> "20cced65d4.." [minlen=1]
+    "20cced65d4.." -> "cfa85dfc68.." [minlen=2]
+    "cfa85dfc68.." -> "dbada52656.." [minlen=1]
+    "dbada52656.." -> "b7c6b3f70f.." [minlen=3]
+    "b7c6b3f70f.." -> "ffe0f30040.." [minlen=1]
+    "ffe0f30040.." -> "9bf701c3b0.." [minlen=1]
+    "9bf701c3b0.." -> "c174a57326.." [minlen=2]
+    "c174a57326.." -> "d1a43a79c9.." [minlen=1]
+    "d1a43a79c9.." -> "0584b2a969.." [minlen=1]
+
+
+  }
+  "a118c218d3.." -> "5bf7f8ac00.." [constraint=false]
+  "fbb0f444d5.." -> "2971a7cd10.." [constraint=false]
+  "fbb0f444d5.." -> "1e5726b2f2.." [constraint=false]
+  "6035e98417.." -> "043b416f7c.." [constraint=false]
+  "fcd06a5bfe.." -> "76f80f1a8d.." [constraint=false]
+  "49587bd907.." -> "c34b4c2fcb.." [constraint=false]
+  "1d712a6024.." -> "20cced65d4.." [constraint=false]
+  "9956ff7c9f.." -> "cfa85dfc68.." [constraint=false]
+  "bb8acb898c.." -> "dbada52656.." [constraint=false]
+  "d5890228eb.." -> "b7c6b3f70f.." [constraint=false]
+  "bd9383be13.." -> "ffe0f30040.." [constraint=false]
+  "1ec6628195.." -> "9bf701c3b0.." [constraint=false]
+  "511fb75f3e.." -> "c174a57326.." [constraint=false]
+  "8e3bc55854.." -> "d1a43a79c9.." [constraint=false]
+  "493d2a5a3b.." -> "0584b2a969.." [constraint=false]
+
+    style=invis
+  subgraph cluster_Carol {
+    label=Carol
+    Carol [style=invis]
+    Carol -> "fa13ad61fd.." [style=invis]
+    "fa13ad61fd.." -> "36099e4269.." [minlen=1]
+    "36099e4269.." -> "fbb0f444d5.." [minlen=1]
+    "fbb0f444d5.." -> "41ea2d2535.." [minlen=4]
+    "41ea2d2535.." -> "2548da4030.." [minlen=1]
+    "2548da4030.." -> "6ee7798933.." [minlen=1]
+    "6ee7798933.." -> "fcd06a5bfe.." [minlen=1]
+    "fcd06a5bfe.." -> "3ccf0eb0e3.." [minlen=1]
+    "3ccf0eb0e3.." -> "49587bd907.." [minlen=1]
+    "49587bd907.." -> "bb8acb898c.." [minlen=1]
+    "bb8acb898c.." -> "41fd26fd48.." [minlen=1]
+    "41fd26fd48.." -> "1d6c12d64e.." [minlen=3]
+    "1d6c12d64e.." -> "3602524c3b.." [minlen=1]
+    "3602524c3b.." -> "85c91ec9a0.." [minlen=1]
+    "85c91ec9a0.." -> "d5890228eb.." [minlen=1]
+    "d5890228eb.." -> "be91fdf2c9.." [minlen=1]
+    "be91fdf2c9.." -> "511fb75f3e.." [minlen=3]
+    "511fb75f3e.." -> "493d2a5a3b.." [minlen=1]
+    "493d2a5a3b.." -> "ea46f50e17.." [minlen=3]
+    "ea46f50e17.." -> "c1ba0a0530.." [minlen=1]
+
+
+  }
+  "682aa6684e.." -> "fbb0f444d5.." [constraint=false]
+  "1e5726b2f2.." -> "41ea2d2535.." [constraint=false]
+  "90733e9f80.." -> "2548da4030.." [constraint=false]
+  "e33eca991f.." -> "6ee7798933.." [constraint=false]
+  "a6176ea05b.." -> "fcd06a5bfe.." [constraint=false]
+  "6035e98417.." -> "49587bd907.." [constraint=false]
+  "043b416f7c.." -> "bb8acb898c.." [constraint=false]
+  "e3c1a438da.." -> "41fd26fd48.." [constraint=false]
+  "9956ff7c9f.." -> "1d6c12d64e.." [constraint=false]
+  "76f80f1a8d.." -> "3602524c3b.." [constraint=false]
+  "c34b4c2fcb.." -> "85c91ec9a0.." [constraint=false]
+  "c563683ebf.." -> "d5890228eb.." [constraint=false]
+  "9956ff7c9f.." -> "be91fdf2c9.." [constraint=false]
+  "9bf701c3b0.." -> "511fb75f3e.." [constraint=false]
+  "9bf701c3b0.." -> "493d2a5a3b.." [constraint=false]
+  "0584b2a969.." -> "ea46f50e17.." [constraint=false]
+  "0584b2a969.." -> "c1ba0a0530.." [constraint=false]
+
+ "043b416f7c.." [fillcolor=white, label="B_6"]
+ "0584b2a969.." [ shape=rectangle, fillcolor=white, label="B_17
+A: [ { 0/0, est:{t, f} bin:{t} aux:{t} dec:{} }]
+B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
+C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
+D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
+ "1d6c12d64e.." [fillcolor=white, label="C_11"]
+ "1d712a6024.." [fillcolor=white, label="D_10"]
+ "1e5726b2f2.." [fillcolor=white, label="B_4"]
+ "1ec6628195.." [fillcolor=white, label="A_10"]
+ "20cced65d4.." [fillcolor=white, label="B_9"]
+ "2548da4030.." [fillcolor=white, label="C_4"]
+ "2971a7cd10.." [fillcolor=white, label="B_3"]
+ "30d7e4394d.." [fillcolor=white, label="A_0"]
+ "3602524c3b.." [fillcolor=white, label="C_12"]
+ "36099e4269.." [fillcolor=white, label="C_1
+Genesis({Alice, Bob, Carol, Dave})"]
+ "36099e4269.." [shape=rectangle, style=filled, fillcolor=cyan]
+ "36969f0186.." [fillcolor=white, label="A_4"]
+ "3ccf0eb0e3.." [fillcolor=white, label="C_7
+OpaquePayload(ABCD)"]
+ "3ccf0eb0e3.." [shape=rectangle, style=filled, fillcolor=cyan]
+ "41ea2d2535.." [fillcolor=white, label="C_3"]
+ "41fd26fd48.." [fillcolor=white, label="C_10"]
+ "4541f98755.." [fillcolor=white, label="D_0"]
+ "493d2a5a3b.." [ shape=rectangle, fillcolor=white, label="C_17
+A: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
+ "49587bd907.." [fillcolor=white, label="C_8"]
+ "511fb75f3e.." [ shape=rectangle, fillcolor=white, label="C_16
+A: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
+ "526960e082.." [fillcolor=white, label="A_6"]
+ "5bf7f8ac00.." [fillcolor=white, label="B_2"]
+ "6035e98417.." [fillcolor=white, label="D_8"]
+ "682aa6684e.." [fillcolor=white, label="B_1
+Genesis({Alice, Bob, Carol, Dave})"]
+ "682aa6684e.." [shape=rectangle, style=filled, fillcolor=cyan]
+ "6ee7798933.." [fillcolor=white, label="C_5"]
+ "76f80f1a8d.." [fillcolor=white, label="B_7"]
+ "7aafb8df6a.." [fillcolor=white, label="D_7
+OpaquePayload(ABCD)"]
+ "7aafb8df6a.." [shape=rectangle, style=filled, fillcolor=cyan]
+ "85c91ec9a0.." [fillcolor=white, label="C_13"]
+ "8ced4dd981.." [fillcolor=white, label="A_11"]
+ "8e3bc55854.." [ shape=rectangle, fillcolor=white, label="A_13
+A: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
+ "8fdd8d213e.." [fillcolor=white, label="D_11"]
+ "90733e9f80.." [fillcolor=white, label="A_3"]
+ "9956ff7c9f.." [fillcolor=white, label="D_13
+[OpaquePayload(ABCD)]"]
+ "9956ff7c9f.." [shape=rectangle, style=filled, fillcolor=crimson]
+ "9ba98ecb39.." [ shape=rectangle, fillcolor=white, label="A_15
+A: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
+B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
+C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
+D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
+ "9bf701c3b0.." [ shape=rectangle, fillcolor=white, label="B_14
+A: [ { 0/0, est:{f} bin:{} aux:{} dec:{} }]
+B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
+ "a118c218d3.." [fillcolor=white, label="A_2"]
+ "a2377c2f1e.." [fillcolor=white, label="D_12"]
+ "a35a75dc06.." [fillcolor=white, label="D_14"]
+ "a6176ea05b.." [fillcolor=white, label="D_3"]
+ "af91fcff5e.." [fillcolor=white, label="D_1
+Genesis({Alice, Bob, Carol, Dave})"]
+ "af91fcff5e.." [shape=rectangle, style=filled, fillcolor=cyan]
+ "b7c6b3f70f.." [fillcolor=white, label="B_12"]
+ "bb8acb898c.." [fillcolor=white, label="C_9
+[OpaquePayload(ABCD)]"]
+ "bb8acb898c.." [shape=rectangle, style=filled, fillcolor=crimson]
+ "bd9383be13.." [fillcolor=white, label="A_9"]
+ "be91fdf2c9.." [fillcolor=white, label="C_15"]
+ "c174a57326.." [ shape=rectangle, fillcolor=white, label="B_15
+A: [ { 0/0, est:{f} bin:{} aux:{} dec:{} }]
+B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
+ "c1ba0a0530.." [ shape=rectangle, fillcolor=white, label="C_19
+A: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
+B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
+C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
+D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
+ "c34b4c2fcb.." [fillcolor=white, label="B_8
+[OpaquePayload(ABCD)]"]
+ "c34b4c2fcb.." [shape=rectangle, style=filled, fillcolor=crimson]
+ "c563683ebf.." [fillcolor=white, label="A_7
+OpaquePayload(ABCD)"]
+ "c563683ebf.." [shape=rectangle, style=filled, fillcolor=cyan]
+ "c61999e610.." [fillcolor=white, label="B_5
+OpaquePayload(ABCD)"]
+ "c61999e610.." [shape=rectangle, style=filled, fillcolor=cyan]
+ "cc1bd95a30.." [fillcolor=white, label="A_5"]
+ "cfa85dfc68.." [fillcolor=white, label="B_10"]
+ "d1a43a79c9.." [ shape=rectangle, fillcolor=white, label="B_16
+A: [ { 0/0, est:{t, f} bin:{t} aux:{t} dec:{} }]
+B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
+C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
+D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
+ "d45f13f080.." [fillcolor=white, label="D_6"]
+ "d5890228eb.." [fillcolor=white, label="C_14"]
+ "d8b1f9a84e.." [fillcolor=white, label="D_4"]
+ "dbada52656.." [fillcolor=white, label="B_11"]
+ "dc8296fe22.." [fillcolor=white, label="B_0"]
+ "dd4079bcb1.." [fillcolor=white, label="A_8
+[OpaquePayload(ABCD)]"]
+ "dd4079bcb1.." [shape=rectangle, style=filled, fillcolor=crimson]
+ "decd277ed4.." [ shape=rectangle, fillcolor=white, label="A_12
+A: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
+D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
+ "e2873d8612.." [fillcolor=white, label="A_1
+Genesis({Alice, Bob, Carol, Dave})"]
+ "e2873d8612.." [shape=rectangle, style=filled, fillcolor=cyan]
+ "e33eca991f.." [fillcolor=white, label="D_2"]
+ "e3c1a438da.." [fillcolor=white, label="D_9"]
+ "ea46f50e17.." [ shape=rectangle, fillcolor=white, label="C_18
+A: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
+B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
+C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
+D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
+ "f227b3b612.." [fillcolor=white, label="D_5"]
+ "fa13ad61fd.." [fillcolor=white, label="C_0"]
+ "fbb0f444d5.." [fillcolor=white, label="C_2"]
+ "fcd06a5bfe.." [fillcolor=white, label="C_6"]
+ "fd03b5208a.." [ shape=rectangle, fillcolor=white, label="A_14
+A: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
+B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
+C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
+D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
+ "ffe0f30040.." [fillcolor=white, label="B_13"]
+
+  {
+    rank=same
+    Alice [style=filled, color=white]
+    Dave [style=filled, color=white]
+    Bob [style=filled, color=white]
+    Carol [style=filled, color=white]
+  }
+  Alice -> Bob -> Carol -> Dave [style=invis]
+}
