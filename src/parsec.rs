@@ -1400,6 +1400,36 @@ mod functional_tests {
         };
     }
 
+    // Returns iterator over all votes cast by the given node.
+    fn our_votes<T: NetworkEvent, S: SecretId>(
+        parsec: &Parsec<T, S>,
+    ) -> impl Iterator<Item = &Observation<T, S::PublicId>> {
+        parsec
+            .peer_list
+            .our_events()
+            .filter_map(move |hash| parsec.events.get(hash))
+            .filter_map(|event| event.vote())
+            .map(|vote| vote.payload())
+    }
+
+    // Reprocess all events.
+    fn reprocess_events<T: NetworkEvent, S: SecretId>(parsec: &mut Parsec<T, S>) {
+        parsec.clear_consensus_data();
+        parsec.restart_consensus();
+    }
+
+    // Add the peers to the `PeerList` as the genesis group.
+    fn add_genesis_group<'a, S, I>(peer_list: &mut PeerList<S>, genesis: I)
+    where
+        S: SecretId,
+        S::PublicId: 'a,
+        I: IntoIterator<Item = &'a S::PublicId>,
+    {
+        for peer_id in genesis {
+            peer_list.add_peer(peer_id.clone(), PeerState::active());
+        }
+    }
+
     #[test]
     fn from_existing() {
         let mut peers = mock::create_ids(10);
@@ -1853,35 +1883,5 @@ mod functional_tests {
         unwrap!(alice.add_event(second_duplicate));
         assert_eq!(alice.pending_accusations, expected_accusations);
         assert!(alice.events.contains_key(&second_duplicate_hash));
-    }
-
-    // Returns iterator over all votes cast by the given node.
-    fn our_votes<T: NetworkEvent, S: SecretId>(
-        parsec: &Parsec<T, S>,
-    ) -> impl Iterator<Item = &Observation<T, S::PublicId>> {
-        parsec
-            .peer_list
-            .our_events()
-            .filter_map(move |hash| parsec.events.get(hash))
-            .filter_map(|event| event.vote())
-            .map(|vote| vote.payload())
-    }
-
-    // Reprocess all events.
-    fn reprocess_events<T: NetworkEvent, S: SecretId>(parsec: &mut Parsec<T, S>) {
-        parsec.clear_consensus_data();
-        parsec.restart_consensus();
-    }
-
-    // Add the peers to the `PeerList` as the genesis group.
-    fn add_genesis_group<'a, S, I>(peer_list: &mut PeerList<S>, genesis: I)
-    where
-        S: SecretId,
-        S::PublicId: 'a,
-        I: IntoIterator<Item = &'a S::PublicId>,
-    {
-        for peer_id in genesis {
-            peer_list.add_peer(peer_id.clone(), PeerState::active());
-        }
     }
 }
