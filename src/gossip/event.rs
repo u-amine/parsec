@@ -220,17 +220,18 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         };
         let serialised_content = serialise(&content);
 
-        let (index, last_ancestors) = if let Ok((index, last_ancestors)) =
-            Self::index_and_last_ancestors(&content, events, peer_list)
-        {
-            (index, last_ancestors)
-        } else {
-            log_or_panic!(
-                "{:?} constructed an invalid event.",
-                peer_list.our_id().public_id()
-            );
-            (0, BTreeMap::new())
-        };
+        let (index, last_ancestors) =
+            match Self::index_and_last_ancestors(&content, events, peer_list) {
+                Ok(result) => result,
+                Err(error) => {
+                    log_or_panic!(
+                        "{:?} constructed an invalid event: {:?}.",
+                        peer_list.our_id().public_id(),
+                        error
+                    );
+                    (0, BTreeMap::new())
+                }
+            };
 
         // `interesting_content` and `observations` still need to be set correctly by the caller.
         Self {
@@ -407,8 +408,6 @@ impl Event<Transaction, PeerId> {
     }
 }
 
-// TODO - remove once `find_event_by_short_name()` is used in tests.
-#[allow(unused)]
 /// Finds the first event which has the `short_name` provided.
 #[cfg(test)]
 pub(crate) fn find_event_by_short_name<'a, I, T, P>(
