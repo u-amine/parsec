@@ -14,7 +14,7 @@ use error::{Error, Result};
 use gossip::{Event, PackedEvent, Request, Response};
 use hash::Hash;
 use id::SecretId;
-use meta_vote::{MetaElections, MetaVote, Step};
+use meta_voting::{MetaElections, MetaVote, Step};
 #[cfg(test)]
 use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
@@ -1273,8 +1273,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             } else {
                 return;
             };
-        let self_parent_ancestor_index = if let Some(index) = self
-            .self_parent(event)
+        let self_parent_ancestor_index = if let Some(index) = event
+            .self_parent()
+            .and_then(|hash| self.events.get(hash))
             .and_then(|self_parent| self_parent.last_ancestors().get(&other_parent_creator))
         {
             *index
@@ -1434,7 +1435,7 @@ mod functional_tests {
     use super::*;
     use dev_utils::parse_test_dot_file;
     use gossip::{find_event_by_short_name, Event};
-    use meta_vote::MetaVotes;
+    use meta_voting::MetaVotes;
     use mock::{self, Transaction};
     use peer_list::PeerState;
     use std::collections::BTreeMap;

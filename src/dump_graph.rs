@@ -9,7 +9,7 @@
 use gossip::Event;
 use hash::Hash;
 use id::SecretId;
-use meta_vote::MetaVote;
+use meta_voting::MetaVote;
 use network_event::NetworkEvent;
 use peer_list::PeerList;
 use std::collections::BTreeMap;
@@ -55,7 +55,7 @@ mod detail {
     use gossip::Event;
     use hash::Hash;
     use id::{PublicId, SecretId};
-    use meta_vote::MetaVote;
+    use meta_voting::MetaVote;
     use network_event::NetworkEvent;
     use peer_list::PeerList;
     use rand::{self, Rng};

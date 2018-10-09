@@ -87,7 +87,7 @@ mod error;
 mod gossip;
 mod hash;
 mod id;
-mod meta_vote;
+mod meta_voting;
 mod network_event;
 mod observation;
 mod parsec;
