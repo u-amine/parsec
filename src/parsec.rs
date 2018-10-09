@@ -1884,4 +1884,27 @@ mod functional_tests {
         assert_eq!(alice.pending_accusations, expected_accusations);
         assert!(alice.events.contains_key(&second_duplicate_hash));
     }
+
+    #[test]
+    fn handle_malice_stale_other_parent() {
+        // Carol will create event C_4 with other-parent as B_1, despite having C_3 with other-
+        // parent as B_2.
+        let carol = Parsec::from_parsed_contents(parse_test_dot_file("carol.dot"));
+        let c_3_hash = *unwrap!(find_event_by_short_name(carol.events.values(), "C_3")).hash();
+        let b_1_hash = *unwrap!(find_event_by_short_name(carol.events.values(), "B_1")).hash();
+
+        let c_4 = Event::new_from_request(c_3_hash, b_1_hash, &carol.events, &carol.peer_list);
+        let c_4_hash = *c_4.hash();
+
+        // Check that adding C_4 triggers an accusation by Alice, but that C_4 is still added to the
+        // graph.
+        let mut alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
+        let expected_accusations = vec![(
+            carol.our_pub_id().clone(),
+            Malice::StaleOtherParent(c_4_hash),
+        )];
+        unwrap!(alice.add_event(c_4));
+        assert_eq!(alice.pending_accusations, expected_accusations);
+        assert!(alice.events.contains_key(&c_4_hash));
+    }
 }
