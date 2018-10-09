@@ -389,6 +389,7 @@ digraph GossipGraph {
   "9bff8f.." -> "8602c4.." [constraint=false]
   "ecd748.." -> "ec806d.." [constraint=false]
 
+/// meta-vote section
  "0979c6.." [ shape=rectangle, fillcolor=white, label="C_8
 A: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
 B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]

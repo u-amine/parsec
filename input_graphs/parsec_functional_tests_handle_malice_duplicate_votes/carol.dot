@@ -506,6 +506,7 @@ digraph GossipGraph {
   "0584b2a969.." -> "ea46f50e17.." [constraint=false]
   "0584b2a969.." -> "c1ba0a0530.." [constraint=false]
 
+/// meta-vote section
  "043b416f7c.." [fillcolor=white, label="B_6"]
  "0584b2a969.." [ shape=rectangle, fillcolor=white, label="B_17
 A: [ { 0/0, est:{t, f} bin:{t} aux:{t} dec:{} }]

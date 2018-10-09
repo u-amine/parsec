@@ -280,6 +280,7 @@ mod detail {
         meta_votes: &BTreeMap<Hash, BTreeMap<P, Vec<MetaVote>>>,
         initial_events: &[Hash],
     ) -> io::Result<()> {
+        writeln!(writer, "/// meta-vote section")?;
         for (event_hash, event) in gossip_graph.iter() {
             write!(writer, " \"{:?}\" [", event.hash())?;
             if meta_votes.contains_key(event_hash) {

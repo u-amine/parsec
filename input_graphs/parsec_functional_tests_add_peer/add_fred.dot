@@ -581,6 +581,7 @@ digraph GossipGraph {
   "0f0c81.." -> "1de169.." [constraint=false]
   "283af0.." -> "1d133e.." [constraint=false]
 
+/// meta-vote section
  "0401d8.." [fillcolor=white, label="B_8"]
  "0be3da.." [fillcolor=white, label="E_4"]
  "0f0c81.." [ shape=rectangle, fillcolor=white, label="A_14
