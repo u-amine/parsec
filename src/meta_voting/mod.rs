@@ -12,7 +12,7 @@ mod elections;
 mod vote;
 
 pub use self::bool_set::BoolSet;
-pub use self::elections::MetaElections;
+pub use self::elections::{MetaElectionHandle, MetaElections};
 pub use self::vote::{MetaVote, Step};
 
 use hash::Hash;
