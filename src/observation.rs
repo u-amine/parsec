@@ -45,5 +45,7 @@ pub enum Malice {
     IncorrectGenesis(Hash),
     /// Event carries other_parent older than first ancestor of self_parent.
     StaleOtherParent(Hash),
+    /// More than one events having this event as its self_parent.
+    Fork(Hash),
     // TODO: add other malice variants
 }

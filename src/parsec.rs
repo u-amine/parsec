@@ -1122,6 +1122,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.detect_missing_genesis(event);
         self.detect_duplicate_vote(event);
         self.detect_stale_other_parent(event);
+        self.detect_fork(event);
 
         // TODO: detect other forms of malice here
 
@@ -1242,9 +1243,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             } else {
                 return;
             };
-        let self_parent_ancestor_index = if let Some(index) = event
-            .self_parent()
-            .and_then(|hash| self.events.get(hash))
+        let self_parent_ancestor_index = if let Some(index) = self
+            .self_parent(event)
             .and_then(|self_parent| self_parent.last_ancestors().get(&other_parent_creator))
         {
             *index
@@ -1256,6 +1256,15 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 event.creator().clone(),
                 Malice::StaleOtherParent(*event.hash()),
             );
+        }
+    }
+
+    // Detect whether the event incurs a fork.
+    fn detect_fork(&mut self, event: &Event<T, S::PublicId>) {
+        if self.peer_list.last_event_hash(event.creator()) != event.self_parent() {
+            if let Some(self_parent_hash) = event.self_parent() {
+                self.accuse(event.creator().clone(), Malice::Fork(*self_parent_hash));
+            }
         }
     }
 
