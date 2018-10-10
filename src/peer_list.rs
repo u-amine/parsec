@@ -71,8 +71,6 @@ impl<S: SecretId> PeerList<S> {
         self.peers.get(peer_id)
     }
 
-    // TODO: remove the allow(unused) attribute.
-    #[allow(unused)]
     pub fn peer_mut(&mut self, peer_id: &S::PublicId) -> Option<&mut Peer<S::PublicId>> {
         self.peers.get_mut(peer_id)
     }
@@ -90,15 +88,16 @@ impl<S: SecretId> PeerList<S> {
 
     /// Adds a peer in the given state into the map. If the peer has already been added, merges its
     /// state with the one given.
-    pub fn add_peer(&mut self, peer_id: S::PublicId, state: PeerState) {
+    pub fn add_peer(&mut self, peer_id: S::PublicId, state: PeerState) -> &mut Peer<S::PublicId> {
         match self.peers.entry(peer_id.clone()) {
             Entry::Occupied(mut entry) => {
                 entry.get_mut().state |= state;
+                entry.into_mut()
             }
             Entry::Vacant(entry) => {
-                let _ = entry.insert(Peer::new(state));
                 self.peer_id_hashes
                     .push((Hash::from(serialise(&peer_id).as_slice()), peer_id));
+                entry.insert(Peer::new(state))
             }
         }
     }
@@ -372,14 +371,18 @@ impl<P: PublicId> Peer<P> {
         self.events.get(&index)
     }
 
-    // TODO: remove the allow(unused) attribute.
-    #[allow(unused)]
     pub fn add_peer(&mut self, peer_id: P) {
         let _ = self.peers.insert(peer_id);
     }
 
-    // TODO: remove the allow(unused) attribute.
-    #[allow(unused)]
+    pub fn add_peers<'a, I>(&mut self, peer_ids: I)
+    where
+        I: IntoIterator<Item = &'a P>,
+        P: 'a,
+    {
+        self.peers.extend(peer_ids.into_iter().cloned())
+    }
+
     pub fn remove_peer(&mut self, peer_id: &P) {
         let _ = self.peers.remove(peer_id);
     }

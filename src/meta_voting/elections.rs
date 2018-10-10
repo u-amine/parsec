@@ -173,11 +173,7 @@ impl<P: PublicId> MetaElections<P> {
         I: IntoIterator<Item = &'a P>,
         P: 'a,
     {
-        let hash = self
-            .history
-            .last()
-            .cloned()
-            .unwrap_or_else(|| Hash::all_zero());
+        let hash = self.history.last().cloned().unwrap_or_else(Hash::all_zero);
         self.initialise_current_election_round_hashes(peer_ids, hash);
     }
 

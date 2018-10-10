@@ -446,7 +446,7 @@ mod detail {
         writeln!(writer, "/// our_id: {:?}", peer_list.our_id().public_id())?;
         let peer_states = peer_list
             .iter()
-            .map(|(peer_id, peer)| (peer_id, format!("{:?}", peer.state)))
+            .map(|(peer_id, peer)| (peer_id, format!("{:?}", peer.state())))
             .collect::<BTreeMap<_, _>>();
         writeln!(writer, "/// peer_states: {:?}", peer_states)
     }

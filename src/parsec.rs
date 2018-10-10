@@ -80,7 +80,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         for peer_id in genesis_group {
             parsec
                 .peer_list
-                .add_peer(peer_id.clone(), PeerState::active());
+                .add_peer(peer_id.clone(), PeerState::active())
+                .add_peers(genesis_group);
         }
 
         parsec
@@ -144,16 +145,20 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let our_public_id = our_id.public_id().clone();
         let mut parsec = Self::empty(our_id, genesis_group, is_interesting_event);
 
-        parsec.peer_list.add_peer(our_public_id, PeerState::RECV);
+        let _ = parsec.peer_list.add_peer(our_public_id, PeerState::RECV);
 
         for peer_id in genesis_group {
             parsec
                 .peer_list
                 .add_peer(peer_id.clone(), PeerState::VOTE | PeerState::SEND)
+                .add_peers(genesis_group)
         }
 
         for peer_id in section {
-            parsec.peer_list.add_peer(peer_id.clone(), PeerState::SEND);
+            parsec
+                .peer_list
+                .add_peer(peer_id.clone(), PeerState::SEND)
+                .add_peers(genesis_group)
         }
 
         parsec
@@ -419,7 +424,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         // We have received at least one gossip from the sender, so they can now receive gossips
         // from us as well.
-        self.peer_list.add_peer(src.clone(), PeerState::RECV);
+        let _ = self.peer_list.add_peer(src.clone(), PeerState::RECV);
 
         for packed_event in packed_events {
             if let Some(event) = Event::unpack(packed_event, &self.events, &self.peer_list)? {
@@ -565,7 +570,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                         peer.state().can_recv()
                     });
 
-                self.peer_list.add_peer(
+                let _ = self.peer_list.add_peer(
                     peer_id,
                     if recv {
                         PeerState::VOTE | PeerState::SEND | PeerState::RECV
@@ -609,7 +614,25 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             peer_id,
             payload
         );
-        // TODO: implement this
+
+        match payload {
+            Observation::Add(other_peer_id) => {
+                if let Some(peer) = self.peer_list.peer_mut(peer_id) {
+                    peer.add_peer(other_peer_id);
+                }
+            }
+            Observation::Remove(other_peer_id) => {
+                if let Some(peer) = self.peer_list.peer_mut(peer_id) {
+                    peer.remove_peer(&other_peer_id);
+                }
+            }
+            Observation::Accusation { offender, .. } => {
+                if let Some(peer) = self.peer_list.peer_mut(peer_id) {
+                    peer.remove_peer(&offender);
+                }
+            }
+            _ => (),
+        }
     }
 
     fn set_interesting_content(&mut self, event_hash: &Hash) -> Result<()> {
@@ -1497,8 +1520,17 @@ mod functional_tests {
             let peer_list = parsec
                 .peer_list
                 .iter()
-                .map(|(peer_id, peer)| (peer_id.clone(), (peer.state, peer.events.clone())))
-                .collect();
+                .map(|(peer_id, peer)| {
+                    (
+                        peer_id.clone(),
+                        (
+                            peer.state(),
+                            peer.indexed_events()
+                                .map(|(index, hash)| (index, *hash))
+                                .collect(),
+                        ),
+                    )
+                }).collect();
             let events = parsec.events.keys().cloned().collect();
 
             Snapshot {
@@ -1543,14 +1575,14 @@ mod functional_tests {
     }
 
     // Add the peers to the `PeerList` as the genesis group.
-    fn add_genesis_group<'a, S, I>(peer_list: &mut PeerList<S>, genesis: I)
-    where
-        S: SecretId,
-        S::PublicId: 'a,
-        I: IntoIterator<Item = &'a S::PublicId>,
-    {
+    fn add_genesis_group<S: SecretId>(
+        peer_list: &mut PeerList<S>,
+        genesis: &BTreeSet<S::PublicId>,
+    ) {
         for peer_id in genesis {
-            peer_list.add_peer(peer_id.clone(), PeerState::active());
+            peer_list
+                .add_peer(peer_id.clone(), PeerState::active())
+                .add_peers(genesis);
         }
     }
 
@@ -1839,7 +1871,7 @@ mod functional_tests {
         // Peer state is (VOTE | SEND) when created from existing. Need to call
         // 'add_peer' to update the state to (VOTE | SEND | RECV).
         for peer_id in section {
-            eric.peer_list.add_peer(peer_id, PeerState::RECV);
+            let _ = eric.peer_list.add_peer(peer_id, PeerState::RECV);
         }
 
         // Eric can no longer gossip to anyone.
@@ -1860,7 +1892,7 @@ mod functional_tests {
         let dave_id = PeerId::new("Dave");
         let mut dave_contents = ParsedContents::new(dave_id.clone());
 
-        dave_contents
+        let _ = dave_contents
             .peer_list
             .add_peer(dave_id.clone(), PeerState::active());
         add_genesis_group(&mut dave_contents.peer_list, &genesis);
@@ -1921,7 +1953,7 @@ mod functional_tests {
         let eric_id = PeerId::new("Eric");
         let mut eric_contents = ParsedContents::new(eric_id.clone());
 
-        eric_contents
+        let _ = eric_contents
             .peer_list
             .add_peer(eric_id.clone(), PeerState::active());
         add_genesis_group(&mut eric_contents.peer_list, &genesis);
