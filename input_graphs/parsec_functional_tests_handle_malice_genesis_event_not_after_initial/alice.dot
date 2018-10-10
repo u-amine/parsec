@@ -399,6 +399,7 @@ digraph GossipGraph {
   "364bf48c35.." -> "0bcfa591c4.." [constraint=false]
   "364bf48c35.." -> "e9eb78e8ef.." [constraint=false]
 
+/// meta-vote section
  "02044d97d9.." [fillcolor=white, label="B_3
 [Genesis({Alice, Bob, Carol, Dave})]"]
  "02044d97d9.." [shape=rectangle, style=filled, fillcolor=crimson]

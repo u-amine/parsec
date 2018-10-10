@@ -1400,6 +1400,36 @@ mod functional_tests {
         };
     }
 
+    // Returns iterator over all votes cast by the given node.
+    fn our_votes<T: NetworkEvent, S: SecretId>(
+        parsec: &Parsec<T, S>,
+    ) -> impl Iterator<Item = &Observation<T, S::PublicId>> {
+        parsec
+            .peer_list
+            .our_events()
+            .filter_map(move |hash| parsec.events.get(hash))
+            .filter_map(|event| event.vote())
+            .map(|vote| vote.payload())
+    }
+
+    // Reprocess all events.
+    fn reprocess_events<T: NetworkEvent, S: SecretId>(parsec: &mut Parsec<T, S>) {
+        parsec.clear_consensus_data();
+        parsec.restart_consensus();
+    }
+
+    // Add the peers to the `PeerList` as the genesis group.
+    fn add_genesis_group<'a, S, I>(peer_list: &mut PeerList<S>, genesis: I)
+    where
+        S: SecretId,
+        S::PublicId: 'a,
+        I: IntoIterator<Item = &'a S::PublicId>,
+    {
+        for peer_id in genesis {
+            peer_list.add_peer(peer_id.clone(), PeerState::active());
+        }
+    }
+
     #[test]
     fn from_existing() {
         let mut peers = mock::create_ids(10);
@@ -1855,33 +1885,26 @@ mod functional_tests {
         assert!(alice.events.contains_key(&second_duplicate_hash));
     }
 
-    // Returns iterator over all votes cast by the given node.
-    fn our_votes<T: NetworkEvent, S: SecretId>(
-        parsec: &Parsec<T, S>,
-    ) -> impl Iterator<Item = &Observation<T, S::PublicId>> {
-        parsec
-            .peer_list
-            .our_events()
-            .filter_map(move |hash| parsec.events.get(hash))
-            .filter_map(|event| event.vote())
-            .map(|vote| vote.payload())
-    }
+    #[test]
+    fn handle_malice_stale_other_parent() {
+        // Carol will create event C_4 with other-parent as B_1, despite having C_3 with other-
+        // parent as B_2.
+        let carol = Parsec::from_parsed_contents(parse_test_dot_file("carol.dot"));
+        let c_3_hash = *unwrap!(find_event_by_short_name(carol.events.values(), "C_3")).hash();
+        let b_1_hash = *unwrap!(find_event_by_short_name(carol.events.values(), "B_1")).hash();
 
-    // Reprocess all events.
-    fn reprocess_events<T: NetworkEvent, S: SecretId>(parsec: &mut Parsec<T, S>) {
-        parsec.clear_consensus_data();
-        parsec.restart_consensus();
-    }
+        let c_4 = Event::new_from_request(c_3_hash, b_1_hash, &carol.events, &carol.peer_list);
+        let c_4_hash = *c_4.hash();
 
-    // Add the peers to the `PeerList` as the genesis group.
-    fn add_genesis_group<'a, S, I>(peer_list: &mut PeerList<S>, genesis: I)
-    where
-        S: SecretId,
-        S::PublicId: 'a,
-        I: IntoIterator<Item = &'a S::PublicId>,
-    {
-        for peer_id in genesis {
-            peer_list.add_peer(peer_id.clone(), PeerState::active());
-        }
+        // Check that adding C_4 triggers an accusation by Alice, but that C_4 is still added to the
+        // graph.
+        let mut alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
+        let expected_accusations = vec![(
+            carol.our_pub_id().clone(),
+            Malice::StaleOtherParent(c_4_hash),
+        )];
+        unwrap!(alice.add_event(c_4));
+        assert_eq!(alice.pending_accusations, expected_accusations);
+        assert!(alice.events.contains_key(&c_4_hash));
     }
 }
