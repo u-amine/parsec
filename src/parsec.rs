@@ -225,7 +225,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             // adding them to the section so we shouldn't contact them yet.
             self.confirm_peer_state(recipient_id, PeerState::VOTE | PeerState::RECV)?;
 
-            if self.peer_list.last_event_hash(recipient_id).is_some() {
+            if self.peer_list.last_event(recipient_id).is_some() {
                 debug!(
                     "{:?} creating gossip request for {:?}",
                     self.our_pub_id(),
@@ -367,7 +367,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn our_last_event_hash(&self) -> Hash {
-        if let Some(hash) = self.peer_list.last_event_hash(self.our_pub_id()) {
+        if let Some(hash) = self.peer_list.last_event(self.our_pub_id()) {
             *hash
         } else {
             log_or_panic!(
@@ -554,7 +554,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     .iter()
                     .filter(|&(id, peer)| {
                         // Peers that can vote, which means we got consensus on adding them.
-                        peer.state.can_vote() &&
+                        peer.state().can_vote() &&
                         // Excluding the peer being added.
                         *id != peer_id &&
                         // And excluding us.
@@ -562,7 +562,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     }).all(|(_, peer)| {
                         // Peers that can receive, which implies they've already sent us at least
                         // one message which implies they've already reached consensus on adding us.
-                        peer.state.can_recv()
+                        peer.state().can_recv()
                     });
 
                 self.peer_list.add_peer(
@@ -635,7 +635,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .peer_list
             .iter()
             .flat_map(|(_peer_id, peer)| {
-                peer.events.iter().filter_map(|(_index, hash)| {
+                peer.events().filter_map(|hash| {
                     self.events
                         .get(hash)
                         .and_then(|event| event.vote().map(|vote| vote.payload()))
@@ -701,7 +701,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             return BTreeMap::new();
         }
 
-        let sees_vote_for_same_payload = |pair: &(&u64, &Hash)| {
+        let sees_vote_for_same_payload = |pair: &(u64, &Hash)| {
             let (_index, event_hash) = *pair;
             match self.get_known_event(event_hash) {
                 Ok(that_event) => {
@@ -714,10 +714,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.peer_list
             .iter()
             .filter_map(|(peer_id, peer)| {
-                peer.events
-                    .iter()
+                peer.indexed_events()
                     .find(sees_vote_for_same_payload)
-                    .map(|(index, _hash)| (peer_id, *index))
+                    .map(|(index, _hash)| (peer_id, index))
             }).collect()
     }
 
@@ -1116,12 +1115,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn create_sync_event(&mut self, src: &S::PublicId, is_request: bool) -> Result<()> {
         let self_parent = *self
             .peer_list
-            .last_event_hash(self.our_pub_id())
+            .last_event(self.our_pub_id())
             .ok_or_else(|| {
                 log_or_panic!("{:?} missing our own last event hash.", self.our_pub_id());
                 Error::Logic
             })?;
-        let other_parent = *self.peer_list.last_event_hash(src).ok_or_else(|| {
+        let other_parent = *self.peer_list.last_event(src).ok_or_else(|| {
             log_or_panic!("{:?} missing {:?} last event hash.", self.our_pub_id(), src);
             Error::Logic
         })?;
@@ -1140,7 +1139,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         &self,
         peer_id: &S::PublicId,
     ) -> Result<impl Iterator<Item = &Event<T, S::PublicId>>> {
-        let peer_last_event = if let Some(event_hash) = self.peer_list.last_event_hash(peer_id) {
+        let peer_last_event = if let Some(event_hash) = self.peer_list.last_event(peer_id) {
             self.get_known_event(event_hash)?
         } else {
             log_or_panic!("{:?} doesn't have peer {:?}", self.our_pub_id(), peer_id);
@@ -1158,7 +1157,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // oldest events we know about to the list of hashes.
         for (id, peer) in self.peer_list.iter() {
             if !peer_last_event.last_ancestors().contains_key(id) {
-                if let Some(hash) = peer.events.get(&0) {
+                if let Some(hash) = peer.event_by_index(0) {
                     let _ = last_ancestors_hashes.insert(hash);
                 }
             }
@@ -1333,7 +1332,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     // Detect whether the event incurs a fork.
     fn detect_fork(&mut self, event: &Event<T, S::PublicId>) {
-        if self.peer_list.last_event_hash(event.creator()) != event.self_parent() {
+        if self.peer_list.last_event(event.creator()) != event.self_parent() {
             if let Some(self_parent_hash) = event.self_parent() {
                 self.accuse(event.creator().clone(), Malice::Fork(*self_parent_hash));
             }

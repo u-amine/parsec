@@ -9,19 +9,20 @@
 use error::Error;
 use gossip::Event;
 use hash::Hash;
-use id::SecretId;
+use id::{PublicId, SecretId};
 #[cfg(test)]
 use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
 use parsec::is_more_than_two_thirds;
 use serialise;
 use std::collections::btree_map::{self, BTreeMap, Entry};
+use std::collections::BTreeSet;
 use std::fmt::{self, Debug, Formatter};
 use std::ops::{BitOr, BitOrAssign};
 
 pub(crate) struct PeerList<S: SecretId> {
     our_id: S,
-    peers: BTreeMap<S::PublicId, Peer>,
+    peers: BTreeMap<S::PublicId, Peer<S::PublicId>>,
     // Map of Hash(peer_id) => peer_id.
     peer_id_hashes: Vec<(Hash, S::PublicId)>,
 }
@@ -55,13 +56,25 @@ impl<S: SecretId> PeerList<S> {
     }
 
     /// Returns an iterator of peers.
-    pub fn iter(&self) -> btree_map::Iter<S::PublicId, Peer> {
+    pub fn iter(&self) -> btree_map::Iter<S::PublicId, Peer<S::PublicId>> {
         self.peers.iter()
     }
 
     /// Returns an iterator of peers that can vote.
-    pub fn voters(&self) -> impl Iterator<Item = (&S::PublicId, &Peer)> {
+    pub fn voters(&self) -> impl Iterator<Item = (&S::PublicId, &Peer<S::PublicId>)> {
         self.peers.iter().filter(|(_, peer)| peer.state.can_vote())
+    }
+
+    // TODO: remove the allow(unused) attribute.
+    #[allow(unused)]
+    pub fn peer(&self, peer_id: &S::PublicId) -> Option<&Peer<S::PublicId>> {
+        self.peers.get(peer_id)
+    }
+
+    // TODO: remove the allow(unused) attribute.
+    #[allow(unused)]
+    pub fn peer_mut(&mut self, peer_id: &S::PublicId) -> Option<&mut Peer<S::PublicId>> {
+        self.peers.get_mut(peer_id)
     }
 
     pub fn peer_state(&self, peer_id: &S::PublicId) -> PeerState {
@@ -108,17 +121,17 @@ impl<S: SecretId> PeerList<S> {
     }
 
     /// Returns the hash of the last event created by this peer. Returns `None` if cannot find.
-    pub fn last_event_hash(&self, peer_id: &S::PublicId) -> Option<&Hash> {
+    pub fn last_event(&self, peer_id: &S::PublicId) -> Option<&Hash> {
         self.peers
             .get(peer_id)
-            .and_then(|peer| peer.events.values().rev().next())
+            .and_then(|peer| peer.events().rev().next())
     }
 
     /// Returns the hash of the indexed event.
     pub fn event_by_index(&self, peer_id: &S::PublicId, index: u64) -> Option<&Hash> {
         self.peers
             .get(peer_id)
-            .and_then(|peer| peer.events.get(&index))
+            .and_then(|peer| peer.event_by_index(index))
     }
 
     /// Adds event created by the peer. Returns an error if the creator is not known, or if we
@@ -165,7 +178,7 @@ impl<S: SecretId> PeerList<S> {
         self.peers
             .get(peer_id)
             .into_iter()
-            .flat_map(|peer| peer.events.values())
+            .flat_map(|peer| peer.events())
     }
 
     /// Hashes of our events in insertion order.
@@ -219,7 +232,14 @@ impl PeerList<PeerId> {
                 }
             }
 
-            let _ = peers.insert(peer_id.clone(), Peer { state, events });
+            let _ = peers.insert(
+                peer_id.clone(),
+                Peer {
+                    state,
+                    events,
+                    peers: BTreeSet::new(),
+                },
+            );
             peer_id_hashes.push((Hash::from(serialise(&peer_id).as_slice()), peer_id.clone()))
         }
 
@@ -321,16 +341,52 @@ impl Debug for PeerState {
 }
 
 #[derive(Debug)]
-pub(crate) struct Peer {
-    pub state: PeerState,
-    pub events: BTreeMap<u64, Hash>,
+pub struct Peer<P: PublicId> {
+    state: PeerState,
+    events: BTreeMap<u64, Hash>,
+    peers: BTreeSet<P>,
 }
 
-impl Peer {
+impl<P: PublicId> Peer<P> {
     fn new(state: PeerState) -> Self {
         Self {
             state,
             events: BTreeMap::new(),
+            peers: BTreeSet::new(),
         }
+    }
+
+    pub fn state(&self) -> PeerState {
+        self.state
+    }
+
+    pub fn events(&self) -> impl DoubleEndedIterator<Item = &Hash> {
+        self.events.values()
+    }
+
+    pub fn indexed_events(&self) -> impl DoubleEndedIterator<Item = (u64, &Hash)> {
+        self.events.iter().map(|(index, hash)| (*index, hash))
+    }
+
+    pub fn event_by_index(&self, index: u64) -> Option<&Hash> {
+        self.events.get(&index)
+    }
+
+    // TODO: remove the allow(unused) attribute.
+    #[allow(unused)]
+    pub fn add_peer(&mut self, peer_id: P) {
+        let _ = self.peers.insert(peer_id);
+    }
+
+    // TODO: remove the allow(unused) attribute.
+    #[allow(unused)]
+    pub fn remove_peer(&mut self, peer_id: &P) {
+        let _ = self.peers.remove(peer_id);
+    }
+
+    // TODO: remove the allow(unused) attribute.
+    #[allow(unused)]
+    pub fn has_peer(&self, peer_id: &P) -> bool {
+        self.peers.contains(peer_id)
     }
 }
