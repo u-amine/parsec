@@ -1123,6 +1123,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.detect_duplicate_vote(event);
         self.detect_stale_other_parent(event);
         self.detect_fork(event);
+        self.detect_invalid_accusation(event);
 
         // TODO: detect other forms of malice here
 
@@ -1266,6 +1267,56 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 self.accuse(event.creator().clone(), Malice::Fork(*self_parent_hash));
             }
         }
+    }
+
+    fn detect_invalid_accusation(&mut self, event: &Event<T, S::PublicId>) {
+        let their_accusation = if let Some(&Observation::Accusation {
+            ref offender,
+            ref malice,
+        }) = event.vote().map(Vote::payload)
+        {
+            (offender, malice)
+        } else {
+            return;
+        };
+
+        // First try to find the same accusation in our pending accusations...
+        let found = self
+            .pending_accusations
+            .iter()
+            .any(|&(ref our_offender, ref our_malice)| {
+                their_accusation == (our_offender, our_malice)
+            });
+        if found {
+            return;
+        }
+
+        // ...then in our events...
+        let found = self
+            .peer_list
+            .our_events()
+            .rev()
+            .filter_map(|hash| self.get_known_event(hash).ok())
+            .filter_map(|event| {
+                if let Some(&Observation::Accusation {
+                    ref offender,
+                    ref malice,
+                }) = event.vote().map(Vote::payload)
+                {
+                    Some((offender, malice))
+                } else {
+                    None
+                }
+            }).any(|our_accusation| their_accusation == our_accusation);
+        if found {
+            return;
+        }
+
+        // ..if not found, their accusation is invalid.
+        self.accuse(
+            event.creator().clone(),
+            Malice::InvalidAccusation(*event.hash()),
+        )
     }
 
     fn genesis_group(&self) -> BTreeSet<&S::PublicId> {
