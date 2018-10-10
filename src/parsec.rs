@@ -86,7 +86,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         parsec
             .meta_elections
-            .initialise_current_election_round_hashes(parsec.peer_list.all_ids(), Hash::all_zero());
+            .initialise_current_election_round_hashes(parsec.peer_list.all_ids(), Hash::ZERO);
 
         // Add initial event.
         let event = Event::new_initial(&parsec.peer_list);
@@ -163,7 +163,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         parsec
             .meta_elections
-            .initialise_current_election_round_hashes(parsec.peer_list.all_ids(), Hash::all_zero());
+            .initialise_current_election_round_hashes(parsec.peer_list.all_ids(), Hash::ZERO);
 
         let initial_event = Event::new_initial(&parsec.peer_list);
         if let Err(error) = parsec.add_event(initial_event) {
@@ -380,7 +380,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 self.our_pub_id(),
                 self.peer_list
             );
-            Hash::from([].as_ref())
+            Hash::ZERO
         }
     }
 
