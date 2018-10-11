@@ -47,5 +47,8 @@ pub enum Malice {
     StaleOtherParent(Hash),
     /// More than one events having this event as its self_parent.
     Fork(Hash),
+    /// A node incorrectly accused other node of malice. Contains hash of the invalid Accusation
+    /// event.
+    InvalidAccusation(Hash),
     // TODO: add other malice variants
 }
