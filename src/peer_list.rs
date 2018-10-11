@@ -65,10 +65,8 @@ impl<S: SecretId> PeerList<S> {
         self.peers.iter().filter(|(_, peer)| peer.state.can_vote())
     }
 
-    // TODO: remove the allow(unused) attribute.
-    #[allow(unused)]
-    pub fn peer(&self, peer_id: &S::PublicId) -> Option<&Peer<S::PublicId>> {
-        self.peers.get(peer_id)
+    pub fn has_peer(&self, peer_id: &S::PublicId) -> bool {
+        self.peers.contains_key(peer_id)
     }
 
     pub fn peer_mut(&mut self, peer_id: &S::PublicId) -> Option<&mut Peer<S::PublicId>> {
@@ -88,18 +86,29 @@ impl<S: SecretId> PeerList<S> {
 
     /// Adds a peer in the given state into the map. If the peer has already been added, merges its
     /// state with the one given.
-    pub fn add_peer(&mut self, peer_id: S::PublicId, state: PeerState) -> &mut Peer<S::PublicId> {
-        match self.peers.entry(peer_id.clone()) {
-            Entry::Occupied(mut entry) => {
-                entry.get_mut().state |= state;
-                entry.into_mut()
+    pub fn add_peer<'a, I>(&mut self, peer_id: S::PublicId, state: PeerState, genesis_group: I)
+    where
+        I: IntoIterator<Item = &'a S::PublicId>,
+        S::PublicId: 'a,
+    {
+        match self.peers.entry(peer_id) {
+            Entry::Occupied(entry) => {
+                log_or_panic!(
+                    "{:?} already has {:?} in the peer list",
+                    self.our_id.public_id(),
+                    entry.key()
+                );
             }
             Entry::Vacant(entry) => {
+                let peer_id = entry.key().clone();
                 self.peer_id_hashes
                     .push((Hash::from(serialise(&peer_id).as_slice()), peer_id));
-                entry.insert(Peer::new(state))
+
+                let mut peer = Peer::new(state);
+                peer.add_peers(genesis_group);
+                let _ = entry.insert(peer);
             }
-        }
+        };
     }
 
     pub fn remove_peer(&mut self, peer_id: &S::PublicId) {
@@ -108,6 +117,18 @@ impl<S: SecretId> PeerList<S> {
         } else {
             debug!(
                 "{:?} tried to remove unknown peer {:?}",
+                self.our_id.public_id(),
+                peer_id
+            );
+        }
+    }
+
+    pub fn change_peer_state(&mut self, peer_id: &S::PublicId, state: PeerState) {
+        if let Some(peer) = self.peers.get_mut(peer_id) {
+            peer.state |= state;
+        } else {
+            log_or_panic!(
+                "{:?} tried to change state of unknown peer {:?}",
                 self.our_id.public_id(),
                 peer_id
             );
@@ -385,11 +406,5 @@ impl<P: PublicId> Peer<P> {
 
     pub fn remove_peer(&mut self, peer_id: &P) {
         let _ = self.peers.remove(peer_id);
-    }
-
-    // TODO: remove the allow(unused) attribute.
-    #[allow(unused)]
-    pub fn has_peer(&self, peer_id: &P) -> bool {
-        self.peers.contains(peer_id)
     }
 }

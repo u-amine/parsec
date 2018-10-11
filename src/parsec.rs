@@ -80,8 +80,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         for peer_id in genesis_group {
             parsec
                 .peer_list
-                .add_peer(peer_id.clone(), PeerState::active())
-                .add_peers(genesis_group);
+                .add_peer(peer_id.clone(), PeerState::active(), genesis_group);
         }
 
         parsec
@@ -145,20 +144,26 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let our_public_id = our_id.public_id().clone();
         let mut parsec = Self::empty(our_id, genesis_group, is_interesting_event);
 
-        let _ = parsec.peer_list.add_peer(our_public_id, PeerState::RECV);
+        parsec
+            .peer_list
+            .add_peer(our_public_id, PeerState::RECV, genesis_group);
 
         for peer_id in genesis_group {
-            parsec
-                .peer_list
-                .add_peer(peer_id.clone(), PeerState::VOTE | PeerState::SEND)
-                .add_peers(genesis_group)
+            parsec.peer_list.add_peer(
+                peer_id.clone(),
+                PeerState::VOTE | PeerState::SEND,
+                genesis_group,
+            )
         }
 
         for peer_id in section {
+            if genesis_group.contains(peer_id) {
+                continue;
+            }
+
             parsec
                 .peer_list
-                .add_peer(peer_id.clone(), PeerState::SEND)
-                .add_peers(genesis_group)
+                .add_peer(peer_id.clone(), PeerState::SEND, genesis_group)
         }
 
         parsec
@@ -424,7 +429,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         // We have received at least one gossip from the sender, so they can now receive gossips
         // from us as well.
-        let _ = self.peer_list.add_peer(src.clone(), PeerState::RECV);
+        self.peer_list.change_peer_state(src, PeerState::RECV);
 
         for packed_event in packed_events {
             if let Some(event) = Event::unpack(packed_event, &self.events, &self.peer_list)? {
@@ -570,14 +575,18 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                         peer.state().can_recv()
                     });
 
-                let _ = self.peer_list.add_peer(
-                    peer_id,
-                    if recv {
-                        PeerState::VOTE | PeerState::SEND | PeerState::RECV
-                    } else {
-                        PeerState::VOTE | PeerState::SEND
-                    },
-                );
+                let state = if recv {
+                    PeerState::VOTE | PeerState::SEND | PeerState::RECV
+                } else {
+                    PeerState::VOTE | PeerState::SEND
+                };
+
+                if self.peer_list.has_peer(&peer_id) {
+                    self.peer_list.change_peer_state(&peer_id, state);
+                } else {
+                    let genesis_group: Vec<_> = self.genesis_group().into_iter().cloned().collect();
+                    self.peer_list.add_peer(peer_id, state, &genesis_group);
+                }
             }
             Observation::Remove(peer_id) => {
                 self.peer_list.remove_peer(&peer_id);
@@ -1033,11 +1042,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let last_meta_votes = self.meta_elections.meta_votes(election, event_hash)?;
 
         let decided_meta_votes = last_meta_votes.iter().filter_map(|(id, event_votes)| {
-            if let Some(v) = event_votes.last().and_then(|v| v.decision) {
-                Some((id, v))
-            } else {
-                None
-            }
+            event_votes.last().and_then(|v| v.decision).map(|v| (id, v))
         });
 
         if decided_meta_votes.clone().count() < self.peer_list.voters().count() {
@@ -1580,9 +1585,11 @@ mod functional_tests {
         genesis: &BTreeSet<S::PublicId>,
     ) {
         for peer_id in genesis {
-            peer_list
-                .add_peer(peer_id.clone(), PeerState::active())
-                .add_peers(genesis);
+            if peer_list.has_peer(peer_id) {
+                continue;
+            }
+
+            peer_list.add_peer(peer_id.clone(), PeerState::active(), genesis);
         }
     }
 
@@ -1868,10 +1875,10 @@ mod functional_tests {
             is_supermajority,
         );
 
-        // Peer state is (VOTE | SEND) when created from existing. Need to call
-        // 'add_peer' to update the state to (VOTE | SEND | RECV).
-        for peer_id in section {
-            let _ = eric.peer_list.add_peer(peer_id, PeerState::RECV);
+        // Peer state is (VOTE | SEND) when created from existing. Need to update the states to
+        // (VOTE | SEND | RECV).
+        for peer_id in &section {
+            eric.peer_list.change_peer_state(peer_id, PeerState::RECV);
         }
 
         // Eric can no longer gossip to anyone.
@@ -1892,9 +1899,9 @@ mod functional_tests {
         let dave_id = PeerId::new("Dave");
         let mut dave_contents = ParsedContents::new(dave_id.clone());
 
-        let _ = dave_contents
+        dave_contents
             .peer_list
-            .add_peer(dave_id.clone(), PeerState::active());
+            .add_peer(dave_id.clone(), PeerState::active(), &genesis);
         add_genesis_group(&mut dave_contents.peer_list, &genesis);
 
         let d_0 = Event::<Transaction, _>::new_initial(&dave_contents.peer_list);
@@ -1953,9 +1960,9 @@ mod functional_tests {
         let eric_id = PeerId::new("Eric");
         let mut eric_contents = ParsedContents::new(eric_id.clone());
 
-        let _ = eric_contents
+        eric_contents
             .peer_list
-            .add_peer(eric_id.clone(), PeerState::active());
+            .add_peer(eric_id.clone(), PeerState::active(), &genesis);
         add_genesis_group(&mut eric_contents.peer_list, &genesis);
 
         let e_0 = Event::<Transaction, _>::new_initial(&eric_contents.peer_list);
@@ -2002,10 +2009,10 @@ mod functional_tests {
         let mut alice_contents = ParsedContents::new(alice_id.clone());
         alice_contents
             .peer_list
-            .add_peer(alice_id.clone(), PeerState::active());
+            .add_peer(alice_id.clone(), PeerState::active(), iter::empty());
         alice_contents
             .peer_list
-            .add_peer(dave_id.clone(), PeerState::active());
+            .add_peer(dave_id.clone(), PeerState::active(), iter::empty());
         let a_0 = Event::<Transaction, _>::new_initial(&alice_contents.peer_list);
         let a_0_hash = *a_0.hash();
         alice_contents.add_event(a_0);
@@ -2023,10 +2030,10 @@ mod functional_tests {
         let mut dave_contents = ParsedContents::new(dave_id.clone());
         dave_contents
             .peer_list
-            .add_peer(alice_id.clone(), PeerState::active());
+            .add_peer(alice_id.clone(), PeerState::active(), iter::empty());
         dave_contents
             .peer_list
-            .add_peer(dave_id.clone(), PeerState::active());
+            .add_peer(dave_id.clone(), PeerState::active(), iter::empty());
         let d_0 = Event::<Transaction, _>::new_initial(&dave_contents.peer_list);
         let d_0_hash = *d_0.hash();
         dave_contents.add_event(d_0);
