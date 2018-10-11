@@ -16,7 +16,7 @@ use std::{iter, mem, usize};
 
 /// Handle that uniquely identifies a `MetaElection`.
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
-pub struct MetaElectionHandle(usize);
+pub(crate) struct MetaElectionHandle(usize);
 
 impl MetaElectionHandle {
     /// Handle to the current election.
@@ -59,7 +59,7 @@ impl<P: PublicId> MetaElection<P> {
     }
 }
 
-pub struct MetaElections<P: PublicId> {
+pub(crate) struct MetaElections<P: PublicId> {
     // Current ongoing meta-election.
     current: MetaElection<P>,
     // Meta-elections decided by us, but not by all peers.
@@ -104,11 +104,7 @@ impl<P: PublicId> MetaElections<P> {
         self.get(handle).and_then(|e| e.meta_votes.get(event_hash))
     }
 
-    pub(crate) fn round_hashes(
-        &self,
-        handle: MetaElectionHandle,
-        peer_id: &P,
-    ) -> Option<&Vec<RoundHash>> {
+    pub fn round_hashes(&self, handle: MetaElectionHandle, peer_id: &P) -> Option<&Vec<RoundHash>> {
         self.get(handle).and_then(|e| e.round_hashes.get(peer_id))
     }
 
@@ -139,6 +135,8 @@ impl<P: PublicId> MetaElections<P> {
             if entry.get().undecided_peers.is_empty() {
                 let _ = entry.remove();
             }
+        } else {
+            log_or_panic!("Meta-election not found");
         }
     }
 
@@ -165,6 +163,8 @@ impl<P: PublicId> MetaElections<P> {
     ) {
         if let Some(election) = self.get_mut(handle) {
             let _ = election.meta_votes.insert(event_hash, meta_votes);
+        } else {
+            log_or_panic!("Meta-election not found");
         }
     }
 
@@ -181,6 +181,7 @@ impl<P: PublicId> MetaElections<P> {
         let election = if let Some(election) = self.get_mut(handle) {
             election
         } else {
+            log_or_panic!("Meta-election not found");
             return;
         };
 

@@ -7,15 +7,16 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 mod bool_set;
-mod counts;
-mod elections;
-mod vote;
+mod meta_elections;
+mod meta_vote;
+mod meta_vote_counts;
 
-pub use self::bool_set::BoolSet;
-pub use self::elections::{MetaElectionHandle, MetaElections};
-pub use self::vote::{MetaVote, Step};
+#[cfg(test)]
+pub(crate) use self::bool_set::BoolSet;
+pub(crate) use self::meta_elections::{MetaElectionHandle, MetaElections};
+pub(crate) use self::meta_vote::{MetaVote, Step};
 
 use hash::Hash;
 use std::collections::BTreeMap;
 
-pub(super) type MetaVotes<P> = BTreeMap<Hash, BTreeMap<P, Vec<MetaVote>>>;
+pub(crate) type MetaVotes<P> = BTreeMap<Hash, BTreeMap<P, Vec<MetaVote>>>;

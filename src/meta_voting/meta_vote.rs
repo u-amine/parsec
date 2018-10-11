@@ -7,13 +7,13 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::bool_set::BoolSet;
-use super::counts::MetaVoteCounts;
+use super::meta_vote_counts::MetaVoteCounts;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 
 // This holds the state of a (binary) meta vote about which we're trying to achieve consensus.
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MetaVote {
+pub(crate) struct MetaVote {
     pub round: usize,
     pub step: Step,
     pub estimates: BoolSet,
@@ -279,7 +279,7 @@ impl MetaVote {
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Serialize, Deserialize)]
-pub enum Step {
+pub(crate) enum Step {
     ForcedTrue,
     ForcedFalse,
     GenuineFlip,

@@ -6,14 +6,14 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::vote::MetaVote;
+use super::meta_vote::MetaVote;
 use parsec::is_more_than_two_thirds;
 use std::iter;
 
 // This is used to collect the meta votes of other events relating to a single (binary) meta vote at
 // a given round and step.
 #[derive(Default)]
-pub struct MetaVoteCounts {
+pub(crate) struct MetaVoteCounts {
     pub estimates_true: usize,
     pub estimates_false: usize,
     pub bin_values_true: usize,
