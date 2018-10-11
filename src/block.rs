@@ -11,7 +11,6 @@ use hash::Hash;
 use id::{Proof, PublicId};
 use network_event::NetworkEvent;
 use observation::Observation;
-use serialise;
 use std::collections::{BTreeMap, BTreeSet};
 use vote::Vote;
 
@@ -53,7 +52,7 @@ impl<T: NetworkEvent, P: PublicId> Block<T, P> {
 
     /// Returns the hash of this block's payload.
     pub fn create_payload_hash(&self) -> Hash {
-        Hash::from(serialise(&self.payload).as_slice())
+        self.payload.create_hash()
     }
 
     /// Converts `vote` to a `Proof` and attempts to add it to the block.  Returns an error if

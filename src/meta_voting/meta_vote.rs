@@ -6,90 +6,10 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use hash::Hash;
-use id::PublicId;
-use parsec::is_more_than_two_thirds;
-use round_hash::RoundHash;
+use super::bool_set::BoolSet;
+use super::meta_vote_counts::MetaVoteCounts;
 use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
-use std::{iter, mem};
-
-#[derive(Clone, PartialEq, Eq, PartialOrd, Serialize, Deserialize)]
-pub(crate) enum Step {
-    ForcedTrue,
-    ForcedFalse,
-    GenuineFlip,
-}
-
-impl Default for Step {
-    fn default() -> Step {
-        Step::ForcedTrue
-    }
-}
-
-impl Debug for Step {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let step = match self {
-            Step::ForcedTrue => 0,
-            Step::ForcedFalse => 1,
-            Step::GenuineFlip => 2,
-        };
-        write!(f, "{}", step)
-    }
-}
-
-/// A simple enum to hold a set of bools.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) enum BoolSet {
-    Empty,
-    Single(bool),
-    Both,
-}
-
-impl Default for BoolSet {
-    fn default() -> BoolSet {
-        BoolSet::Empty
-    }
-}
-
-impl BoolSet {
-    pub fn is_empty(&self) -> bool {
-        *self == BoolSet::Empty
-    }
-
-    fn insert(&mut self, val: bool) -> bool {
-        match self.clone() {
-            BoolSet::Empty => *self = BoolSet::Single(val),
-            BoolSet::Single(s) if s != val => *self = BoolSet::Both,
-            _ => return false,
-        }
-        true
-    }
-
-    fn contains(&self, val: bool) -> bool {
-        match *self {
-            BoolSet::Empty => false,
-            BoolSet::Single(ref s) => *s == val,
-            BoolSet::Both => true,
-        }
-    }
-
-    fn clear(&mut self) {
-        *self = BoolSet::Empty
-    }
-
-    fn len(&self) -> usize {
-        match *self {
-            BoolSet::Empty => 0,
-            BoolSet::Single(_) => 1,
-            BoolSet::Both => 2,
-        }
-    }
-
-    fn from_bool(val: bool) -> Self {
-        BoolSet::Single(val)
-    }
-}
 
 // This holds the state of a (binary) meta vote about which we're trying to achieve consensus.
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -358,205 +278,26 @@ impl MetaVote {
     }
 }
 
-// This is used to collect the meta votes of other events relating to a single (binary) meta vote at
-// a given round and step.
-#[derive(Default)]
-struct MetaVoteCounts {
-    estimates_true: usize,
-    estimates_false: usize,
-    bin_values_true: usize,
-    bin_values_false: usize,
-    aux_values_true: usize,
-    aux_values_false: usize,
-    decision: Option<bool>,
-    total_peers: usize,
+#[derive(Clone, PartialEq, Eq, PartialOrd, Serialize, Deserialize)]
+pub(crate) enum Step {
+    ForcedTrue,
+    ForcedFalse,
+    GenuineFlip,
 }
 
-impl MetaVoteCounts {
-    // Construct a `MetaVoteCounts` by collecting details from all meta votes which are for the
-    // given `parent`'s `round` and `step`.  These results will include info from our own `parent`
-    // meta vote.
-    fn new(parent: &MetaVote, others: &[Vec<MetaVote>], total_peers: usize) -> Self {
-        let mut counts = MetaVoteCounts::default();
-        counts.total_peers = total_peers;
-        for vote in others
-            .iter()
-            .filter_map(|other| {
-                other
-                    .iter()
-                    .filter(|vote| vote.round == parent.round && vote.step == parent.step)
-                    .last()
-            }).chain(iter::once(parent))
-        {
-            if vote.estimates.contains(true) {
-                counts.estimates_true += 1;
-            }
-            if vote.estimates.contains(false) {
-                counts.estimates_false += 1;
-            }
-            if vote.bin_values.contains(true) {
-                counts.bin_values_true += 1;
-            }
-            if vote.bin_values.contains(false) {
-                counts.bin_values_false += 1;
-            }
-            match vote.aux_value {
-                Some(true) => counts.aux_values_true += 1,
-                Some(false) => counts.aux_values_false += 1,
-                None => (),
-            }
-
-            if counts.decision.is_none() {
-                counts.decision = vote.decision;
-            }
-        }
-        counts
-    }
-
-    fn aux_values_set(&self) -> usize {
-        self.aux_values_true + self.aux_values_false
-    }
-
-    fn is_supermajority(&self, count: usize) -> bool {
-        is_more_than_two_thirds(count, self.total_peers)
-    }
-
-    fn at_least_one_third(&self, count: usize) -> bool {
-        3 * count >= self.total_peers
+impl Default for Step {
+    fn default() -> Step {
+        Step::ForcedTrue
     }
 }
 
-pub(super) type MetaVotes<P> = BTreeMap<Hash, BTreeMap<P, Vec<MetaVote>>>;
-
-struct MetaElection<P: PublicId> {
-    // Hash of the block that was last stable when this meta-election started.
-    block_hash: Hash,
-    meta_votes: MetaVotes<P>,
-    // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
-    // the one for round `x` is held at index `x`.
-    round_hashes: BTreeMap<P, Vec<RoundHash>>,
-}
-
-impl<P: PublicId> MetaElection<P> {
-    fn new(block_hash: Hash) -> Self {
-        MetaElection {
-            block_hash,
-            meta_votes: BTreeMap::new(),
-            round_hashes: BTreeMap::new(),
-        }
-    }
-}
-
-pub(super) struct MetaElections<P: PublicId> {
-    current: MetaElection<P>,
-    old: Vec<MetaElection<P>>,
-}
-
-impl<'a, P: 'a + PublicId> MetaElections<P> {
-    pub(super) fn new() -> Self {
-        MetaElections {
-            current: MetaElection::new(Hash::all_zero()),
-            old: vec![],
-        }
-    }
-
-    pub(super) fn meta_votes_from_current_election(
-        &self,
-        event_hash: &Hash,
-    ) -> Option<&BTreeMap<P, Vec<MetaVote>>> {
-        self.current.meta_votes.get(event_hash)
-    }
-
-    pub(super) fn round_hashes_from_current_election(
-        &self,
-        peer_id: &P,
-    ) -> Option<&Vec<RoundHash>> {
-        self.current.round_hashes.get(peer_id)
-    }
-
-    pub(super) fn consensus_history(&self) -> impl Iterator<Item = &Hash> {
-        // The block_hash of the first round of election is all_zero, so need to be skipped.
-        self.old
-            .iter()
-            .skip(1)
-            .chain(iter::once(&self.current))
-            .map(|election| &election.block_hash)
-    }
-
-    pub(super) fn new_election(&mut self, payload_hash: Hash) {
-        let previous = mem::replace(&mut self.current, MetaElection::new(payload_hash));
-        self.old.push(previous);
-    }
-
-    pub(super) fn insert_into_current_election(
-        &mut self,
-        event_hash: Hash,
-        meta_votes: BTreeMap<P, Vec<MetaVote>>,
-    ) {
-        let _ = self.current.meta_votes.insert(event_hash, meta_votes);
-    }
-
-    pub(super) fn restart_current_election_round_hashes<I: Iterator<Item = &'a P>>(
-        &mut self,
-        peer_ids: I,
-    ) {
-        let latest_block_hash = self.current.block_hash;
-        self.initialise_current_election_round_hashes(peer_ids, &latest_block_hash);
-    }
-
-    pub(super) fn update_current_election_round_hashes(&mut self, event_hash: &Hash) {
-        let meta_votes = if let Some(meta_votes) = self.current.meta_votes.get(event_hash) {
-            meta_votes
-        } else {
-            return;
+impl Debug for Step {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let step = match self {
+            Step::ForcedTrue => 0,
+            Step::ForcedFalse => 1,
+            Step::GenuineFlip => 2,
         };
-        for (peer_id, event_votes) in meta_votes {
-            for meta_vote in event_votes {
-                let hashes = if let Some(hashes) = self.current.round_hashes.get_mut(&peer_id) {
-                    hashes
-                } else {
-                    continue;
-                };
-                while hashes.len() < meta_vote.round + 1 {
-                    let next_round_hash = hashes[hashes.len() - 1].increment_round();
-                    hashes.push(next_round_hash);
-                }
-            }
-        }
-    }
-
-    pub(super) fn initialise_round_hashes<I: Iterator<Item = &'a P>>(&mut self, peer_ids: I) {
-        self.initialise_current_election_round_hashes(peer_ids, &Hash::from([].as_ref()));
-    }
-
-    pub(super) fn current_meta_votes(&self) -> &MetaVotes<P> {
-        &self.current.meta_votes
-    }
-
-    fn initialise_current_election_round_hashes<I: Iterator<Item = &'a P>>(
-        &mut self,
-        peer_ids: I,
-        initial_hash: &Hash,
-    ) {
-        self.current.round_hashes = peer_ids
-            .map(|peer_id| {
-                let round_hash = RoundHash::new(peer_id, *initial_hash);
-                (peer_id.clone(), vec![round_hash])
-            }).collect();
-    }
-}
-
-#[cfg(test)]
-impl<P: PublicId> MetaElections<P> {
-    pub(super) fn new_from_parsed(votes: MetaVotes<P>) -> Self {
-        let current = MetaElection {
-            block_hash: Hash::all_zero(),
-            meta_votes: votes,
-            round_hashes: BTreeMap::new(),
-        };
-        MetaElections {
-            current,
-            old: vec![],
-        }
+        write!(f, "{}", step)
     }
 }

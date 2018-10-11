@@ -8,7 +8,7 @@
 
 use gossip::Event;
 use hash::Hash;
-use meta_vote::{BoolSet, MetaVote, Step};
+use meta_voting::{BoolSet, MetaVote, Step};
 use mock::{PeerId, Transaction};
 use observation::Observation;
 use peer_list::{PeerList, PeerState};
@@ -598,7 +598,7 @@ mod tests {
     use dev_utils::{Environment, RngChoice, Schedule, ScheduleOptions};
     use dump_graph::DIR;
     use maidsafe_utilities::serialisation::deserialise;
-    use meta_vote::MetaVote;
+    use meta_voting::MetaVote;
     use mock::{PeerId, Transaction};
     use std::fs;
 

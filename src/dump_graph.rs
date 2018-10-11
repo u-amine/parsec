@@ -9,7 +9,7 @@
 use gossip::Event;
 use hash::Hash;
 use id::SecretId;
-use meta_vote::MetaVote;
+use meta_voting::MetaVote;
 use network_event::NetworkEvent;
 use peer_list::PeerList;
 use std::collections::BTreeMap;
@@ -55,7 +55,7 @@ mod detail {
     use gossip::Event;
     use hash::Hash;
     use id::{PublicId, SecretId};
-    use meta_vote::MetaVote;
+    use meta_voting::MetaVote;
     use network_event::NetworkEvent;
     use peer_list::PeerList;
     use rand::{self, Rng};
@@ -349,7 +349,7 @@ mod detail {
         if let Some(parent_hash) = parent_hash {
             if let Some(parent_pos) = positions.get(parent_hash) {
                 Some(*parent_pos)
-            } else if parent_hash == &Hash::all_zero() {
+            } else if *parent_hash == Hash::ZERO {
                 Some(index)
             } else {
                 None
@@ -446,7 +446,7 @@ mod detail {
         writeln!(writer, "/// our_id: {:?}", peer_list.our_id().public_id())?;
         let peer_states = peer_list
             .iter()
-            .map(|(peer_id, peer)| (peer_id, format!("{:?}", peer.state)))
+            .map(|(peer_id, peer)| (peer_id, format!("{:?}", peer.state())))
             .collect::<BTreeMap<_, _>>();
         writeln!(writer, "/// peer_states: {:?}", peer_states)
     }

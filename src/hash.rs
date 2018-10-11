@@ -16,6 +16,8 @@ const HASH_LEN: usize = 32;
 pub struct Hash([u8; HASH_LEN]);
 
 impl Hash {
+    pub const ZERO: Self = Hash([0; HASH_LEN]);
+
     // Compares the distance of the arguments to `self`.  Returns `Less` if `lhs` is closer,
     // `Greater` if `rhs` is closer, and `Equal` if `lhs == rhs`.  (The XOR distance can only be
     // equal if the arguments are equal.)
@@ -26,10 +28,6 @@ impl Hash {
             }
         }
         Ordering::Equal
-    }
-
-    pub fn all_zero() -> Self {
-        Hash([0; HASH_LEN])
     }
 }
 
