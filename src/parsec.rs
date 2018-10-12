@@ -2013,52 +2013,59 @@ mod functional_tests {
         assert_eq!(hash, e_1_hash);
     }
 
+    fn initialise_parsec(
+        id: PeerId,
+        genesis: BTreeSet<PeerId>,
+        second_event: Option<Observation<Transaction, PeerId>>,
+    ) -> Parsec<Transaction, PeerId> {
+        let mut peer_contents = ParsedContents::new(id);
+        for peer_id in &genesis {
+            peer_contents
+                .peer_list
+                .add_peer(peer_id.clone(), PeerState::active(), &genesis);
+        }
+        let ev_0 = Event::<Transaction, _>::new_initial(&peer_contents.peer_list);
+        let ev_0_hash = *ev_0.hash();
+        peer_contents.add_event(ev_0);
+        let ev_1 = if let Some(obs_1) = second_event {
+            Event::<Transaction, _>::new_from_observation(
+                ev_0_hash,
+                obs_1,
+                &peer_contents.events,
+                &peer_contents.peer_list,
+            )
+        } else {
+            Event::<Transaction, _>::new_from_observation(
+                ev_0_hash,
+                Observation::Genesis(genesis),
+                &peer_contents.events,
+                &peer_contents.peer_list,
+            )
+        };
+        peer_contents.add_event(ev_1);
+        Parsec::from_parsed_contents(peer_contents)
+    }
+
     #[test]
     fn handle_malice_missing_genesis_event() {
         let alice_id = PeerId::new("Alice");
         let dave_id = PeerId::new("Dave");
 
+        let mut genesis = BTreeSet::new();
+        let _ = genesis.insert(alice_id.clone());
+        let _ = genesis.insert(dave_id.clone());
+
         // Create Alice where the first event is not a genesis event (malice)
-        let mut alice_contents = ParsedContents::new(alice_id.clone());
-        alice_contents
-            .peer_list
-            .add_peer(alice_id.clone(), PeerState::active(), iter::empty());
-        alice_contents
-            .peer_list
-            .add_peer(dave_id.clone(), PeerState::active(), iter::empty());
-        let a_0 = Event::<Transaction, _>::new_initial(&alice_contents.peer_list);
-        let a_0_hash = *a_0.hash();
-        alice_contents.add_event(a_0);
-        let a_1 = Event::<Transaction, _>::new_from_observation(
-            a_0_hash,
-            Observation::OpaquePayload(Transaction::new("Foo")),
-            &alice_contents.events,
-            &alice_contents.peer_list,
+        let alice = initialise_parsec(
+            alice_id.clone(),
+            genesis.clone(),
+            Some(Observation::OpaquePayload(Transaction::new("Foo"))),
         );
-        let a_1_hash = *a_1.hash();
-        alice_contents.add_event(a_1);
-        let alice = Parsec::from_parsed_contents(alice_contents);
+        let a_0_hash = alice.events_order[0];
+        let a_1_hash = alice.events_order[1];
 
         // Create Dave where the first event is a geneneis event containing both Alice and Dave.
-        let mut dave_contents = ParsedContents::new(dave_id.clone());
-        dave_contents
-            .peer_list
-            .add_peer(alice_id.clone(), PeerState::active(), iter::empty());
-        dave_contents
-            .peer_list
-            .add_peer(dave_id.clone(), PeerState::active(), iter::empty());
-        let d_0 = Event::<Transaction, _>::new_initial(&dave_contents.peer_list);
-        let d_0_hash = *d_0.hash();
-        dave_contents.add_event(d_0);
-        let genesis: BTreeSet<_> = dave_contents.peer_list.all_ids().cloned().collect();
-        let d_1 = Event::<Transaction, _>::new_from_observation(
-            d_0_hash,
-            Observation::Genesis(genesis),
-            &dave_contents.events,
-            &dave_contents.peer_list,
-        );
-        dave_contents.add_event(d_1);
-        let mut dave = Parsec::from_parsed_contents(dave_contents);
+        let mut dave = initialise_parsec(dave_id.clone(), genesis, None);
         assert!(!dave.events.contains_key(&a_0_hash));
         assert!(!dave.events.contains_key(&a_1_hash));
 
@@ -2096,45 +2103,16 @@ mod functional_tests {
         let _ = false_genesis.insert(PeerId::new("Derp"));
 
         // Create Alice where the first event is an incorrect genesis event (malice)
-        let mut alice_contents = ParsedContents::new(alice_id.clone());
-        alice_contents
-            .peer_list
-            .add_peer(alice_id.clone(), PeerState::active(), &false_genesis);
-        alice_contents
-            .peer_list
-            .add_peer(dave_id.clone(), PeerState::active(), &false_genesis);
-        let a_0 = Event::<Transaction, _>::new_initial(&alice_contents.peer_list);
-        let a_0_hash = *a_0.hash();
-        alice_contents.add_event(a_0);
-        let a_1 = Event::<Transaction, _>::new_from_observation(
-            a_0_hash,
-            Observation::Genesis(false_genesis),
-            &alice_contents.events,
-            &alice_contents.peer_list,
+        let alice = initialise_parsec(
+            alice_id.clone(),
+            genesis.clone(),
+            Some(Observation::Genesis(false_genesis)),
         );
-        let a_1_hash = *a_1.hash();
-        alice_contents.add_event(a_1);
-        let alice = Parsec::from_parsed_contents(alice_contents);
+        let a_0_hash = alice.events_order[0];
+        let a_1_hash = alice.events_order[1];
 
         // Create Dave where the first event is a genesis event containing both Alice and Dave.
-        let mut dave_contents = ParsedContents::new(dave_id.clone());
-        dave_contents
-            .peer_list
-            .add_peer(alice_id.clone(), PeerState::active(), &genesis);
-        dave_contents
-            .peer_list
-            .add_peer(dave_id.clone(), PeerState::active(), &genesis);
-        let d_0 = Event::<Transaction, _>::new_initial(&dave_contents.peer_list);
-        let d_0_hash = *d_0.hash();
-        dave_contents.add_event(d_0);
-        let d_1 = Event::<Transaction, _>::new_from_observation(
-            d_0_hash,
-            Observation::Genesis(genesis),
-            &dave_contents.events,
-            &dave_contents.peer_list,
-        );
-        dave_contents.add_event(d_1);
-        let mut dave = Parsec::from_parsed_contents(dave_contents);
+        let mut dave = initialise_parsec(dave_id.clone(), genesis, None);
         assert!(!dave.events.contains_key(&a_0_hash));
         assert!(!dave.events.contains_key(&a_1_hash));
 
