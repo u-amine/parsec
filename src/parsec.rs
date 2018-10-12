@@ -58,7 +58,7 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     // Consensused network events that have not been returned via `poll()` yet.
     consensused_blocks: VecDeque<Block<T, S::PublicId>>,
     // The map of meta votes of the events on each consensus block.
-    meta_elections: MetaElections<S::PublicId>,
+    meta_elections: MetaElections<T, S::PublicId>,
     // Accusations to raise at the end of the processing of current gossip message.
     pending_accusations: Vec<(S::PublicId, Malice)>,
     is_interesting_event: IsInterestingEventFn<S::PublicId>,
@@ -491,37 +491,36 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         let creator = self.get_known_event(event_hash)?.creator().clone();
 
-        if let Some(block) = self.next_stable_block(event_hash) {
-            let payload_hash = block.create_payload_hash();
-
-            self.output_consensus_info(block.payload(), &payload_hash);
+        if let Some(payload) = self.compute_consensus(MetaElectionHandle::CURRENT, event_hash) {
             self.clear_consensus_data();
 
             let prev_election = self
                 .meta_elections
-                .new_election(payload_hash, self.peer_list.voter_ids());
+                .new_election(payload.clone(), self.peer_list.voter_ids());
+
             self.meta_elections
                 .mark_as_decided(prev_election, self.peer_list.our_id().public_id());
             self.meta_elections.mark_as_decided(prev_election, &creator);
 
-            let cont = match self.handle_self_consensus(block.payload()) {
+            let cont = match self.handle_self_consensus(&payload) {
                 PostConsensusAction::Continue => true,
                 PostConsensusAction::Stop => false,
             };
 
             if cont && creator != *self.our_pub_id() {
-                self.handle_peer_consensus(&creator, block.payload())
+                self.handle_peer_consensus(&creator, &payload);
             }
 
+            let block = self.create_block(payload.clone())?;
             self.consensused_blocks.push_back(block);
+            self.output_consensus_info();
 
             if cont {
                 self.restart_consensus();
             }
-        } else {
-            let decided: Vec<_> = self.meta_elections.decided().collect();
-
-            for election in decided {
+        } else if creator != *self.our_pub_id() {
+            let undecided: Vec<_> = self.meta_elections.undecided_by(&creator).collect();
+            for election in undecided {
                 if let Some(payload) = self.compute_consensus(election, event_hash) {
                     self.meta_elections.mark_as_decided(election, &creator);
                     self.handle_peer_consensus(&creator, &payload);
@@ -532,7 +531,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Ok(())
     }
 
-    fn output_consensus_info(&self, payload: &Observation<T, S::PublicId>, payload_hash: &Hash) {
+    fn output_consensus_info(&self) {
         dump_graph::to_file(
             self.our_pub_id(),
             &self.events,
@@ -540,13 +539,18 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             &self.peer_list,
         );
 
-        info!(
-            "{:?} got consensus on block {} with payload {:?} and payload hash {:?}",
-            self.our_pub_id(),
-            self.meta_elections.consensus_history().len(),
-            payload,
-            payload_hash
-        );
+        let payload = self.consensused_blocks.back().map(Block::payload);
+        let payload_hash = self.meta_elections.consensus_history().last();
+
+        if let (Some(payload), Some(payload_hash)) = (payload, payload_hash) {
+            info!(
+                "{:?} got consensus on block {} with payload {:?} and payload hash {:?}",
+                self.our_pub_id(),
+                self.meta_elections.consensus_history().len() - 1,
+                payload,
+                payload_hash
+            );
+        }
     }
 
     /// Handles consensus reached by us.
@@ -636,20 +640,14 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         );
 
         match *payload {
-            Observation::Add(ref other_peer_id) => {
-                if let Some(peer) = self.peer_list.peer_mut(peer_id) {
-                    peer.add_peer(other_peer_id.clone());
-                }
-            }
+            Observation::Add(ref other_peer_id) => self
+                .peer_list
+                .add_peers_peer(peer_id, other_peer_id.clone()),
             Observation::Remove(ref other_peer_id) => {
-                if let Some(peer) = self.peer_list.peer_mut(peer_id) {
-                    peer.remove_peer(other_peer_id);
-                }
+                self.peer_list.remove_peers_peer(peer_id, other_peer_id)
             }
             Observation::Accusation { ref offender, .. } => {
-                if let Some(peer) = self.peer_list.peer_mut(peer_id) {
-                    peer.remove_peer(offender);
-                }
+                self.peer_list.remove_peers_peer(peer_id, offender)
             }
             _ => (),
         }
@@ -782,7 +780,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn set_meta_votes(&mut self, election: MetaElectionHandle, event_hash: &Hash) -> Result<()> {
-        let total_peers = self.peer_list.voters().count();
+        let voter_count = self.voter_count(election);
         let mut meta_votes = BTreeMap::new();
         // If self-parent already has meta votes associated with it, derive this event's meta votes
         // from those ones.
@@ -798,7 +796,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                         let other_votes = self.collect_other_meta_votes(election, &peer_id, event);
                         let coin_tosses =
                             self.toss_coins(election, &peer_id, &parent_event_votes, event)?;
-                        MetaVote::next(&parent_event_votes, &other_votes, &coin_tosses, total_peers)
+                        MetaVote::next(&parent_event_votes, &other_votes, &coin_tosses, voter_count)
                     };
                     let _ = meta_votes.insert(peer_id, new_meta_votes);
                 }
@@ -809,7 +807,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     let initial_estimate = event.observations.contains(peer_id);
                     let _ = meta_votes.insert(
                         peer_id.clone(),
-                        MetaVote::new(initial_estimate, &other_votes, total_peers),
+                        MetaVote::new(initial_estimate, &other_votes, voter_count),
                     );
                 }
             };
@@ -1037,10 +1035,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         other_votes
     }
 
-    // Try to compute the next stable block using the given deciding event.
-    fn next_stable_block(&self, event_hash: &Hash) -> Option<Block<T, S::PublicId>> {
-        let payload = self.compute_consensus(MetaElectionHandle::CURRENT, event_hash)?;
-        self.create_block(payload)
+    // If the given meta-election is already decided, returns the number of voters at the time it was decided.
+    // Otherwise return the number of current voters.
+    fn voter_count(&self, election: MetaElectionHandle) -> usize {
+        self.meta_elections
+            .decided_voter_count(election)
+            .unwrap_or_else(|| self.peer_list.voters().count())
     }
 
     fn compute_consensus(
@@ -1054,11 +1054,26 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             event_votes.last().and_then(|v| v.decision).map(|v| (id, v))
         });
 
-        if decided_meta_votes.clone().count() < self.peer_list.voters().count() {
+        if decided_meta_votes.clone().count() < self.voter_count(election) {
             return None;
         }
 
+        self.meta_elections
+            .decided_payload(election)
+            .cloned()
+            .or_else(|| self.compute_payload_for_consensus(decided_meta_votes))
+    }
+
+    fn compute_payload_for_consensus<'a, I>(
+        &self,
+        decided_meta_votes: I,
+    ) -> Option<Observation<T, S::PublicId>>
+    where
+        I: IntoIterator<Item = (&'a S::PublicId, bool)>,
+        S::PublicId: 'a,
+    {
         let payloads: Vec<_> = decided_meta_votes
+            .into_iter()
             .filter_map(|(id, decision)| {
                 if decision {
                     self.interesting_events
@@ -1087,7 +1102,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             }).cloned()
     }
 
-    fn create_block(&self, payload: Observation<T, S::PublicId>) -> Option<Block<T, S::PublicId>> {
+    fn create_block(&self, payload: Observation<T, S::PublicId>) -> Result<Block<T, S::PublicId>> {
         let votes = self
             .events
             .values()
@@ -1101,7 +1116,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 })
             }).collect();
 
-        Block::new(payload, &votes).ok()
+        Block::new(payload, &votes)
     }
 
     fn clear_consensus_data(&mut self) {

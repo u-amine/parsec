@@ -69,10 +69,6 @@ impl<S: SecretId> PeerList<S> {
         self.peers.contains_key(peer_id)
     }
 
-    pub fn peer_mut(&mut self, peer_id: &S::PublicId) -> Option<&mut Peer<S::PublicId>> {
-        self.peers.get_mut(peer_id)
-    }
-
     pub fn peer_state(&self, peer_id: &S::PublicId) -> PeerState {
         self.peers
             .get(peer_id)
@@ -105,7 +101,20 @@ impl<S: SecretId> PeerList<S> {
                     .push((Hash::from(serialise(&peer_id).as_slice()), peer_id));
 
                 let mut peer = Peer::new(state);
-                peer.add_peers(genesis_group);
+
+                // Do not populate our membership list, as it would be redundant.
+                if entry.key() != self.our_id.public_id() {
+                    for genesis_peer_id in genesis_group {
+                        // Do not add the peer into their own membership list, as it too would be
+                        // redundant.
+                        if genesis_peer_id == entry.key() {
+                            continue;
+                        }
+
+                        peer.add_peer(genesis_peer_id.clone());
+                    }
+                }
+
                 let _ = entry.insert(peer);
             }
         };
@@ -132,6 +141,27 @@ impl<S: SecretId> PeerList<S> {
                 self.our_id.public_id(),
                 peer_id
             );
+        }
+    }
+
+    /// Add `other_peer_id` to `peer_id`'s membership list.
+    /// If `peer_id` is ourselves, this function does nothing to prevent redundancy (the `PeerList`
+    /// itself is already out membership list). If `other_peer_id` equals `peer_id`, this function
+    /// also does nothing, as every peer implicitly knows themselves, so it too would be redundant.
+    pub fn add_peers_peer(&mut self, peer_id: &S::PublicId, other_peer_id: S::PublicId) {
+        if *peer_id == *self.our_id.public_id() || *peer_id == other_peer_id {
+            return;
+        }
+
+        if let Some(peer) = self.peers.get_mut(peer_id) {
+            peer.add_peer(other_peer_id)
+        }
+    }
+
+    /// Remove `other_peer_id` from `peer_id`'s membership list.
+    pub fn remove_peers_peer(&mut self, peer_id: &S::PublicId, other_peer_id: &S::PublicId) {
+        if let Some(peer) = self.peers.get_mut(peer_id) {
+            peer.remove_peer(other_peer_id)
         }
     }
 
@@ -394,14 +424,6 @@ impl<P: PublicId> Peer<P> {
 
     pub fn add_peer(&mut self, peer_id: P) {
         let _ = self.peers.insert(peer_id);
-    }
-
-    pub fn add_peers<'a, I>(&mut self, peer_ids: I)
-    where
-        I: IntoIterator<Item = &'a P>,
-        P: 'a,
-    {
-        self.peers.extend(peer_ids.into_iter().cloned())
     }
 
     pub fn remove_peer(&mut self, peer_id: &P) {
