@@ -1,0 +1,72 @@
+digraph GossipGraph {
+  splines=false
+  rankdir=BT
+/// our_id: Bob
+/// peer_states: {Alice: "PeerState(VOTE|SEND|RECV)", Bob: "PeerState(VOTE|SEND|RECV)"}
+/// { 30d7e4394d..
+/// cause: Initial
+/// interesting_content: []
+/// last_ancestors: {Alice: 0}
+/// }
+/// { 3fae277c4b..
+/// cause: Observation(Genesis({Alice, Bob}))
+/// interesting_content: []
+/// last_ancestors: {Alice: 1}
+/// }
+/// { dc8296fe22..
+/// cause: Initial
+/// interesting_content: []
+/// last_ancestors: {Bob: 0}
+/// }
+/// { 1efae523fa..
+/// cause: Observation(Genesis({Alice, Bob}))
+/// interesting_content: []
+/// last_ancestors: {Bob: 1}
+/// }
+/// { 4541f98755..
+/// cause: Initial
+/// interesting_content: []
+/// last_ancestors: {Carol: 0}
+/// }
+    style=invis
+  subgraph cluster_Alice {
+    label=Alice
+    Alice [style=invis]
+    Alice -> "30d7e4394d.." [style=invis]
+    "30d7e4394d.." -> "3fae277c4b.." [minlen=1]
+  }
+
+    style=invis
+  subgraph cluster_Bob {
+    label=Bob
+    Bob [style=invis]
+    Bob -> "dc8296fe22.." [style=invis]
+    "dc8296fe22.." -> "1efae523fa.." [minlen=1]
+  }
+
+    style=invis
+  subgraph cluster_Carol {
+    label=Carol
+    Carol [style=invis]
+    Carol -> "4541f98755.." [style=invis]
+  }
+
+/// meta-vote section
+ "30d7e4394d.." [fillcolor=white, label="A_0"]
+ "3fae277c4b.." [fillcolor=white, label="A_1
+Genesis({Alice, Bob})"]
+ "3fae277c4b.." [shape=rectangle, style=filled, fillcolor=cyan]
+ "dc8296fe22.." [fillcolor=white, label="B_0"]
+ "1efae523fa.." [fillcolor=white, label="B_1
+Genesis({Alice, Bob})"]
+ "1efae523fa.." [shape=rectangle, style=filled, fillcolor=cyan]
+ "4541f98755.." [fillcolor=white, label="C_0"]
+
+  {
+    rank=same
+    Alice [style=filled, color=white]
+    Bob [style=filled, color=white]
+    Carol [style=filled, color=white]
+  }
+  Alice -> Bob -> Carol [style=invis]
+}
