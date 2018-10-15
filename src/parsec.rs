@@ -529,6 +529,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
 
         self.set_interesting_content(&event_hash)?;
+        self.initialise_membership_list(&event_hash);
         self.process_event(&event_hash)?;
 
         Ok(())
@@ -722,11 +723,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             Observation::Add(ref other_peer_id) => self
                 .peer_list
                 .add_peers_peer(peer_id, other_peer_id.clone()),
-            Observation::Remove(ref other_peer_id) => {
-                self.peer_list.remove_peers_peer(peer_id, other_peer_id)
-            }
+            Observation::Remove(ref other_peer_id) => self
+                .peer_list
+                .remove_peers_peer(peer_id, other_peer_id.clone()),
             Observation::Accusation { ref offender, .. } => {
-                self.peer_list.remove_peers_peer(peer_id, offender)
+                self.peer_list.remove_peers_peer(peer_id, offender.clone())
             }
             _ => (),
         }
@@ -836,6 +837,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     .find(sees_vote_for_same_payload)
                     .map(|(index, _hash)| (peer_id, index))
             }).collect()
+    }
+
+    // Initialise the membership list of the creator of the given event.
+    // Do nothing if already initialised.
+    fn initialise_membership_list(&mut self, _event_hash: &Hash) {
+        // TODO
     }
 
     fn set_observations(&mut self, event_hash: &Hash) -> Result<()> {
