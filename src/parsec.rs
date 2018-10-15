@@ -632,55 +632,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         observation: &Observation<T, S::PublicId>,
     ) -> PostConsensusAction {
         match *observation {
-            Observation::Genesis(_) => {
-                // TODO: handle malice
-            }
-            Observation::Add(ref peer_id) => {
-                // - If we are already full member of the section, we can start sending gossips to
-                //   the new peer from this moment.
-                // - If we are the new peer, we must wait for the other members to send gossips to
-                //   us first.
-                //
-                // To distinguish between the two, we check whether everyone we reached consensus on
-                // adding also reached consensus on adding us.
-                let recv = self
-                    .peer_list
-                    .iter()
-                    .filter(|&(id, peer)| {
-                        // Peers that can vote, which means we got consensus on adding them.
-                        peer.state().can_vote() &&
-                        // Excluding the peer being added.
-                        *id != *peer_id &&
-                        // And excluding us.
-                        *id != *self.our_pub_id()
-                    }).all(|(_, peer)| {
-                        // Peers that can receive, which implies they've already sent us at least
-                        // one message which implies they've already reached consensus on adding us.
-                        peer.state().can_recv()
-                    });
-
-                let state = if recv {
-                    PeerState::VOTE | PeerState::SEND | PeerState::RECV
-                } else {
-                    PeerState::VOTE | PeerState::SEND
-                };
-
-                if self.peer_list.has_peer(peer_id) {
-                    self.peer_list.change_peer_state(peer_id, state);
-                } else {
-                    let genesis_group: Vec<_> = self.genesis_group().into_iter().cloned().collect();
-                    self.peer_list
-                        .add_peer(peer_id.clone(), state, &genesis_group);
-                }
-            }
-            Observation::Remove(ref peer_id) => {
-                self.peer_list.remove_peer(peer_id);
-                self.meta_elections.handle_peer_removed(peer_id);
-
-                if *peer_id == *self.our_pub_id() {
-                    return PostConsensusAction::Stop;
-                }
-            }
+            Observation::Add(ref peer_id) => self.handle_add_peer(peer_id),
+            Observation::Remove(ref peer_id) => self.handle_remove_peer(peer_id),
             Observation::Accusation {
                 ref offender,
                 ref malice,
@@ -691,15 +644,68 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     offender,
                     malice
                 );
-                self.peer_list.remove_peer(offender);
-                self.meta_elections.handle_peer_removed(offender);
+
+                self.handle_remove_peer(offender)
             }
-            Observation::OpaquePayload(_) => {}
+            Observation::Genesis(_) | Observation::OpaquePayload(_) => {
+                PostConsensusAction::Continue
+            }
+        }
+    }
+
+    fn handle_add_peer(&mut self, peer_id: &S::PublicId) -> PostConsensusAction {
+        // - If we are already full member of the section, we can start sending gossips to
+        //   the new peer from this moment.
+        // - If we are the new peer, we must wait for the other members to send gossips to
+        //   us first.
+        //
+        // To distinguish between the two, we check whether everyone we reached consensus on
+        // adding also reached consensus on adding us.
+        let recv = self
+            .peer_list
+            .iter()
+            .filter(|&(id, peer)| {
+                // Peers that can vote, which means we got consensus on adding them.
+                peer.state().can_vote() &&
+                        // Excluding the peer being added.
+                        *id != *peer_id &&
+                        // And excluding us.
+                        *id != *self.our_pub_id()
+            }).all(|(_, peer)| {
+                // Peers that can receive, which implies they've already sent us at least
+                // one message which implies they've already reached consensus on adding us.
+                peer.state().can_recv()
+            });
+
+        let state = if recv {
+            PeerState::VOTE | PeerState::SEND | PeerState::RECV
+        } else {
+            PeerState::VOTE | PeerState::SEND
+        };
+
+        if self.peer_list.has_peer(peer_id) {
+            self.peer_list.change_peer_state(peer_id, state);
+        } else {
+            let genesis_group: Vec<_> = self.genesis_group().into_iter().cloned().collect();
+            self.peer_list
+                .add_peer(peer_id.clone(), state, &genesis_group);
         }
 
         PostConsensusAction::Continue
     }
 
+    fn handle_remove_peer(&mut self, peer_id: &S::PublicId) -> PostConsensusAction {
+        self.peer_list.remove_peer(peer_id);
+        self.meta_elections.handle_peer_removed(peer_id);
+
+        if *peer_id == *self.our_pub_id() {
+            PostConsensusAction::Stop
+        } else {
+            PostConsensusAction::Continue
+        }
+    }
+
+    // Handle consensus reached by other peer.
     fn handle_peer_consensus(
         &mut self,
         peer_id: &S::PublicId,
