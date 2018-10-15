@@ -84,13 +84,8 @@ impl<S: SecretId> PeerList<S> {
         self.peer_state(self.our_id.public_id())
     }
 
-    /// Adds a peer in the given state into the map. If the peer has already been added, merges its
-    /// state with the one given.
-    pub fn add_peer<'a, I>(&mut self, peer_id: S::PublicId, state: PeerState, genesis_group: I)
-    where
-        I: IntoIterator<Item = &'a S::PublicId>,
-        S::PublicId: 'a,
-    {
+    /// Adds a peer in the given state into the map.
+    pub fn add_peer(&mut self, peer_id: S::PublicId, state: PeerState) {
         match self.peers.entry(peer_id) {
             Entry::Occupied(entry) => {
                 log_or_panic!(
@@ -103,23 +98,7 @@ impl<S: SecretId> PeerList<S> {
                 let peer_id = entry.key().clone();
                 self.peer_id_hashes
                     .push((Hash::from(serialise(&peer_id).as_slice()), peer_id));
-
-                let mut peer = Peer::new(state);
-
-                // Do not populate our membership list, as it would be redundant.
-                if entry.key() != self.our_id.public_id() {
-                    for genesis_peer_id in genesis_group {
-                        // Do not add the peer into their own membership list, as it too would be
-                        // redundant.
-                        if genesis_peer_id == entry.key() {
-                            continue;
-                        }
-
-                        peer.add_to_membership_list(genesis_peer_id.clone());
-                    }
-                }
-
-                let _ = entry.insert(peer);
+                let _ = entry.insert(Peer::new(state));
             }
         };
     }
@@ -152,24 +131,89 @@ impl<S: SecretId> PeerList<S> {
     /// If `peer_id` is ourselves, this function does nothing to prevent redundancy (the `PeerList`
     /// itself is already out membership list). If `other_peer_id` equals `peer_id`, this function
     /// also does nothing, as every peer implicitly knows themselves, so it too would be redundant.
-    pub fn add_to_membership_list(&mut self, peer_id: &S::PublicId, other_peer_id: S::PublicId) {
+    pub fn add_to_peer_membership_list(
+        &mut self,
+        peer_id: &S::PublicId,
+        other_peer_id: S::PublicId,
+    ) {
         if *peer_id == *self.our_id.public_id() || *peer_id == other_peer_id {
             return;
         }
 
         if let Some(peer) = self.peers.get_mut(peer_id) {
             peer.add_to_membership_list(other_peer_id)
+        } else {
+            log_or_panic!(
+                "{:?} tried to add to membership list of unknown peer {:?}",
+                self.our_id.public_id(),
+                peer_id
+            )
         }
     }
 
     /// Remove `other_peer_id` from `peer_id`'s membership list.
-    pub fn remove_from_membership_list(
+    pub fn remove_from_peer_membership_list(
         &mut self,
         peer_id: &S::PublicId,
         other_peer_id: S::PublicId,
     ) {
         if let Some(peer) = self.peers.get_mut(peer_id) {
             peer.remove_from_membership_list(other_peer_id)
+        } else {
+            log_or_panic!(
+                "{:?} tried to remove from membership list of unknown peer {:?}",
+                self.our_id.public_id(),
+                peer_id
+            )
+        }
+    }
+
+    /// Initialise the membership list of `peer_id` with the given `other_peer_ids`.
+    pub fn initialise_peer_membership_list<I>(&mut self, peer_id: &S::PublicId, membership_list: I)
+    where
+        I: IntoIterator<Item = S::PublicId>,
+    {
+        // Do not populate our membership list, and do not put the peer into their own membership
+        // list, as it would be redundant.
+
+        if *peer_id == *self.our_id.public_id() {
+            return;
+        }
+
+        if let Some(peer) = self.peers.get_mut(peer_id) {
+            for other_peer_id in membership_list
+                .into_iter()
+                .filter(|other_peer_id| other_peer_id != peer_id)
+            {
+                peer.add_to_membership_list(other_peer_id);
+            }
+        } else {
+            log_or_panic!(
+                "{:?} tried to initialise membership list of unknown peer {:?}",
+                self.our_id.public_id(),
+                peer_id
+            )
+        }
+    }
+
+    /// Returns whether the membership list of the given peer is already initialised.
+    pub fn is_membership_list_initialised(&self, peer_id: &S::PublicId) -> bool {
+        self.peers
+            .get(peer_id)
+            .map_or(false, |peer| !peer.membership_list().is_empty())
+    }
+
+    /// Returns the historic membership list of the given peer at the time the event with the given
+    /// index was their last event.
+    pub fn membership_list_at(
+        &self,
+        peer_id: &S::PublicId,
+        event_index: u64,
+    ) -> BTreeSet<S::PublicId> {
+        if let Some(peer) = self.peers.get(peer_id) {
+            peer.membership_list_at(event_index)
+        } else {
+            BTreeSet::new()
         }
     }
 
@@ -437,14 +481,12 @@ impl<P: PublicId> Peer<P> {
     }
 
     /// Returns the current membership list.
-    #[allow(unused)]
     pub fn membership_list(&self) -> &BTreeSet<P> {
         &self.membership_list
     }
 
     /// Returns the historic membership list at the time the event at `index` was the last event of
     /// this peer.
-    #[allow(unused)]
     pub fn membership_list_at(&self, event_index: u64) -> BTreeSet<P> {
         self.membership_list_changes
             .iter()
