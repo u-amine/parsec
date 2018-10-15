@@ -115,7 +115,7 @@ impl<S: SecretId> PeerList<S> {
                             continue;
                         }
 
-                        peer.add_peer(genesis_peer_id.clone());
+                        peer.add_to_membership_list(genesis_peer_id.clone());
                     }
                 }
 
@@ -152,20 +152,24 @@ impl<S: SecretId> PeerList<S> {
     /// If `peer_id` is ourselves, this function does nothing to prevent redundancy (the `PeerList`
     /// itself is already out membership list). If `other_peer_id` equals `peer_id`, this function
     /// also does nothing, as every peer implicitly knows themselves, so it too would be redundant.
-    pub fn add_peers_peer(&mut self, peer_id: &S::PublicId, other_peer_id: S::PublicId) {
+    pub fn add_to_membership_list(&mut self, peer_id: &S::PublicId, other_peer_id: S::PublicId) {
         if *peer_id == *self.our_id.public_id() || *peer_id == other_peer_id {
             return;
         }
 
         if let Some(peer) = self.peers.get_mut(peer_id) {
-            peer.add_peer(other_peer_id)
+            peer.add_to_membership_list(other_peer_id)
         }
     }
 
     /// Remove `other_peer_id` from `peer_id`'s membership list.
-    pub fn remove_peers_peer(&mut self, peer_id: &S::PublicId, other_peer_id: S::PublicId) {
+    pub fn remove_from_membership_list(
+        &mut self,
+        peer_id: &S::PublicId,
+        other_peer_id: S::PublicId,
+    ) {
         if let Some(peer) = self.peers.get_mut(peer_id) {
-            peer.remove_peer(other_peer_id)
+            peer.remove_from_membership_list(other_peer_id)
         }
     }
 
@@ -394,8 +398,8 @@ impl Debug for PeerState {
 pub struct Peer<P: PublicId> {
     state: PeerState,
     events: BTreeMap<u64, Hash>,
-    peers: BTreeSet<P>,
-    peers_changes: Vec<(u64, PeersChange<P>)>,
+    membership_list: BTreeSet<P>,
+    membership_list_changes: Vec<(u64, MembershipListChange<P>)>,
 }
 
 impl<P: PublicId> Peer<P> {
@@ -403,8 +407,8 @@ impl<P: PublicId> Peer<P> {
         Self {
             state,
             events: BTreeMap::new(),
-            peers: BTreeSet::new(),
-            peers_changes: Vec::new(),
+            membership_list: BTreeSet::new(),
+            membership_list_changes: Vec::new(),
         }
     }
 
@@ -424,57 +428,57 @@ impl<P: PublicId> Peer<P> {
         self.events.get(&index)
     }
 
-    pub fn add_peer(&mut self, peer_id: P) {
-        self.change_peers(PeersChange::Add(peer_id))
+    pub fn add_to_membership_list(&mut self, peer_id: P) {
+        self.change_membership_list(MembershipListChange::Add(peer_id))
     }
 
-    pub fn remove_peer(&mut self, peer_id: P) {
-        self.change_peers(PeersChange::Remove(peer_id))
+    pub fn remove_from_membership_list(&mut self, peer_id: P) {
+        self.change_membership_list(MembershipListChange::Remove(peer_id))
     }
 
     /// Returns the current membership list.
     #[allow(unused)]
-    pub fn peers(&self) -> &BTreeSet<P> {
-        &self.peers
+    pub fn membership_list(&self) -> &BTreeSet<P> {
+        &self.membership_list
     }
 
     /// Returns the historic membership list at the time the event at `index` was the last event of
     /// this peer.
     #[allow(unused)]
-    pub fn peers_at(&self, event_index: u64) -> BTreeSet<P> {
-        self.peers_changes
+    pub fn membership_list_at(&self, event_index: u64) -> BTreeSet<P> {
+        self.membership_list_changes
             .iter()
             .rev()
             .take_while(|(index, _)| *index >= event_index)
             .map(|(_, ref change)| change)
-            .fold(self.peers.clone(), |mut result, change| {
+            .fold(self.membership_list.clone(), |mut result, change| {
                 change.unapply(&mut result);
                 result
             })
     }
 
-    fn change_peers(&mut self, change: PeersChange<P>) {
-        change.apply(&mut self.peers);
+    fn change_membership_list(&mut self, change: MembershipListChange<P>) {
+        change.apply(&mut self.membership_list);
 
         if let Some(index) = self.events.keys().rev().next() {
-            self.peers_changes.push((*index, change));
+            self.membership_list_changes.push((*index, change));
         }
     }
 }
 
 #[derive(Debug)]
-enum PeersChange<P> {
+enum MembershipListChange<P> {
     Add(P),
     Remove(P),
 }
 
-impl<P: Clone + Ord> PeersChange<P> {
+impl<P: Clone + Ord> MembershipListChange<P> {
     fn apply(&self, peers: &mut BTreeSet<P>) {
         match *self {
-            PeersChange::Add(ref peer_id) => {
+            MembershipListChange::Add(ref peer_id) => {
                 let _ = peers.insert(peer_id.clone());
             }
-            PeersChange::Remove(ref peer_id) => {
+            MembershipListChange::Remove(ref peer_id) => {
                 let _ = peers.remove(peer_id);
             }
         }
@@ -482,10 +486,10 @@ impl<P: Clone + Ord> PeersChange<P> {
 
     fn unapply(&self, peers: &mut BTreeSet<P>) {
         match *self {
-            PeersChange::Add(ref peer_id) => {
+            MembershipListChange::Add(ref peer_id) => {
                 let _ = peers.remove(peer_id);
             }
-            PeersChange::Remove(ref peer_id) => {
+            MembershipListChange::Remove(ref peer_id) => {
                 let _ = peers.insert(peer_id.clone());
             }
         }

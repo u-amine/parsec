@@ -722,13 +722,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         match *payload {
             Observation::Add(ref other_peer_id) => self
                 .peer_list
-                .add_peers_peer(peer_id, other_peer_id.clone()),
+                .add_to_membership_list(peer_id, other_peer_id.clone()),
             Observation::Remove(ref other_peer_id) => self
                 .peer_list
-                .remove_peers_peer(peer_id, other_peer_id.clone()),
-            Observation::Accusation { ref offender, .. } => {
-                self.peer_list.remove_peers_peer(peer_id, offender.clone())
-            }
+                .remove_from_membership_list(peer_id, other_peer_id.clone()),
+            Observation::Accusation { ref offender, .. } => self
+                .peer_list
+                .remove_from_membership_list(peer_id, offender.clone()),
             _ => (),
         }
     }
