@@ -2209,4 +2209,55 @@ mod functional_tests {
         assert_eq!(alice.pending_accusations, expected_accusations);
         assert!(alice.events.contains_key(&c_4_hash));
     }
+
+    #[test]
+    fn handle_malice_invalid_accusation() {
+        let mut alice_contents = parse_test_dot_file("alice.dot");
+
+        let a_5_hash = *unwrap!(find_event_by_short_name(
+            alice_contents.events.values(),
+            "A_5"
+        )).hash();
+        let d_1_hash = *unwrap!(find_event_by_short_name(
+            alice_contents.events.values(),
+            "D_1"
+        )).hash();
+
+        // Create an invalid accusation from Alice
+        let a_6 = Event::<Transaction, _>::new_from_observation(
+            a_5_hash,
+            Observation::Accusation {
+                offender: PeerId::new("Dave"),
+                malice: Malice::Fork(d_1_hash),
+            },
+            &alice_contents.events,
+            &alice_contents.peer_list,
+        );
+        let a_6_hash = *a_6.hash();
+        alice_contents.add_event(a_6);
+        let alice = Parsec::from_parsed_contents(alice_contents);
+        assert!(alice.events.contains_key(&a_6_hash));
+
+        let mut carol = Parsec::from_parsed_contents(parse_test_dot_file("carol.dot"));
+        assert!(!carol.events.contains_key(&a_6_hash));
+
+        // Send gossip from Alice to Carol
+        let message = unwrap!(alice.create_gossip(Some(&PeerId::new("Carol"))));
+        unwrap!(carol.handle_request(alice.our_pub_id(), message));
+        assert!(carol.events.contains_key(&a_6_hash));
+
+        // Verify that Carol detected malice and accused Alice of it.
+        let (offender, hash) = unwrap!(
+            our_votes(&carol)
+                .filter_map(|payload| match payload {
+                    Observation::Accusation {
+                        ref offender,
+                        malice: Malice::InvalidAccusation(hash),
+                    } => Some((offender, hash)),
+                    _ => None,
+                }).next()
+        );
+        assert_eq!(offender, alice.our_pub_id());
+        assert_eq!(*hash, a_6_hash);
+    }
 }
