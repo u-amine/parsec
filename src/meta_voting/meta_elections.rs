@@ -9,9 +9,12 @@
 use super::{MetaVote, MetaVotes};
 use hash::Hash;
 use id::PublicId;
+use network_event::NetworkEvent;
+use observation::Observation;
 use round_hash::RoundHash;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{self, Debug};
 use std::{iter, mem, usize};
 
 /// Handle that uniquely identifies a `MetaElection`.
@@ -23,16 +26,29 @@ impl MetaElectionHandle {
     pub const CURRENT: Self = MetaElectionHandle(usize::MAX);
 }
 
-struct MetaElection<P: PublicId> {
+impl Debug for MetaElectionHandle {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "MetaElectionHandle");
+
+        if *self == Self::CURRENT {
+            write!(f, "::CURRENT")
+        } else {
+            write!(f, "({})", self.0)
+        }
+    }
+}
+
+struct MetaElection<T: NetworkEvent, P: PublicId> {
     meta_votes: MetaVotes<P>,
     // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
     // the one for round `x` is held at index `x`.
     round_hashes: BTreeMap<P, Vec<RoundHash>>,
     // Set of peers who haven't decided this election yet.
     undecided_peers: BTreeSet<P>,
+    outcome: Option<Outcome<T, P>>,
 }
 
-impl<P: PublicId> MetaElection<P> {
+impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
     fn new<'a, I>(voters: I) -> Self
     where
         I: IntoIterator<Item = &'a P>,
@@ -42,6 +58,7 @@ impl<P: PublicId> MetaElection<P> {
             meta_votes: BTreeMap::new(),
             round_hashes: BTreeMap::new(),
             undecided_peers: voters.into_iter().cloned().collect(),
+            outcome: None,
         }
     }
 
@@ -59,41 +76,55 @@ impl<P: PublicId> MetaElection<P> {
     }
 }
 
-pub(crate) struct MetaElections<P: PublicId> {
+// Outcome of a meta-election.
+struct Outcome<T: NetworkEvent, P: PublicId> {
+    // Payload decided by this election
+    payload: Observation<T, P>,
+    // Number of voters at the time this election was decided.
+    voter_count: usize,
+}
+
+pub(crate) struct MetaElections<T: NetworkEvent, P: PublicId> {
     // Current ongoing meta-election.
-    current: MetaElection<P>,
-    // Meta-elections decided by us, but not by all peers.
-    decided: BTreeMap<MetaElectionHandle, MetaElection<P>>,
+    current_election: MetaElection<T, P>,
+    // Meta-elections that are already decided by us, but not by all the other peers.
+    previous_elections: BTreeMap<MetaElectionHandle, MetaElection<T, P>>,
     // Hashes of the consensused blocks in the order they were consensused.
-    history: Vec<Hash>,
+    consensus_history: Vec<Hash>,
     // Index of next decided meta-election
     next_index: usize,
 }
 
-impl<P: PublicId> MetaElections<P> {
+impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
     pub fn new<'a, I>(voters: I) -> Self
     where
         I: IntoIterator<Item = &'a P>,
         P: 'a,
     {
         MetaElections {
-            current: MetaElection::new(voters),
-            decided: BTreeMap::new(),
-            history: Vec::new(),
+            current_election: MetaElection::new(voters),
+            previous_elections: BTreeMap::new(),
+            consensus_history: Vec::new(),
             next_index: 0,
         }
     }
 
     pub fn all<'a>(&'a self) -> impl Iterator<Item = MetaElectionHandle> + 'a {
-        self.decided
+        self.previous_elections
             .keys()
             .cloned()
             .chain(iter::once(MetaElectionHandle::CURRENT))
     }
 
-    /// Elections that were already decided by us, but not by all peers.
-    pub fn decided<'a>(&'a self) -> impl Iterator<Item = MetaElectionHandle> + 'a {
-        self.decided.keys().cloned()
+    /// Elections that were already decided by us, but not by the given peer.
+    pub fn undecided_by<'a, 'b: 'a, 'c: 'a>(
+        &'b self,
+        peer_id: &'c P,
+    ) -> impl Iterator<Item = MetaElectionHandle> + 'a {
+        self.previous_elections
+            .iter()
+            .filter(move |(_, election)| election.undecided_peers.contains(peer_id))
+            .map(|(handle, _)| *handle)
     }
 
     pub fn meta_votes(
@@ -108,42 +139,68 @@ impl<P: PublicId> MetaElections<P> {
         self.get(handle).and_then(|e| e.round_hashes.get(peer_id))
     }
 
+    /// Payload decided by the given meta-election, if any.
+    pub fn decided_payload(&self, handle: MetaElectionHandle) -> Option<&Observation<T, P>> {
+        self.get(handle)
+            .and_then(|election| election.outcome.as_ref())
+            .map(|outcome| &outcome.payload)
+    }
+
+    /// Number of voters at the time the given meta-election was decided. `None` if not yet decided.
+    pub fn decided_voter_count(&self, handle: MetaElectionHandle) -> Option<usize> {
+        self.get(handle)
+            .and_then(|election| election.outcome.as_ref())
+            .map(|outcome| outcome.voter_count)
+    }
+
     pub fn consensus_history(&self) -> &[Hash] {
-        &self.history
+        &self.consensus_history
     }
 
     /// Creates new election and returns handle of the previous elections.
-    pub fn new_election<'a, I>(&mut self, payload_hash: Hash, voters: I) -> MetaElectionHandle
+    pub fn new_election<'a, I>(
+        &mut self,
+        payload: Observation<T, P>,
+        voters: I,
+    ) -> MetaElectionHandle
     where
         I: IntoIterator<Item = &'a P>,
         P: 'a,
     {
-        let previous = mem::replace(&mut self.current, MetaElection::new(voters));
-        let handle = self.next_handle();
+        let hash = payload.create_hash();
+        let new = MetaElection::new(voters);
+        let voter_count = new.undecided_peers.len();
 
-        let _ = self.decided.insert(handle, previous);
-        self.history.push(payload_hash);
+        let mut previous = mem::replace(&mut self.current_election, new);
+        previous.outcome = Some(Outcome {
+            payload,
+            voter_count,
+        });
+
+        let handle = self.next_handle();
+        let _ = self.previous_elections.insert(handle, previous);
+        self.consensus_history.push(hash);
 
         handle
     }
 
     /// Mark the given election as decided by the given peer. If there are no more undecided peers,
     /// the election is removed.
-    pub fn mark_as_decided(&mut self, election: MetaElectionHandle, peer_id: &P) {
-        if let Entry::Occupied(mut entry) = self.decided.entry(election) {
+    pub fn mark_as_decided(&mut self, handle: MetaElectionHandle, peer_id: &P) {
+        if let Entry::Occupied(mut entry) = self.previous_elections.entry(handle) {
             let _ = entry.get_mut().undecided_peers.remove(peer_id);
             if entry.get().undecided_peers.is_empty() {
                 let _ = entry.remove();
             }
         } else {
-            log_or_panic!("Meta-election not found");
+            Self::not_found(handle)
         }
     }
 
     pub fn handle_peer_removed(&mut self, peer_id: &P) {
         let mut to_remove = Vec::new();
 
-        for (handle, election) in &mut self.decided {
+        for (handle, election) in &mut self.previous_elections {
             let _ = election.undecided_peers.remove(peer_id);
             if election.undecided_peers.is_empty() {
                 to_remove.push(*handle);
@@ -151,7 +208,7 @@ impl<P: PublicId> MetaElections<P> {
         }
 
         for handle in to_remove {
-            let _ = self.decided.remove(&handle);
+            let _ = self.previous_elections.remove(&handle);
         }
     }
 
@@ -163,8 +220,6 @@ impl<P: PublicId> MetaElections<P> {
     ) {
         if let Some(election) = self.get_mut(handle) {
             let _ = election.meta_votes.insert(event_hash, meta_votes);
-        } else {
-            log_or_panic!("Meta-election not found");
         }
     }
 
@@ -173,7 +228,7 @@ impl<P: PublicId> MetaElections<P> {
         I: IntoIterator<Item = &'a P>,
         P: 'a,
     {
-        let hash = self.history.last().cloned().unwrap_or(Hash::ZERO);
+        let hash = self.consensus_history.last().cloned().unwrap_or(Hash::ZERO);
         self.initialise_current_election_round_hashes(peer_ids, hash);
     }
 
@@ -181,7 +236,6 @@ impl<P: PublicId> MetaElections<P> {
         let election = if let Some(election) = self.get_mut(handle) {
             election
         } else {
-            log_or_panic!("Meta-election not found");
             return;
         };
 
@@ -214,27 +268,38 @@ impl<P: PublicId> MetaElections<P> {
         I: IntoIterator<Item = &'a P>,
         P: 'a,
     {
-        self.current.initialise_round_hashes(peer_ids, initial_hash);
+        self.current_election
+            .initialise_round_hashes(peer_ids, initial_hash);
     }
 
     pub fn current_meta_votes(&self) -> &MetaVotes<P> {
-        &self.current.meta_votes
+        &self.current_election.meta_votes
     }
 
-    fn get(&self, handle: MetaElectionHandle) -> Option<&MetaElection<P>> {
+    fn get(&self, handle: MetaElectionHandle) -> Option<&MetaElection<T, P>> {
         if handle == MetaElectionHandle::CURRENT {
-            Some(&self.current)
+            Some(&self.current_election)
+        } else if let Some(election) = self.previous_elections.get(&handle) {
+            Some(election)
         } else {
-            self.decided.get(&handle)
+            Self::not_found(handle);
+            None
         }
     }
 
-    fn get_mut(&mut self, handle: MetaElectionHandle) -> Option<&mut MetaElection<P>> {
+    fn get_mut(&mut self, handle: MetaElectionHandle) -> Option<&mut MetaElection<T, P>> {
         if handle == MetaElectionHandle::CURRENT {
-            Some(&mut self.current)
+            Some(&mut self.current_election)
+        } else if let Some(election) = self.previous_elections.get_mut(&handle) {
+            Some(election)
         } else {
-            self.decided.get_mut(&handle)
+            Self::not_found(handle);
+            None
         }
+    }
+
+    fn not_found(handle: MetaElectionHandle) {
+        log_or_panic!("Meta-election at {:?} not found", handle);
     }
 
     fn next_handle(&mut self) -> MetaElectionHandle {
@@ -251,14 +316,14 @@ impl<P: PublicId> MetaElections<P> {
 }
 
 #[cfg(test)]
-impl<P: PublicId> MetaElections<P> {
+impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
     pub fn new_from_parsed<'a, I>(voters: I, votes: MetaVotes<P>) -> Self
     where
         I: IntoIterator<Item = &'a P>,
         P: 'a,
     {
         let mut new = Self::new(voters);
-        new.current.meta_votes = votes;
+        new.current_election.meta_votes = votes;
         new
     }
 }
