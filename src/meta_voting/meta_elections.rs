@@ -28,18 +28,21 @@ impl MetaElectionHandle {
 
 impl Debug for MetaElectionHandle {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "MetaElectionHandle");
+        write!(f, "MetaElectionHandle(")?;
 
         if *self == Self::CURRENT {
-            write!(f, "::CURRENT")
+            write!(f, "CURRENT")?
         } else {
-            write!(f, "({})", self.0)
+            write!(f, "{}", self.0)?
         }
+
+        write!(f, ")")
     }
 }
 
 struct MetaElection<T: NetworkEvent, P: PublicId> {
-    meta_votes: MetaVotes<P>,
+    meta_votes: BTreeMap<Hash, MetaVotes<P>>,
+    meta_events: BTreeMap<Hash, MetaEvent<P>>,
     // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
     // the one for round `x` is held at index `x`.
     round_hashes: BTreeMap<P, Vec<RoundHash>>,
@@ -56,6 +59,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
     {
         MetaElection {
             meta_votes: BTreeMap::new(),
+            meta_events: BTreeMap::new(),
             round_hashes: BTreeMap::new(),
             undecided_peers: voters.into_iter().cloned().collect(),
             outcome: None,
@@ -82,6 +86,20 @@ struct Outcome<T: NetworkEvent, P: PublicId> {
     payload: Observation<T, P>,
     // Number of voters at the time this election was decided.
     voter_count: usize,
+}
+
+pub(crate) struct MetaEvent<P> {
+    // The set of peers for which this event can strongly-see an event by that peer which carries a
+    // valid block.  If there are a supermajority of peers here, this event is an "observer".
+    pub observations: BTreeSet<P>,
+}
+
+impl<P: PublicId> MetaEvent<P> {
+    fn new() -> Self {
+        MetaEvent {
+            observations: BTreeSet::new(),
+        }
+    }
 }
 
 pub(crate) struct MetaElections<T: NetworkEvent, P: PublicId> {
@@ -133,6 +151,30 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         event_hash: &Hash,
     ) -> Option<&BTreeMap<P, Vec<MetaVote>>> {
         self.get(handle).and_then(|e| e.meta_votes.get(event_hash))
+    }
+
+    pub fn add_meta_event(&mut self, handle: MetaElectionHandle, event_hash: Hash) {
+        if let Some(election) = self.get_mut(handle) {
+            let _ = election.meta_events.insert(event_hash, MetaEvent::new());
+        }
+    }
+
+    pub fn meta_event(
+        &self,
+        handle: MetaElectionHandle,
+        event_hash: &Hash,
+    ) -> Option<&MetaEvent<P>> {
+        self.get(handle)
+            .and_then(|election| election.meta_events.get(event_hash))
+    }
+
+    pub fn meta_event_mut(
+        &mut self,
+        handle: MetaElectionHandle,
+        event_hash: &Hash,
+    ) -> Option<&mut MetaEvent<P>> {
+        self.get_mut(handle)
+            .and_then(|election| election.meta_events.get_mut(event_hash))
     }
 
     pub fn round_hashes(&self, handle: MetaElectionHandle, peer_id: &P) -> Option<&Vec<RoundHash>> {
@@ -272,7 +314,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
             .initialise_round_hashes(peer_ids, initial_hash);
     }
 
-    pub fn current_meta_votes(&self) -> &MetaVotes<P> {
+    pub fn current_meta_votes(&self) -> &BTreeMap<Hash, MetaVotes<P>> {
         &self.current_election.meta_votes
     }
 
@@ -317,7 +359,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
 
 #[cfg(test)]
 impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
-    pub fn new_from_parsed<'a, I>(voters: I, votes: MetaVotes<P>) -> Self
+    pub fn new_from_parsed<'a, I>(voters: I, votes: BTreeMap<Hash, MetaVotes<P>>) -> Self
     where
         I: IntoIterator<Item = &'a P>,
         P: 'a,

@@ -646,9 +646,6 @@ mod tests {
             let parsed_result = unwrap!(parse_dot_file(&dot_file_path));
 
             assert_eq!(gossip_graph.len(), parsed_result.events_order.len());
-            for event in &mut gossip_graph.values_mut() {
-                event.observations.clear();
-            }
             assert_eq!(gossip_graph, parsed_result.events);
 
             // The dumped dot file doesn't contain all the meta_votes

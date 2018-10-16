@@ -14,7 +14,7 @@ use error::{Error, Result};
 use gossip::{Event, PackedEvent, Request, Response};
 use hash::Hash;
 use id::SecretId;
-use meta_voting::{MetaElectionHandle, MetaElections, MetaVote, Step};
+use meta_voting::{MetaElectionHandle, MetaElections, MetaEvent, MetaVote, Step};
 #[cfg(test)]
 use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
@@ -459,20 +459,47 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         event.other_parent().and_then(|hash| self.events.get(hash))
     }
 
-    fn has_supermajority_observations(&self, event: &Event<T, S::PublicId>) -> bool {
-        self.peer_list.is_super_majority(event.observations.len())
-    }
-
-    fn is_observer(&self, event: &Event<T, S::PublicId>) -> bool {
+    fn is_observer(
+        &self,
+        election: MetaElectionHandle,
+        event: &Event<T, S::PublicId>,
+        meta_event: &MetaEvent<S::PublicId>,
+    ) -> bool {
         // An event is an observer if it has a supermajority of observations and its self-parent
         // does not.
-        self.has_supermajority_observations(event) && self.self_parent(event).map_or_else(
-            || {
-                log_or_panic!("{:?} has observations, but no self-parent", event);
-                true
-            },
-            |parent| !self.has_supermajority_observations(parent),
-        )
+
+        if !self.has_supermajority_observations(meta_event) {
+            return false;
+        }
+
+        let self_parent = if let Some(event) = self.self_parent(event) {
+            event
+        } else {
+            log_or_panic!(
+                "{:?} has event {:?} with observarions, but not self-parent",
+                self.our_pub_id(),
+                event
+            );
+            return false;
+        };
+
+        // If self-parent is initial, we don't have to check it's meta-event, as we already know it
+        // can not have any observations. Also, we don't assign meta-events to initial events anyway.
+        if self_parent.is_initial() {
+            return true;
+        }
+
+        if let Some(meta_parent) = self.meta_elections.meta_event(election, self_parent.hash()) {
+            !self.has_supermajority_observations(meta_parent)
+        } else {
+            self.meta_event_not_found(election, self_parent.hash());
+            false
+        }
+    }
+
+    fn has_supermajority_observations(&self, meta_event: &MetaEvent<S::PublicId>) -> bool {
+        self.peer_list
+            .is_super_majority(meta_event.observations.len())
     }
 
     fn unpack_and_add_events(
@@ -540,7 +567,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             return Ok(());
         }
 
-        self.set_interesting_content(&event_hash)?;
         self.initialise_membership_list(&event_hash);
         self.process_event(&event_hash)?;
 
@@ -548,10 +574,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn process_event(&mut self, event_hash: &Hash) -> Result<()> {
-        self.set_observations(event_hash)?;
+        self.set_interesting_content(&event_hash)?;
 
         let elections: Vec<_> = self.meta_elections.all().collect();
         for election in elections {
+            self.meta_elections.add_meta_event(election, *event_hash);
+            self.set_observations(election, event_hash)?;
             self.set_meta_votes(election, event_hash)?;
             self.meta_elections
                 .update_round_hashes(election, event_hash);
@@ -743,6 +771,15 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
     }
 
+    fn meta_event_not_found(&self, election: MetaElectionHandle, event_hash: &Hash) {
+        log_or_panic!(
+            "{:?} does't have meta-event for event {:?} in meta-election {:?}",
+            self.our_pub_id(),
+            event_hash,
+            election,
+        )
+    }
+
     fn set_interesting_content(&mut self, event_hash: &Hash) -> Result<()> {
         let interesting_content = self.interesting_content(event_hash)?;
         if !interesting_content.is_empty() {
@@ -882,7 +919,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .initialise_peer_membership_list(&creator, membership_list);
     }
 
-    fn set_observations(&mut self, event_hash: &Hash) -> Result<()> {
+    fn set_observations(&mut self, election: MetaElectionHandle, event_hash: &Hash) -> Result<()> {
         let observations = {
             let event = self.get_known_event(event_hash)?;
             self.interesting_events
@@ -898,8 +935,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 }).cloned()
                 .collect()
         };
-        self.get_known_event_mut(event_hash)
-            .map(|event| event.observations = observations)
+
+        if let Some(event) = self.meta_elections.meta_event_mut(election, event_hash) {
+            event.observations = observations;
+        }
+
+        Ok(())
     }
 
     fn set_meta_votes(&mut self, election: MetaElectionHandle, event_hash: &Hash) -> Result<()> {
@@ -909,6 +950,14 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // from those ones.
         {
             let event = self.get_known_event(event_hash)?;
+            let meta_event = self
+                .meta_elections
+                .meta_event(election, event_hash)
+                .ok_or_else(|| {
+                    self.meta_event_not_found(election, event_hash);
+                    Error::Logic
+                })?;
+
             if let Some(parent_votes) = self.self_parent(event).and_then(|parent| {
                 self.meta_elections
                     .meta_votes(election, parent.hash())
@@ -923,11 +972,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     };
                     let _ = meta_votes.insert(peer_id, new_meta_votes);
                 }
-            } else if self.is_observer(event) {
+            } else if self.is_observer(election, event, meta_event) {
                 // Start meta votes for this event.
                 for peer_id in self.peer_list.voter_ids() {
                     let other_votes = self.collect_other_meta_votes(election, peer_id, event);
-                    let initial_estimate = event.observations.contains(peer_id);
+                    let initial_estimate = meta_event.observations.contains(peer_id);
                     let _ = meta_votes.insert(
                         peer_id.clone(),
                         MetaVote::new(initial_estimate, &other_votes, voter_count),
@@ -1247,7 +1296,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.interesting_events.clear();
 
         for event in self.events.values_mut() {
-            event.observations.clear();
             event.interesting_content = vec![];
         }
     }
@@ -1257,7 +1305,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .restart_current_election_round_hashes(self.peer_list.all_ids());
         let events_hashes = self.events_order.to_vec();
         for event_hash in events_hashes {
-            let _ = self.set_interesting_content(&event_hash);
             let _ = self.process_event(&event_hash);
         }
     }
@@ -1685,7 +1732,7 @@ mod functional_tests {
         events: BTreeSet<Hash>,
         events_order: Vec<Hash>,
         consensused_blocks: VecDeque<Block<Transaction, PeerId>>,
-        meta_votes: MetaVotes<PeerId>,
+        meta_votes: BTreeMap<Hash, MetaVotes<PeerId>>,
     }
 
     impl Snapshot {

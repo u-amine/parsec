@@ -19,7 +19,7 @@ use observation::Observation;
 use peer_list::PeerList;
 use serialise;
 use std::cmp;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter};
 #[cfg(feature = "dump-graphs")]
 use std::io::{self, Write};
@@ -38,9 +38,6 @@ pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
     last_ancestors: BTreeMap<P, u64>,
     // Payloads of all the votes deemed interesting by this event.
     pub interesting_content: Vec<Observation<T, P>>,
-    // The set of peers for which this event can strongly-see an event by that peer which carries a
-    // valid block.  If there are a supermajority of peers here, this event is an "observer".
-    pub observations: BTreeSet<P>,
 }
 
 impl<T: NetworkEvent, P: PublicId> Event<T, P> {
@@ -131,7 +128,6 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             index,
             last_ancestors,
             interesting_content: vec![],
-            observations: BTreeSet::new(),
         }))
     }
 
@@ -241,7 +237,6 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             index,
             last_ancestors,
             interesting_content: vec![],
-            observations: BTreeSet::new(),
         }
     }
 
@@ -333,7 +328,6 @@ impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
             ", interesting_content: {:?}",
             self.interesting_content
         )?;
-        write!(formatter, ", observations: {:?}", self.observations)?;
         write!(formatter, " }}")
     }
 }
@@ -403,7 +397,6 @@ impl Event<Transaction, PeerId> {
             index,
             last_ancestors,
             interesting_content,
-            observations: BTreeSet::new(),
         }
     }
 }
