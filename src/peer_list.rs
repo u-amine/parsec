@@ -40,6 +40,10 @@ impl<S: SecretId> PeerList<S> {
         &self.our_id
     }
 
+    pub fn our_pub_id(&self) -> &S::PublicId {
+        self.our_id.public_id()
+    }
+
     /// Returns all sorted peer_ids.
     pub fn all_ids(&self) -> impl Iterator<Item = &S::PublicId> {
         self.peers.keys()
