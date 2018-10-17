@@ -51,15 +51,11 @@ struct MetaElection<T: NetworkEvent, P: PublicId> {
 }
 
 impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
-    fn new<'a, I>(voters: I) -> Self
-    where
-        I: IntoIterator<Item = &'a P>,
-        P: 'a,
-    {
+    fn new(voters: BTreeSet<P>) -> Self {
         MetaElection {
             meta_events: BTreeMap::new(),
             round_hashes: BTreeMap::new(),
-            undecided_peers: voters.into_iter().cloned().collect(),
+            undecided_peers: voters,
             outcome: None,
         }
     }
@@ -82,8 +78,8 @@ impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
 struct Outcome<T: NetworkEvent, P: PublicId> {
     // Payload decided by this election
     payload: Observation<T, P>,
-    // Number of voters at the time this election was decided.
-    voter_count: usize,
+    // List of voters at the time this election was decided.
+    voters: BTreeSet<P>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -119,11 +115,7 @@ pub(crate) struct MetaElections<T: NetworkEvent, P: PublicId> {
 }
 
 impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
-    pub fn new<'a, I>(voters: I) -> Self
-    where
-        I: IntoIterator<Item = &'a P>,
-        P: 'a,
-    {
+    pub fn new(voters: BTreeSet<P>) -> Self {
         MetaElections {
             current_election: MetaElection::new(voters),
             previous_elections: BTreeMap::new(),
@@ -211,11 +203,11 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
             .map(|outcome| &outcome.payload)
     }
 
-    /// Number of voters at the time the given meta-election was decided. `None` if not yet decided.
-    pub fn decided_voter_count(&self, handle: MetaElectionHandle) -> Option<usize> {
+    /// List of voters at the time the given meta-election was decided. `None` if not yet decided.
+    pub fn decided_voters(&self, handle: MetaElectionHandle) -> Option<&BTreeSet<P>> {
         self.get(handle)
             .and_then(|election| election.outcome.as_ref())
-            .map(|outcome| outcome.voter_count)
+            .map(|outcome| &outcome.voters)
     }
 
     pub fn consensus_history(&self) -> &[Hash] {
@@ -232,15 +224,13 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         I: IntoIterator<Item = &'a P>,
         P: 'a,
     {
+        let voters: BTreeSet<_> = voters.into_iter().cloned().collect();
+
         let hash = payload.create_hash();
-        let new = MetaElection::new(voters);
-        let voter_count = new.undecided_peers.len();
+        let new = MetaElection::new(voters.clone());
 
         let mut previous = mem::replace(&mut self.current_election, new);
-        previous.outcome = Some(Outcome {
-            payload,
-            voter_count,
-        });
+        previous.outcome = Some(Outcome { payload, voters });
 
         let handle = self.next_handle();
         let _ = self.previous_elections.insert(handle, previous);
@@ -348,7 +338,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         I: IntoIterator<Item = &'a P>,
         P: 'a,
     {
-        let mut new = Self::new(voters);
+        let mut new = Self::new(voters.into_iter().cloned().collect());
         new.current_election.meta_events = meta_events;
         new
     }

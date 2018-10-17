@@ -211,7 +211,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             interesting_events: BTreeMap::new(),
             consensused_blocks: VecDeque::new(),
             observations: BTreeMap::new(),
-            meta_elections: MetaElections::new(genesis_group),
+            meta_elections: MetaElections::new(genesis_group.clone()),
             is_interesting_event,
             pending_accusations: vec![],
         }
@@ -468,7 +468,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // An event is an observer if it has a supermajority of observations and its self-parent
         // does not.
 
-        if !self.has_supermajority_observations(meta_event) {
+        if !self.has_supermajority_observations(election, meta_event) {
             return false;
         }
 
@@ -490,16 +490,19 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
 
         if let Some(meta_parent) = self.meta_elections.meta_event(election, self_parent.hash()) {
-            !self.has_supermajority_observations(meta_parent)
+            !self.has_supermajority_observations(election, meta_parent)
         } else {
             self.meta_event_not_found(election, self_parent.hash());
             false
         }
     }
 
-    fn has_supermajority_observations(&self, meta_event: &MetaEvent<S::PublicId>) -> bool {
-        self.peer_list
-            .is_super_majority(meta_event.observations.len())
+    fn has_supermajority_observations(
+        &self,
+        election: MetaElectionHandle,
+        meta_event: &MetaEvent<S::PublicId>,
+    ) -> bool {
+        is_more_than_two_thirds(meta_event.observations.len(), self.voter_count(election))
     }
 
     fn unpack_and_add_events(
@@ -931,7 +934,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     fn set_observations(
         &self,
-        _election: MetaElectionHandle,
+        election: MetaElectionHandle,
         event_hash: &Hash,
         meta_event: &mut MetaEvent<S::PublicId>,
     ) -> Result<()> {
@@ -942,7 +945,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .filter_map(|(peer, hashes)| {
                 let old_hash = hashes.front()?;
                 let old_event = self.get_known_event(old_hash).ok()?;
-                if self.strongly_sees(event, old_event) {
+                if self.strongly_sees(election, event, old_event) {
                     Some(peer)
                 } else {
                     None
@@ -959,10 +962,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         event_hash: &Hash,
         meta_event: &mut MetaEvent<S::PublicId>,
     ) -> Result<()> {
-        let voter_count = self.voter_count(election);
+        let voters = self.voters(election);
 
-        // If self-parent already has meta votes associated with it, derive this event's meta votes
-        // from those ones.
         let event = self.get_known_event(event_hash)?;
         let parent_meta_votes = event
             .self_parent()
@@ -975,26 +976,34 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 }
             });
 
+        // If self-parent already has meta votes associated with it, derive this event's meta votes
+        // from those ones.
         if let Some(parent_meta_votes) = parent_meta_votes {
             for (peer_id, parent_event_votes) in parent_meta_votes {
                 let new_meta_votes = {
-                    let other_votes = self.collect_other_meta_votes(election, &peer_id, event);
+                    let other_votes =
+                        self.collect_other_meta_votes(election, &voters, &peer_id, event);
                     let coin_tosses =
-                        self.toss_coins(election, &peer_id, &parent_event_votes, event)?;
-                    MetaVote::next(&parent_event_votes, &other_votes, &coin_tosses, voter_count)
+                        self.toss_coins(election, &voters, &peer_id, &parent_event_votes, event)?;
+                    MetaVote::next(
+                        &parent_event_votes,
+                        &other_votes,
+                        &coin_tosses,
+                        voters.len(),
+                    )
                 };
 
                 meta_event.add_meta_votes(peer_id.clone(), new_meta_votes);
             }
         } else if self.is_observer(election, event, meta_event) {
             // Start meta votes for this event.
-            for peer_id in self.peer_list.voter_ids() {
-                let other_votes = self.collect_other_meta_votes(election, peer_id, event);
+            for peer_id in &voters {
+                let other_votes = self.collect_other_meta_votes(election, &voters, peer_id, event);
                 let initial_estimate = meta_event.observations.contains(peer_id);
 
                 meta_event.add_meta_votes(
                     peer_id.clone(),
-                    MetaVote::new(initial_estimate, &other_votes, voter_count),
+                    MetaVote::new(initial_estimate, &other_votes, voters.len()),
                 );
             }
         };
@@ -1011,6 +1020,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn toss_coins(
         &self,
         election: MetaElectionHandle,
+        voters: &BTreeSet<S::PublicId>,
         peer_id: &S::PublicId,
         parent_votes: &[MetaVote],
         event: &Event<T, S::PublicId>,
@@ -1018,7 +1028,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let mut coin_tosses = BTreeMap::new();
         for parent_vote in parent_votes {
             let _ = self
-                .toss_coin(election, peer_id, parent_vote, event)?
+                .toss_coin(election, voters, peer_id, parent_vote, event)?
                 .map(|coin| coin_tosses.insert(parent_vote.round, coin));
         }
         Ok(coin_tosses)
@@ -1027,6 +1037,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn toss_coin(
         &self,
         election: MetaElectionHandle,
+        voters: &BTreeSet<S::PublicId>,
         peer_id: &S::PublicId,
         parent_vote: &MetaVote,
         event: &Event<T, S::PublicId>,
@@ -1057,11 +1068,15 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         };
 
         // Get the gradient of leadership.
-        let mut peer_id_hashes = self.peer_list.peer_id_hashes().clone();
-        peer_id_hashes.sort_by(|lhs, rhs| round_hash.xor_cmp(&lhs.0, &rhs.0));
+        let mut peer_id_hashes: Vec<_> = self
+            .peer_list
+            .peer_id_hashes()
+            .filter(|(peer_id, _)| voters.contains(peer_id))
+            .collect();
+        peer_id_hashes.sort_by(|lhs, rhs| round_hash.xor_cmp(&lhs.1, &rhs.1));
 
         // Try to get the "most-leader"'s aux value.
-        let creator = &peer_id_hashes[0].1;
+        let creator = &peer_id_hashes[0].0;
         if let Some(creator_event_index) = event.last_ancestors().get(creator) {
             if let Some(aux_value) =
                 self.aux_value(election, creator, *creator_event_index, peer_id, round)
@@ -1072,7 +1087,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         // If we've already waited long enough, get the aux value of the highest ranking leader.
         if self.stop_waiting(election, round, event) {
-            for (_, creator) in &peer_id_hashes[1..] {
+            for (creator, _) in &peer_id_hashes[1..] {
                 if let Some(creator_event_index) = event.last_ancestors().get(creator) {
                     if let Some(aux_value) =
                         self.aux_value(election, creator, *creator_event_index, peer_id, round)
@@ -1118,7 +1133,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     ) -> bool {
         let mut event_hash = Some(event.hash());
         let mut response_count = 0;
-        let responsiveness_threshold = self.responsiveness_threshold();
+        let responsiveness_threshold = self.responsiveness_threshold(election);
 
         loop {
             if let Some(event) = event_hash.and_then(|hash| self.get_known_event(hash).ok()) {
@@ -1189,16 +1204,14 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn collect_other_meta_votes(
         &self,
         election: MetaElectionHandle,
+        voters: &BTreeSet<S::PublicId>,
         peer_id: &S::PublicId,
         event: &Event<T, S::PublicId>,
     ) -> Vec<Vec<MetaVote>> {
-        let mut other_votes = vec![];
-        for creator in self
-            .peer_list
-            .voter_ids()
-            .filter(|id| *id != event.creator())
-        {
-            if let Some(meta_votes) =
+        voters
+            .iter()
+            .filter(|voter_id| *voter_id != event.creator())
+            .filter_map(|creator| {
                 event
                     .last_ancestors()
                     .get(creator)
@@ -1211,18 +1224,23 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                             0,
                             &Step::ForcedTrue,
                         )
-                    }) {
-                other_votes.push(meta_votes)
-            }
-        }
-        other_votes
+                    })
+            }).collect()
     }
 
-    // If the given meta-election is already decided, returns the number of voters at the time it was decided.
-    // Otherwise return the number of current voters.
+    // List of voters for the given meta-election.
+    fn voters(&self, election: MetaElectionHandle) -> BTreeSet<S::PublicId> {
+        self.meta_elections
+            .decided_voters(election)
+            .cloned()
+            .unwrap_or_else(|| self.peer_list.voter_ids().cloned().collect())
+    }
+
+    // Number of voters for the given meta-election.
     fn voter_count(&self, election: MetaElectionHandle) -> usize {
         self.meta_elections
-            .decided_voter_count(election)
+            .decided_voters(election)
+            .map(|voters| voters.len())
             .unwrap_or_else(|| self.peer_list.voters().count())
     }
 
@@ -1337,10 +1355,17 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             }).count()
     }
 
-    // Returns whether event X can strongly see the event Y.
-    fn strongly_sees(&self, x: &Event<T, S::PublicId>, y: &Event<T, S::PublicId>) -> bool {
-        self.peer_list
-            .is_super_majority(self.n_peers_with_directed_paths(x, y))
+    // Returns whether event X can strongly see the event Y during the evaluation of the given election.
+    fn strongly_sees(
+        &self,
+        election: MetaElectionHandle,
+        x: &Event<T, S::PublicId>,
+        y: &Event<T, S::PublicId>,
+    ) -> bool {
+        is_more_than_two_thirds(
+            self.n_peers_with_directed_paths(x, y),
+            self.voter_count(election),
+        )
     }
 
     // Constructs a sync event to prove receipt of a `Request` or `Response` (depending on the value
@@ -1412,8 +1437,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     // Get the responsiveness threshold based on the current number of peers.
-    fn responsiveness_threshold(&self) -> usize {
-        (self.peer_list.voters().count() as f64).log2().ceil() as usize
+    fn responsiveness_threshold(&self, election: MetaElectionHandle) -> usize {
+        (self.voter_count(election) as f64).log2().ceil() as usize
     }
 
     fn detect_malice(&mut self, event: &Event<T, S::PublicId>) -> Result<()> {
