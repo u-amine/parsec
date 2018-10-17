@@ -578,11 +578,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         let elections: Vec<_> = self.meta_elections.all().collect();
         for election in elections {
-            self.meta_elections.add_meta_event(election, *event_hash);
-            self.set_observations(election, event_hash)?;
-            self.set_meta_votes(election, event_hash)?;
-            self.meta_elections
-                .update_round_hashes(election, event_hash);
+            self.advance_meta_election(election, event_hash)?;
         }
 
         let creator = self.get_known_event(event_hash)?.creator().clone();
@@ -649,7 +645,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         dump_graph::to_file(
             self.our_pub_id(),
             &self.events,
-            &self.meta_elections.current_meta_votes(),
+            self.meta_elections.current_meta_events(),
             &self.peer_list,
         );
 
@@ -769,6 +765,20 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .remove_from_peer_membership_list(peer_id, offender.clone()),
             _ => (),
         }
+    }
+
+    fn advance_meta_election(
+        &mut self,
+        election: MetaElectionHandle,
+        event_hash: &Hash,
+    ) -> Result<()> {
+        let mut meta_event = MetaEvent::new();
+        self.set_observations(election, event_hash, &mut meta_event)?;
+        self.set_meta_votes(election, event_hash, &mut meta_event)?;
+
+        self.meta_elections
+            .add_meta_event(election, *event_hash, meta_event);
+        Ok(())
     }
 
     fn meta_event_not_found(&self, election: MetaElectionHandle, event_hash: &Hash) {
@@ -919,81 +929,82 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .initialise_peer_membership_list(&creator, membership_list);
     }
 
-    fn set_observations(&mut self, election: MetaElectionHandle, event_hash: &Hash) -> Result<()> {
-        let observations = {
-            let event = self.get_known_event(event_hash)?;
-            self.interesting_events
-                .iter()
-                .filter_map(|(peer, hashes)| {
-                    let old_hash = hashes.front()?;
-                    let old_event = self.get_known_event(old_hash).ok()?;
-                    if self.strongly_sees(event, old_event) {
-                        Some(peer)
-                    } else {
-                        None
-                    }
-                }).cloned()
-                .collect()
-        };
-
-        if let Some(event) = self.meta_elections.meta_event_mut(election, event_hash) {
-            event.observations = observations;
-        }
+    fn set_observations(
+        &self,
+        _election: MetaElectionHandle,
+        event_hash: &Hash,
+        meta_event: &mut MetaEvent<S::PublicId>,
+    ) -> Result<()> {
+        let event = self.get_known_event(event_hash)?;
+        meta_event.observations = self
+            .interesting_events
+            .iter()
+            .filter_map(|(peer, hashes)| {
+                let old_hash = hashes.front()?;
+                let old_event = self.get_known_event(old_hash).ok()?;
+                if self.strongly_sees(event, old_event) {
+                    Some(peer)
+                } else {
+                    None
+                }
+            }).cloned()
+            .collect();
 
         Ok(())
     }
 
-    fn set_meta_votes(&mut self, election: MetaElectionHandle, event_hash: &Hash) -> Result<()> {
+    fn set_meta_votes(
+        &self,
+        election: MetaElectionHandle,
+        event_hash: &Hash,
+        meta_event: &mut MetaEvent<S::PublicId>,
+    ) -> Result<()> {
         let voter_count = self.voter_count(election);
-        let mut meta_votes = BTreeMap::new();
+
         // If self-parent already has meta votes associated with it, derive this event's meta votes
         // from those ones.
-        {
-            let event = self.get_known_event(event_hash)?;
-            let meta_event = self
-                .meta_elections
-                .meta_event(election, event_hash)
-                .ok_or_else(|| {
-                    self.meta_event_not_found(election, event_hash);
-                    Error::Logic
-                })?;
-
-            if let Some(parent_votes) = self.self_parent(event).and_then(|parent| {
-                self.meta_elections
-                    .meta_votes(election, parent.hash())
-                    .cloned()
-            }) {
-                for (peer_id, parent_event_votes) in parent_votes {
-                    let new_meta_votes = {
-                        let other_votes = self.collect_other_meta_votes(election, &peer_id, event);
-                        let coin_tosses =
-                            self.toss_coins(election, &peer_id, &parent_event_votes, event)?;
-                        MetaVote::next(&parent_event_votes, &other_votes, &coin_tosses, voter_count)
-                    };
-                    let _ = meta_votes.insert(peer_id, new_meta_votes);
+        let event = self.get_known_event(event_hash)?;
+        let parent_meta_votes = event
+            .self_parent()
+            .and_then(|parent_hash| self.meta_elections.meta_votes(election, parent_hash))
+            .and_then(|parent_meta_votes| {
+                if !parent_meta_votes.is_empty() {
+                    Some(parent_meta_votes)
+                } else {
+                    None
                 }
-            } else if self.is_observer(election, event, meta_event) {
-                // Start meta votes for this event.
-                for peer_id in self.peer_list.voter_ids() {
-                    let other_votes = self.collect_other_meta_votes(election, peer_id, event);
-                    let initial_estimate = meta_event.observations.contains(peer_id);
-                    let _ = meta_votes.insert(
-                        peer_id.clone(),
-                        MetaVote::new(initial_estimate, &other_votes, voter_count),
-                    );
-                }
-            };
-            trace!(
-                "{:?} has set the meta votes for {:?}",
-                self.our_pub_id(),
-                event
-            );
-        }
+            });
 
-        if !meta_votes.is_empty() {
-            self.meta_elections
-                .insert(election, *event_hash, meta_votes);
-        }
+        if let Some(parent_meta_votes) = parent_meta_votes {
+            for (peer_id, parent_event_votes) in parent_meta_votes {
+                let new_meta_votes = {
+                    let other_votes = self.collect_other_meta_votes(election, &peer_id, event);
+                    let coin_tosses =
+                        self.toss_coins(election, &peer_id, &parent_event_votes, event)?;
+                    MetaVote::next(&parent_event_votes, &other_votes, &coin_tosses, voter_count)
+                };
+
+                meta_event.add_meta_votes(peer_id.clone(), new_meta_votes);
+            }
+        } else if self.is_observer(election, event, meta_event) {
+            // Start meta votes for this event.
+            for peer_id in self.peer_list.voter_ids() {
+                let other_votes = self.collect_other_meta_votes(election, peer_id, event);
+                let initial_estimate = meta_event.observations.contains(peer_id);
+
+                meta_event.add_meta_votes(
+                    peer_id.clone(),
+                    MetaVote::new(initial_estimate, &other_votes, voter_count),
+                );
+            }
+        };
+
+        trace!(
+            "{:?} has set the meta votes for {:?}",
+            self.our_pub_id(),
+            event
+        );
+
         Ok(())
     }
 
@@ -1659,7 +1670,7 @@ impl<T: NetworkEvent, S: SecretId> Drop for Parsec<T, S> {
             dump_graph::to_file(
                 self.our_pub_id(),
                 &self.events,
-                &self.meta_elections.current_meta_votes(),
+                self.meta_elections.current_meta_events(),
                 &self.peer_list,
             );
         }
@@ -1698,7 +1709,7 @@ impl Parsec<Transaction, PeerId> {
         parsec.events_order = parsed_contents.events_order;
         parsec.meta_elections = MetaElections::new_from_parsed(
             parsed_contents.peer_list.voter_ids(),
-            parsed_contents.meta_votes,
+            parsed_contents.meta_events,
         );
         parsec.peer_list = parsed_contents.peer_list;
         parsec
@@ -1721,7 +1732,6 @@ mod functional_tests {
     use super::*;
     use dev_utils::parse_test_dot_file;
     use gossip::{find_event_by_short_name, Event};
-    use meta_voting::MetaVotes;
     use mock::{self, Transaction};
     use peer_list::PeerState;
     use std::collections::BTreeMap;
@@ -1732,7 +1742,7 @@ mod functional_tests {
         events: BTreeSet<Hash>,
         events_order: Vec<Hash>,
         consensused_blocks: VecDeque<Block<Transaction, PeerId>>,
-        meta_votes: BTreeMap<Hash, MetaVotes<PeerId>>,
+        meta_events: BTreeMap<Hash, MetaEvent<PeerId>>,
     }
 
     impl Snapshot {
@@ -1758,7 +1768,7 @@ mod functional_tests {
                 events,
                 events_order: parsec.events_order.clone(),
                 consensused_blocks: parsec.consensused_blocks.clone(),
-                meta_votes: parsec.meta_elections.current_meta_votes().clone(),
+                meta_events: parsec.meta_elections.current_meta_events().clone(),
             }
         }
     }
@@ -1958,16 +1968,16 @@ mod functional_tests {
         assert_eq!(parsed_contents_comparison.events, parsec.events);
         assert_eq!(parsed_contents_comparison.events_order, parsec.events_order);
         assert_eq!(
-            &parsed_contents_comparison.meta_votes,
-            parsec.meta_elections.current_meta_votes()
+            &parsed_contents_comparison.meta_events,
+            parsec.meta_elections.current_meta_events()
         );
 
         let parsed_contents_other = parse_test_dot_file("1.dot");
         assert_ne!(parsed_contents_other.events, parsec.events);
         assert_ne!(parsed_contents_other.events_order, parsec.events_order);
         assert_ne!(
-            &parsed_contents_other.meta_votes,
-            parsec.meta_elections.current_meta_votes()
+            &parsed_contents_other.meta_events,
+            parsec.meta_elections.current_meta_events()
         );
     }
 

@@ -41,7 +41,6 @@ impl Debug for MetaElectionHandle {
 }
 
 struct MetaElection<T: NetworkEvent, P: PublicId> {
-    meta_votes: BTreeMap<Hash, MetaVotes<P>>,
     meta_events: BTreeMap<Hash, MetaEvent<P>>,
     // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
     // the one for round `x` is held at index `x`.
@@ -58,7 +57,6 @@ impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
         P: 'a,
     {
         MetaElection {
-            meta_votes: BTreeMap::new(),
             meta_events: BTreeMap::new(),
             round_hashes: BTreeMap::new(),
             undecided_peers: voters.into_iter().cloned().collect(),
@@ -88,17 +86,24 @@ struct Outcome<T: NetworkEvent, P: PublicId> {
     voter_count: usize,
 }
 
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) struct MetaEvent<P> {
     // The set of peers for which this event can strongly-see an event by that peer which carries a
     // valid block.  If there are a supermajority of peers here, this event is an "observer".
     pub observations: BTreeSet<P>,
+    pub meta_votes: MetaVotes<P>,
 }
 
 impl<P: PublicId> MetaEvent<P> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         MetaEvent {
             observations: BTreeSet::new(),
+            meta_votes: MetaVotes::new(),
         }
+    }
+
+    pub fn add_meta_votes(&mut self, peer_id: P, votes: Vec<MetaVote>) {
+        let _ = self.meta_votes.insert(peer_id, votes);
     }
 }
 
@@ -145,18 +150,35 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
             .map(|(handle, _)| *handle)
     }
 
-    pub fn meta_votes(
-        &self,
+    pub fn add_meta_event(
+        &mut self,
         handle: MetaElectionHandle,
-        event_hash: &Hash,
-    ) -> Option<&BTreeMap<P, Vec<MetaVote>>> {
-        self.get(handle).and_then(|e| e.meta_votes.get(event_hash))
-    }
+        event_hash: Hash,
+        meta_event: MetaEvent<P>,
+    ) {
+        let election = if let Some(election) = self.get_mut(handle) {
+            election
+        } else {
+            return;
+        };
 
-    pub fn add_meta_event(&mut self, handle: MetaElectionHandle, event_hash: Hash) {
-        if let Some(election) = self.get_mut(handle) {
-            let _ = election.meta_events.insert(event_hash, MetaEvent::new());
+        // Update round hashes.
+        for (peer_id, event_votes) in &meta_event.meta_votes {
+            for meta_vote in event_votes {
+                let hashes = if let Some(hashes) = election.round_hashes.get_mut(&peer_id) {
+                    hashes
+                } else {
+                    continue;
+                };
+                while hashes.len() < meta_vote.round + 1 {
+                    let next_round_hash = hashes[hashes.len() - 1].increment_round();
+                    hashes.push(next_round_hash);
+                }
+            }
         }
+
+        // Insert the meta-event itself.
+        let _ = election.meta_events.insert(event_hash, meta_event);
     }
 
     pub fn meta_event(
@@ -168,13 +190,14 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
             .and_then(|election| election.meta_events.get(event_hash))
     }
 
-    pub fn meta_event_mut(
-        &mut self,
+    pub fn meta_votes(
+        &self,
         handle: MetaElectionHandle,
         event_hash: &Hash,
-    ) -> Option<&mut MetaEvent<P>> {
-        self.get_mut(handle)
-            .and_then(|election| election.meta_events.get_mut(event_hash))
+    ) -> Option<&BTreeMap<P, Vec<MetaVote>>> {
+        self.get(handle)
+            .and_then(|election| election.meta_events.get(event_hash))
+            .map(|meta_event| &meta_event.meta_votes)
     }
 
     pub fn round_hashes(&self, handle: MetaElectionHandle, peer_id: &P) -> Option<&Vec<RoundHash>> {
@@ -254,17 +277,6 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         }
     }
 
-    pub fn insert(
-        &mut self,
-        handle: MetaElectionHandle,
-        event_hash: Hash,
-        meta_votes: BTreeMap<P, Vec<MetaVote>>,
-    ) {
-        if let Some(election) = self.get_mut(handle) {
-            let _ = election.meta_votes.insert(event_hash, meta_votes);
-        }
-    }
-
     pub fn restart_current_election_round_hashes<'a, I>(&mut self, peer_ids: I)
     where
         I: IntoIterator<Item = &'a P>,
@@ -272,34 +284,6 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
     {
         let hash = self.consensus_history.last().cloned().unwrap_or(Hash::ZERO);
         self.initialise_current_election_round_hashes(peer_ids, hash);
-    }
-
-    pub fn update_round_hashes(&mut self, handle: MetaElectionHandle, event_hash: &Hash) {
-        let election = if let Some(election) = self.get_mut(handle) {
-            election
-        } else {
-            return;
-        };
-
-        let meta_votes = if let Some(meta_votes) = election.meta_votes.get(event_hash) {
-            meta_votes
-        } else {
-            return;
-        };
-
-        for (peer_id, event_votes) in meta_votes {
-            for meta_vote in event_votes {
-                let hashes = if let Some(hashes) = election.round_hashes.get_mut(&peer_id) {
-                    hashes
-                } else {
-                    continue;
-                };
-                while hashes.len() < meta_vote.round + 1 {
-                    let next_round_hash = hashes[hashes.len() - 1].increment_round();
-                    hashes.push(next_round_hash);
-                }
-            }
-        }
     }
 
     pub fn initialise_current_election_round_hashes<'a, I>(
@@ -314,8 +298,8 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
             .initialise_round_hashes(peer_ids, initial_hash);
     }
 
-    pub fn current_meta_votes(&self) -> &BTreeMap<Hash, MetaVotes<P>> {
-        &self.current_election.meta_votes
+    pub fn current_meta_events(&self) -> &BTreeMap<Hash, MetaEvent<P>> {
+        &self.current_election.meta_events
     }
 
     fn get(&self, handle: MetaElectionHandle) -> Option<&MetaElection<T, P>> {
@@ -359,13 +343,13 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
 
 #[cfg(test)]
 impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
-    pub fn new_from_parsed<'a, I>(voters: I, votes: BTreeMap<Hash, MetaVotes<P>>) -> Self
+    pub fn new_from_parsed<'a, I>(voters: I, meta_events: BTreeMap<Hash, MetaEvent<P>>) -> Self
     where
         I: IntoIterator<Item = &'a P>,
         P: 'a,
     {
         let mut new = Self::new(voters);
-        new.current_election.meta_votes = votes;
+        new.current_election.meta_events = meta_events;
         new
     }
 }

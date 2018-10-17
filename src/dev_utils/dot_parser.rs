@@ -8,7 +8,7 @@
 
 use gossip::Event;
 use hash::Hash;
-use meta_voting::{BoolSet, MetaVote, Step};
+use meta_voting::{BoolSet, MetaEvent, MetaVote, Step};
 use mock::{PeerId, Transaction};
 use observation::Observation;
 use peer_list::{PeerList, PeerState};
@@ -24,7 +24,7 @@ pub(crate) struct ParsedContents {
     pub our_id: PeerId,
     pub events: BTreeMap<Hash, Event<Transaction, PeerId>>,
     pub events_order: Vec<Hash>,
-    pub meta_votes: BTreeMap<Hash, BTreeMap<PeerId, Vec<MetaVote>>>,
+    pub meta_events: BTreeMap<Hash, MetaEvent<PeerId>>,
     pub peer_list: PeerList<PeerId>,
 }
 
@@ -37,7 +37,7 @@ impl ParsedContents {
             our_id,
             events: BTreeMap::new(),
             events_order: Vec::new(),
-            meta_votes: BTreeMap::new(),
+            meta_events: BTreeMap::new(),
             peer_list,
         }
     }
@@ -48,6 +48,7 @@ impl ParsedContents {
         let event = self.events.remove(&hash)?;
 
         self.peer_list.remove_event(&event);
+        let _ = self.meta_events.remove(&hash);
 
         Some(event)
     }
@@ -59,6 +60,7 @@ impl ParsedContents {
 
         let hash = *event.hash();
         let _ = self.events.insert(hash, event);
+        let _ = self.meta_events.insert(hash, MetaEvent::new());
         self.events_order.push(hash);
     }
 }
@@ -101,7 +103,6 @@ struct ParsedEvent {
     other_parent: Option<String>,
     interesting_content: Vec<Observation<Transaction, PeerId>>,
     last_ancestors: BTreeMap<PeerId, u64>,
-    observations: BTreeSet<PeerId>,
 }
 
 impl ParsedEvent {
@@ -112,7 +113,6 @@ impl ParsedEvent {
         other_parent: Option<String>,
         interesting_content_string: &str,
         last_ancestors_string: &str,
-        observations: BTreeSet<PeerId>,
     ) -> Self {
         let interesting_content = parse_interesting_content(interesting_content_string);
         let last_ancestors = parse_peer_entries(last_ancestors_string)
@@ -126,7 +126,6 @@ impl ParsedEvent {
             other_parent,
             interesting_content,
             last_ancestors,
-            observations,
         }
     }
 }
@@ -227,7 +226,7 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
     let mut events = BTreeMap::new();
     let mut events_order = Vec::new();
     let mut name_hash_map: BTreeMap<String, Hash> = BTreeMap::new();
-    let mut meta_votes = BTreeMap::new();
+    let mut meta_events = BTreeMap::new();
     let length = parsing_events.len();
 
     while !parsing_events.is_empty() {
@@ -256,7 +255,10 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
 
         let hash = *parsed_event.hash();
         if !mv.meta_votes.is_empty() {
-            let _ = meta_votes.insert(hash, mv.meta_votes);
+            let mut meta_event = MetaEvent::new();
+            meta_event.meta_votes = mv.meta_votes;
+
+            let _ = meta_events.insert(hash, meta_event);
         }
 
         let _ = events.insert(hash, parsed_event);
@@ -273,7 +275,7 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
         our_id,
         events,
         events_order,
-        meta_votes,
+        meta_events,
         peer_list,
     })
 }
@@ -360,7 +362,6 @@ fn parse_event_graph(contents: &str) -> BTreeMap<String, ParsedEvent> {
                         other_parent,
                         info.interesting_content,
                         info.last_ancestors,
-                        BTreeSet::new(),
                     ),
                 );
             }
@@ -649,10 +650,10 @@ mod tests {
             assert_eq!(gossip_graph, parsed_result.events);
 
             // The dumped dot file doesn't contain all the meta_votes
-            assert!(meta_votes.len() >= parsed_result.meta_votes.len());
-            for (hash, meta_vote) in &parsed_result.meta_votes {
+            assert!(meta_votes.len() >= parsed_result.meta_events.len());
+            for (hash, meta_event) in &parsed_result.meta_events {
                 let ori_meta_vote = unwrap!(meta_votes.get(hash));
-                assert_eq!(ori_meta_vote, meta_vote);
+                assert_eq!(*ori_meta_vote, meta_event.meta_votes);
             }
         }
         assert_ne!(num_of_files, 0u8);
