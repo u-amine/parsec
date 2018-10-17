@@ -24,7 +24,7 @@ pub(crate) struct ParsedContents {
     pub our_id: PeerId,
     pub events: BTreeMap<Hash, Event<Transaction, PeerId>>,
     pub events_order: Vec<Hash>,
-    pub meta_events: BTreeMap<Hash, MetaEvent<PeerId>>,
+    pub meta_events: BTreeMap<Hash, MetaEvent<Transaction, PeerId>>,
     pub peer_list: PeerList<PeerId>,
 }
 
@@ -250,13 +250,13 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
             other_parent,
             mv.event_index,
             event.last_ancestors,
-            event.interesting_content,
         );
 
         let hash = *parsed_event.hash();
-        if !mv.meta_votes.is_empty() {
+        if !event.interesting_content.is_empty() || !mv.meta_votes.is_empty() {
             let mut meta_event = MetaEvent::new();
             meta_event.meta_votes = mv.meta_votes;
+            meta_event.interesting_content = event.interesting_content;
 
             let _ = meta_events.insert(hash, meta_event);
         }

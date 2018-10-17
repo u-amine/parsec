@@ -33,7 +33,7 @@ pub(crate) fn init() {
 pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
     owner_id: &S::PublicId,
     gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
-    meta_events: &BTreeMap<Hash, MetaEvent<S::PublicId>>,
+    meta_events: &BTreeMap<Hash, MetaEvent<T, S::PublicId>>,
     peer_list: &PeerList<S>,
 ) {
     detail::to_file(owner_id, gossip_graph, meta_events, peer_list)
@@ -42,7 +42,7 @@ pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
 pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
     _: &S::PublicId,
     _: &BTreeMap<Hash, Event<T, S::PublicId>>,
-    _: &BTreeMap<Hash, MetaEvent<S::PublicId>>,
+    _: &BTreeMap<Hash, MetaEvent<T, S::PublicId>>,
     _: &PeerList<S>,
 ) {
 }
@@ -108,7 +108,7 @@ mod detail {
     fn catch_dump<T: NetworkEvent, P: PublicId>(
         mut file_path: PathBuf,
         gossip_graph: &BTreeMap<Hash, Event<T, P>>,
-        meta_events: &BTreeMap<Hash, MetaEvent<P>>,
+        meta_events: &BTreeMap<Hash, MetaEvent<T, P>>,
     ) {
         if let Some("dev_utils::dot_parser::tests::dot_parser") = thread::current().name() {
             let meta_votes: BTreeMap<_, _> = meta_events
@@ -130,7 +130,7 @@ mod detail {
     pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
         owner_id: &S::PublicId,
         gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
-        meta_events: &BTreeMap<Hash, MetaEvent<S::PublicId>>,
+        meta_events: &BTreeMap<Hash, MetaEvent<T, S::PublicId>>,
         peer_list: &PeerList<S>,
     ) {
         let id = format!("{:?}", owner_id);
@@ -282,7 +282,7 @@ mod detail {
     fn write_evaluates<T: NetworkEvent, P: PublicId>(
         writer: &mut Write,
         gossip_graph: &BTreeMap<Hash, Event<T, P>>,
-        meta_events: &BTreeMap<Hash, MetaEvent<P>>,
+        meta_events: &BTreeMap<Hash, MetaEvent<T, P>>,
         initial_events: &[Hash],
     ) -> io::Result<()> {
         writeln!(writer, "/// meta-vote section")?;
@@ -297,13 +297,13 @@ mod detail {
                 write!(writer, "\n{:?}", event_payload)?;
             }
 
-            // Write the `interesting_content` if have
-            if !event.interesting_content.is_empty() {
-                write!(writer, "\n{:?}", event.interesting_content)?;
-            }
-
-            // Write the `meta_votes` if have
             if let Some(meta_event) = meta_events.get(event_hash) {
+                // Write the `interesting_content` if have
+                if !meta_event.interesting_content.is_empty() {
+                    write!(writer, "\n{:?}", meta_event.interesting_content)?;
+                }
+
+                // Write the `meta_votes` if have
                 if meta_event.meta_votes.len() >= initial_events.len() {
                     let mut peer_ids: Vec<&P> = meta_event.meta_votes.keys().collect();
                     peer_ids.sort_by(|lhs, rhs| first_char(lhs).cmp(&first_char(rhs)));
@@ -328,7 +328,11 @@ mod detail {
             }
             writeln!(writer, "\"]")?;
             // Add any styling
-            if !event.interesting_content.is_empty() {
+            if meta_events
+                .get(event_hash)
+                .map(|meta_event| !meta_event.interesting_content.is_empty())
+                .unwrap_or(false)
+            {
                 writeln!(
                     writer,
                     " \"{:?}\" [shape=rectangle, style=filled, fillcolor=crimson]",
@@ -396,7 +400,7 @@ mod detail {
     fn write_gossip_graph_dot<T: NetworkEvent, S: SecretId>(
         writer: &mut Write,
         gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
-        meta_events: &BTreeMap<Hash, MetaEvent<S::PublicId>>,
+        meta_events: &BTreeMap<Hash, MetaEvent<T, S::PublicId>>,
         peer_list: &PeerList<S>,
         initial_events: &[Hash],
     ) -> io::Result<()> {
@@ -419,8 +423,9 @@ mod detail {
 
         write_peerlist_to_dot(writer, peer_list)?;
 
-        for event in gossip_graph.values() {
-            event.write_to_dot_format(writer)?;
+        for (hash, event) in gossip_graph {
+            let meta_event = meta_events.get(hash);
+            write_event_to_dot(writer, event, meta_event)?;
         }
 
         for node in &nodes {
@@ -454,6 +459,26 @@ mod detail {
             .map(|(peer_id, peer)| (peer_id, format!("{:?}", peer.state())))
             .collect::<BTreeMap<_, _>>();
         writeln!(writer, "/// peer_states: {:?}", peer_states)
+    }
+
+    fn write_event_to_dot<T: NetworkEvent, P: PublicId>(
+        writer: &mut Write,
+        event: &Event<T, P>,
+        meta_event: Option<&MetaEvent<T, P>>,
+    ) -> io::Result<()> {
+        writeln!(writer, "/// {{ {:?}", event.hash())?;
+        event.write_cause_to_dot_format(writer)?;
+
+        if let Some(meta_event) = meta_event {
+            writeln!(
+                writer,
+                "/// interesting_content: {:?}",
+                meta_event.interesting_content
+            )?;
+        }
+
+        writeln!(writer, "/// last_ancestors: {:?}", event.last_ancestors())?;
+        writeln!(writer, "/// }}")
     }
 
     #[cfg(unix)]

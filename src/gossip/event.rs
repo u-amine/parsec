@@ -36,8 +36,6 @@ pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
     index: u64,
     // Index of each peer's latest event that is an ancestor of this event.
     last_ancestors: BTreeMap<P, u64>,
-    // Payloads of all the votes deemed interesting by this event.
-    pub interesting_content: Vec<Observation<T, P>>,
 }
 
 impl<T: NetworkEvent, P: PublicId> Event<T, P> {
@@ -127,7 +125,6 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             hash,
             index,
             last_ancestors,
-            interesting_content: vec![],
         }))
     }
 
@@ -229,14 +226,12 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
                 }
             };
 
-        // `interesting_content` and `observations` still need to be set correctly by the caller.
         Self {
             content,
             signature: peer_list.our_id().sign_detached(&serialised_content),
             hash: Hash::from(serialised_content.as_slice()),
             index,
             last_ancestors,
-            interesting_content: vec![],
         }
     }
 
@@ -290,16 +285,8 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     }
 
     #[cfg(feature = "dump-graphs")]
-    pub fn write_to_dot_format(&self, writer: &mut Write) -> io::Result<()> {
-        writeln!(writer, "/// {{ {:?}", self.hash)?;
-        writeln!(writer, "/// cause: {}", self.content.cause)?;
-        writeln!(
-            writer,
-            "/// interesting_content: {:?}",
-            self.interesting_content
-        )?;
-        writeln!(writer, "/// last_ancestors: {:?}", self.last_ancestors)?;
-        writeln!(writer, "/// }}")
+    pub fn write_cause_to_dot_format(&self, writer: &mut Write) -> io::Result<()> {
+        writeln!(writer, "/// cause: {}", self.content.cause)
     }
 }
 
@@ -323,11 +310,6 @@ impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
             self.content.other_parent()
         )?;
         write!(formatter, ", last_ancestors: {:?}", self.last_ancestors)?;
-        write!(
-            formatter,
-            ", interesting_content: {:?}",
-            self.interesting_content
-        )?;
         write!(formatter, " }}")
     }
 }
@@ -342,7 +324,6 @@ impl Event<Transaction, PeerId> {
         other_parent: Option<Hash>,
         index: u64,
         last_ancestors: BTreeMap<PeerId, u64>,
-        interesting_content: Vec<Observation<Transaction, PeerId>>,
     ) -> Self {
         use dev_utils::parse_peer_ids;
 
@@ -396,7 +377,6 @@ impl Event<Transaction, PeerId> {
             hash: Hash::from(serialised_content.as_slice()),
             index,
             last_ancestors,
-            interesting_content,
         }
     }
 }
