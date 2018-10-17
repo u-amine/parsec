@@ -435,7 +435,6 @@ mod tests {
     use observation::Observation;
     use peer_list::{PeerList, PeerState};
     use std::collections::BTreeMap;
-    use std::iter;
 
     struct PeerListAndEvent {
         peer_list: PeerList<PeerId>,
@@ -477,12 +476,10 @@ mod tests {
         peer_id0_list.add_peer(
             peer_id1,
             PeerState::VOTE | PeerState::SEND | PeerState::RECV,
-            iter::empty(),
         );
         peer_id1_list.add_peer(
             peer_id0,
             PeerState::VOTE | PeerState::SEND | PeerState::RECV,
-            iter::empty(),
         );
 
         (

@@ -82,7 +82,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         for peer_id in genesis_group {
             parsec
                 .peer_list
-                .add_peer(peer_id.clone(), PeerState::active(), genesis_group);
+                .add_peer(peer_id.clone(), PeerState::active());
+            parsec
+                .peer_list
+                .initialise_peer_membership_list(peer_id, genesis_group.iter().cloned())
         }
 
         parsec
@@ -146,26 +149,35 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let our_public_id = our_id.public_id().clone();
         let mut parsec = Self::empty(our_id, genesis_group, is_interesting_event);
 
+        // Add ourselves.
         parsec
             .peer_list
-            .add_peer(our_public_id, PeerState::RECV, genesis_group);
+            .add_peer(our_public_id.clone(), PeerState::RECV);
 
+        // Add the genesis group.
         for peer_id in genesis_group {
-            parsec.peer_list.add_peer(
-                peer_id.clone(),
-                PeerState::VOTE | PeerState::SEND,
-                genesis_group,
-            )
+            parsec
+                .peer_list
+                .add_peer(peer_id.clone(), PeerState::VOTE | PeerState::SEND)
         }
 
+        // Add the current section members.
         for peer_id in section {
             if genesis_group.contains(peer_id) {
                 continue;
             }
 
+            parsec.peer_list.add_peer(peer_id.clone(), PeerState::SEND)
+        }
+
+        // Initialise everyone's membership list.
+        for peer_id in iter::once(&our_public_id)
+            .chain(genesis_group)
+            .chain(section)
+        {
             parsec
                 .peer_list
-                .add_peer(peer_id.clone(), PeerState::SEND, genesis_group)
+                .initialise_peer_membership_list(peer_id, genesis_group.iter().cloned())
         }
 
         parsec
@@ -529,6 +541,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
 
         self.set_interesting_content(&event_hash)?;
+        self.initialise_membership_list(&event_hash);
         self.process_event(&event_hash)?;
 
         Ok(())
@@ -632,55 +645,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         observation: &Observation<T, S::PublicId>,
     ) -> PostConsensusAction {
         match *observation {
-            Observation::Genesis(_) => {
-                // TODO: handle malice
-            }
-            Observation::Add(ref peer_id) => {
-                // - If we are already full member of the section, we can start sending gossips to
-                //   the new peer from this moment.
-                // - If we are the new peer, we must wait for the other members to send gossips to
-                //   us first.
-                //
-                // To distinguish between the two, we check whether everyone we reached consensus on
-                // adding also reached consensus on adding us.
-                let recv = self
-                    .peer_list
-                    .iter()
-                    .filter(|&(id, peer)| {
-                        // Peers that can vote, which means we got consensus on adding them.
-                        peer.state().can_vote() &&
-                        // Excluding the peer being added.
-                        *id != *peer_id &&
-                        // And excluding us.
-                        *id != *self.our_pub_id()
-                    }).all(|(_, peer)| {
-                        // Peers that can receive, which implies they've already sent us at least
-                        // one message which implies they've already reached consensus on adding us.
-                        peer.state().can_recv()
-                    });
-
-                let state = if recv {
-                    PeerState::VOTE | PeerState::SEND | PeerState::RECV
-                } else {
-                    PeerState::VOTE | PeerState::SEND
-                };
-
-                if self.peer_list.has_peer(peer_id) {
-                    self.peer_list.change_peer_state(peer_id, state);
-                } else {
-                    let genesis_group: Vec<_> = self.genesis_group().into_iter().cloned().collect();
-                    self.peer_list
-                        .add_peer(peer_id.clone(), state, &genesis_group);
-                }
-            }
-            Observation::Remove(ref peer_id) => {
-                self.peer_list.remove_peer(peer_id);
-                self.meta_elections.handle_peer_removed(peer_id);
-
-                if *peer_id == *self.our_pub_id() {
-                    return PostConsensusAction::Stop;
-                }
-            }
+            Observation::Add(ref peer_id) => self.handle_add_peer(peer_id),
+            Observation::Remove(ref peer_id) => self.handle_remove_peer(peer_id),
             Observation::Accusation {
                 ref offender,
                 ref malice,
@@ -691,15 +657,66 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     offender,
                     malice
                 );
-                self.peer_list.remove_peer(offender);
-                self.meta_elections.handle_peer_removed(offender);
+
+                self.handle_remove_peer(offender)
             }
-            Observation::OpaquePayload(_) => {}
+            Observation::Genesis(_) | Observation::OpaquePayload(_) => {
+                PostConsensusAction::Continue
+            }
+        }
+    }
+
+    fn handle_add_peer(&mut self, peer_id: &S::PublicId) -> PostConsensusAction {
+        // - If we are already full member of the section, we can start sending gossips to
+        //   the new peer from this moment.
+        // - If we are the new peer, we must wait for the other members to send gossips to
+        //   us first.
+        //
+        // To distinguish between the two, we check whether everyone we reached consensus on
+        // adding also reached consensus on adding us.
+        let recv = self
+            .peer_list
+            .iter()
+            .filter(|&(id, peer)| {
+                // Peers that can vote, which means we got consensus on adding them.
+                peer.state().can_vote() &&
+                        // Excluding the peer being added.
+                        *id != *peer_id &&
+                        // And excluding us.
+                        *id != *self.our_pub_id()
+            }).all(|(_, peer)| {
+                // Peers that can receive, which implies they've already sent us at least
+                // one message which implies they've already reached consensus on adding us.
+                peer.state().can_recv()
+            });
+
+        let state = if recv {
+            PeerState::VOTE | PeerState::SEND | PeerState::RECV
+        } else {
+            PeerState::VOTE | PeerState::SEND
+        };
+
+        if self.peer_list.has_peer(peer_id) {
+            self.peer_list.change_peer_state(peer_id, state);
+        } else {
+            self.peer_list.add_peer(peer_id.clone(), state);
         }
 
         PostConsensusAction::Continue
     }
 
+    fn handle_remove_peer(&mut self, peer_id: &S::PublicId) -> PostConsensusAction {
+        self.peer_list.remove_peer(peer_id);
+        self.meta_elections.handle_peer_removed(peer_id);
+
+        if *peer_id == *self.our_pub_id() {
+            PostConsensusAction::Stop
+        } else {
+            PostConsensusAction::Continue
+        }
+    }
+
+    // Handle consensus reached by other peer.
     fn handle_peer_consensus(
         &mut self,
         peer_id: &S::PublicId,
@@ -715,13 +732,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         match *payload {
             Observation::Add(ref other_peer_id) => self
                 .peer_list
-                .add_peers_peer(peer_id, other_peer_id.clone()),
-            Observation::Remove(ref other_peer_id) => {
-                self.peer_list.remove_peers_peer(peer_id, other_peer_id)
-            }
-            Observation::Accusation { ref offender, .. } => {
-                self.peer_list.remove_peers_peer(peer_id, offender)
-            }
+                .add_to_peer_membership_list(peer_id, other_peer_id.clone()),
+            Observation::Remove(ref other_peer_id) => self
+                .peer_list
+                .remove_from_peer_membership_list(peer_id, other_peer_id.clone()),
+            Observation::Accusation { ref offender, .. } => self
+                .peer_list
+                .remove_from_peer_membership_list(peer_id, offender.clone()),
             _ => (),
         }
     }
@@ -830,6 +847,39 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     .find(sees_vote_for_same_payload)
                     .map(|(index, _hash)| (peer_id, index))
             }).collect()
+    }
+
+    // Initialise the membership list of the creator of the given event to the same membership list
+    // the creator of the other-parent had at the time of the other-parent's creation. Do nothing if
+    // the event is not a request or response or if the membership list if already initialised.
+    fn initialise_membership_list(&mut self, event_hash: &Hash) {
+        let (creator, other_parent_creator, other_parent_index) = {
+            let event = if let Ok(event) = self.get_known_event(event_hash) {
+                event
+            } else {
+                return;
+            };
+
+            if let Some(other_parent) = self.other_parent(event) {
+                (
+                    event.creator().clone(),
+                    other_parent.creator().clone(),
+                    other_parent.index(),
+                )
+            } else {
+                return;
+            }
+        };
+
+        if self.peer_list.is_membership_list_initialised(&creator) {
+            return;
+        }
+
+        let membership_list = self
+            .peer_list
+            .membership_list_at(&other_parent_creator, other_parent_index);
+        self.peer_list
+            .initialise_peer_membership_list(&creator, membership_list);
     }
 
     fn set_observations(&mut self, event_hash: &Hash) -> Result<()> {
@@ -1707,7 +1757,8 @@ mod functional_tests {
                 continue;
             }
 
-            peer_list.add_peer(peer_id.clone(), PeerState::active(), genesis);
+            peer_list.add_peer(peer_id.clone(), PeerState::active());
+            peer_list.initialise_peer_membership_list(peer_id, genesis.iter().cloned());
         }
     }
 
@@ -2019,7 +2070,7 @@ mod functional_tests {
 
         dave_contents
             .peer_list
-            .add_peer(dave_id.clone(), PeerState::active(), &genesis);
+            .add_peer(dave_id.clone(), PeerState::active());
         add_genesis_group(&mut dave_contents.peer_list, &genesis);
 
         let d_0 = Event::<Transaction, _>::new_initial(&dave_contents.peer_list);
@@ -2080,7 +2131,7 @@ mod functional_tests {
 
         eric_contents
             .peer_list
-            .add_peer(eric_id.clone(), PeerState::active(), &genesis);
+            .add_peer(eric_id.clone(), PeerState::active());
         add_genesis_group(&mut eric_contents.peer_list, &genesis);
 
         let e_0 = Event::<Transaction, _>::new_initial(&eric_contents.peer_list);
@@ -2127,8 +2178,10 @@ mod functional_tests {
         for peer_id in &genesis {
             peer_contents
                 .peer_list
-                .add_peer(peer_id.clone(), PeerState::active(), &genesis);
+                .add_peer(peer_id.clone(), PeerState::active());
         }
+        add_genesis_group(&mut peer_contents.peer_list, &genesis);
+
         let ev_0 = Event::<Transaction, _>::new_initial(&peer_contents.peer_list);
         let ev_0_hash = *ev_0.hash();
         peer_contents.add_event(ev_0);
