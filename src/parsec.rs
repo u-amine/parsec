@@ -53,6 +53,8 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     events: BTreeMap<Hash, Event<T, S::PublicId>>,
     // The sequence in which all gossip events were added to this `Parsec`.
     events_order: Vec<Hash>,
+    // Information about observations stored in the graph, mapped to their hashes.
+    observations: BTreeMap<Hash, ObservationInfo>,
     // The hashes of events for each peer that have a non-empty set of `interesting_content`.
     interesting_events: BTreeMap<S::PublicId, VecDeque<Hash>>,
     // Consensused network events that have not been returned via `poll()` yet.
@@ -196,6 +198,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             events_order: vec![],
             interesting_events: BTreeMap::new(),
             consensused_blocks: VecDeque::new(),
+            observations: BTreeMap::new(),
             meta_elections: MetaElections::new(genesis_group),
             is_interesting_event,
             pending_accusations: vec![],
@@ -320,6 +323,47 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         })
     }
 
+    /// Check if there are any observation that have been voted for but not yet consensused.
+    pub fn has_unconsensused_observations(&self) -> bool {
+        self.observations.values().any(|info| !info.consensused)
+    }
+
+    /// Returns observations voted for by us which haven't been returned by `poll` yet.
+    /// This includes observations that are either not yet consensused or that are already
+    /// consensused, but not yet popped out of the consensus queue.
+    ///
+    /// The observations are sorted first by the consensus order, then by the vote order.
+    pub fn our_unpolled_observations(&self) -> impl Iterator<Item = &Observation<T, S::PublicId>> {
+        self.our_consensused_observations()
+            .chain(self.our_unconsensused_observations())
+    }
+
+    fn our_consensused_observations(&self) -> impl Iterator<Item = &Observation<T, S::PublicId>> {
+        self.consensused_blocks
+            .iter()
+            .filter(move |block| {
+                let hash = block.create_payload_hash();
+                self.observations
+                    .get(&hash)
+                    .map(|info| info.created_by_us)
+                    .unwrap_or(false)
+            }).map(|block| block.payload())
+    }
+
+    fn our_unconsensused_observations(&self) -> impl Iterator<Item = &Observation<T, S::PublicId>> {
+        self.peer_list
+            .our_events()
+            .filter_map(move |hash| self.get_known_event(hash).ok())
+            .filter_map(|event| event.vote().map(Vote::payload))
+            .filter(move |observation| {
+                let hash = observation.create_hash();
+                self.observations
+                    .get(&hash)
+                    .map(|info| !info.consensused)
+                    .unwrap_or(false)
+            })
+    }
+
     /// Must only be used for events which have already been added to our graph.
     fn get_known_event(&self, event_hash: &Hash) -> Result<&Event<T, S::PublicId>> {
         self.events.get(event_hash).ok_or_else(|| {
@@ -342,7 +386,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn our_pub_id(&self) -> &S::PublicId {
-        self.peer_list.our_id().public_id()
+        self.peer_list.our_pub_id()
     }
 
     fn confirm_peer_state(&self, peer_id: &S::PublicId, required: PeerState) -> Result<()> {
@@ -467,6 +511,17 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             self.events_order.push(event_hash);
         }
 
+        if let Some(observation) = event.vote().map(Vote::payload) {
+            let info = self
+                .observations
+                .entry(observation.create_hash())
+                .or_insert_with(ObservationInfo::default);
+
+            if event.creator() == self.peer_list.our_pub_id() {
+                info.created_by_us = true;
+            }
+        }
+
         let _ = self.events.insert(event_hash, event);
 
         if is_initial {
@@ -499,7 +554,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .new_election(payload.clone(), self.peer_list.voter_ids());
 
             self.meta_elections
-                .mark_as_decided(prev_election, self.peer_list.our_id().public_id());
+                .mark_as_decided(prev_election, self.peer_list.our_pub_id());
             self.meta_elections.mark_as_decided(prev_election, &creator);
 
             let cont = match self.handle_self_consensus(&payload) {
@@ -513,6 +568,24 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
             let block = self.create_block(payload.clone())?;
             self.consensused_blocks.push_back(block);
+
+            if let Some(hash) = self.meta_elections.consensus_history().last() {
+                if let Some(info) = self.observations.get_mut(hash) {
+                    info.consensused = true;
+                } else {
+                    log_or_panic!(
+                        "{:?} doesn't know about observation with hash {:?}",
+                        self.peer_list.our_pub_id(),
+                        hash
+                    );
+                }
+            } else {
+                log_or_panic!(
+                    "{:?} has empty consensus history but shouldn't (logic error)",
+                    self.our_pub_id()
+                );
+            }
+
             self.output_consensus_info();
 
             if cont {
@@ -1511,6 +1584,17 @@ impl Parsec<Transaction, PeerId> {
                         hashes.push_back(*event.hash());
                     }).or_insert_with(|| iter::once(*event.hash()).collect());
             }
+
+            // Populate the `observations` cache. Use also `interesting_content` to support partial graphs.
+            for hash in event
+                .vote()
+                .map(Vote::payload)
+                .into_iter()
+                .chain(&event.interesting_content)
+                .map(Observation::create_hash)
+            {
+                let _ = parsec.observations.insert(hash, ObservationInfo::default());
+            }
         }
 
         parsec.events = parsed_contents.events;
@@ -1522,6 +1606,12 @@ impl Parsec<Transaction, PeerId> {
         parsec.peer_list = parsed_contents.peer_list;
         parsec
     }
+}
+
+#[derive(Default)]
+struct ObservationInfo {
+    consensused: bool,
+    created_by_us: bool,
 }
 
 enum PostConsensusAction {
