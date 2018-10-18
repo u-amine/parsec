@@ -475,6 +475,8 @@ mod detail {
                 "/// interesting_content: {:?}",
                 meta_event.interesting_content
             )?;
+        } else {
+            writeln!(writer, "/// interesting_content: []",)?;
         }
 
         writeln!(writer, "/// last_ancestors: {:?}", event.last_ancestors())?;
