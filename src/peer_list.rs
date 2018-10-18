@@ -69,6 +69,10 @@ impl<S: SecretId> PeerList<S> {
         self.peers.contains_key(peer_id)
     }
 
+    pub fn peer(&self, peer_id: &S::PublicId) -> Option<&Peer<S::PublicId>> {
+        self.peers.get(peer_id)
+    }
+
     pub fn peer_state(&self, peer_id: &S::PublicId) -> PeerState {
         self.peers
             .get(peer_id)

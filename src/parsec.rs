@@ -1439,6 +1439,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.detect_stale_other_parent(event);
         self.detect_fork(event);
         self.detect_invalid_accusation(event);
+        self.detect_invalid_gossip_creator(event);
 
         // TODO: detect other forms of malice here
 
@@ -1632,6 +1633,56 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             event.creator().clone(),
             Malice::InvalidAccusation(*event.hash()),
         )
+    }
+
+    fn detect_invalid_gossip_creator(&mut self, event: &Event<T, S::PublicId>) {
+        // Skip this detection on ourselves, because our membership list is always empty so we
+        // would end up always accusing ourselves.
+        if event.creator() == self.our_pub_id() {
+            return;
+        }
+
+        let detected = {
+            let parent = if let Some(parent) = self.self_parent(event) {
+                parent
+            } else {
+                // Must be the initial event, so there is nothing to detect.
+                return;
+            };
+
+            let membership_list = if let Some(peer) = self.peer_list.peer(event.creator()) {
+                peer.membership_list()
+            } else {
+                log_or_panic!(
+                    "{:?} tried to detect malice on event with unknown creator: {:?}",
+                    self.our_pub_id(),
+                    event.creator()
+                );
+                return;
+            };
+
+            // Find an event X created by someone that the creator of `event` should not know about,
+            // where X is seen by `event` but not seen by `event`'s parent. If there is such an
+            // event, we raise the accusation.
+            //
+            // The reason why we filter out events seen by the parent is to prevent spamming
+            // accusations of the same malice.
+            self.peer_list
+                .all_ids()
+                .filter(|peer_id| *peer_id != event.creator() && !membership_list.contains(peer_id))
+                .filter_map(|peer_id| {
+                    let index = *event.last_ancestors().get(peer_id)?;
+                    let hash = self.peer_list.event_by_index(peer_id, index)?;
+                    self.get_known_event(hash).ok()
+                }).any(|invalid_event| !parent.sees(invalid_event))
+        };
+
+        if detected {
+            self.accuse(
+                event.creator().clone(),
+                Malice::InvalidGossipCreator(*event.hash()),
+            )
+        }
     }
 
     fn genesis_group(&self) -> BTreeSet<&S::PublicId> {
@@ -2428,6 +2479,16 @@ mod functional_tests {
         // Check that adding C_4 triggers an accusation by Alice, but that C_4 is still added to the
         // graph.
         let mut alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
+
+        // Manually initialise the membership lists.
+        // TODO: remove once the dot dumper and dot parser support membership lists.
+        let peers: Vec<_> = alice.peer_list.all_ids().cloned().collect();
+        for peer_id in &peers {
+            alice
+                .peer_list
+                .initialise_peer_membership_list(peer_id, peers.clone());
+        }
+
         let expected_accusations = vec![(
             carol.our_pub_id().clone(),
             Malice::StaleOtherParent(c_4_hash),

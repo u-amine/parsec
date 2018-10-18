@@ -198,6 +198,14 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         &self.last_ancestors
     }
 
+    pub fn is_request(&self) -> bool {
+        if let Cause::Request { .. } = self.content.cause {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn is_response(&self) -> bool {
         if let Cause::Response { .. } = self.content.cause {
             true
