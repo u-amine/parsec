@@ -6,7 +6,8 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::{MetaVote, MetaVotes};
+use super::meta_event::MetaEvent;
+use super::meta_vote::MetaVote;
 use hash::Hash;
 use id::PublicId;
 use network_event::NetworkEvent;
@@ -104,30 +105,6 @@ struct Outcome<T: NetworkEvent, P: PublicId> {
     payload: Observation<T, P>,
     // List of voters at the time this election was decided.
     voters: BTreeSet<P>,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub(crate) struct MetaEvent<T: NetworkEvent, P: PublicId> {
-    // The set of peers for which this event can strongly-see an event by that peer which carries a
-    // valid block.  If there are a supermajority of peers here, this event is an "observer".
-    pub observations: BTreeSet<P>,
-    // Payloads of all the votes deemed interesting by this event.
-    pub interesting_content: Vec<Observation<T, P>>,
-    pub meta_votes: MetaVotes<P>,
-}
-
-impl<T: NetworkEvent, P: PublicId> MetaEvent<T, P> {
-    pub fn new() -> Self {
-        MetaEvent {
-            observations: BTreeSet::new(),
-            interesting_content: Vec::new(),
-            meta_votes: MetaVotes::new(),
-        }
-    }
-
-    pub fn add_meta_votes(&mut self, peer_id: P, votes: Vec<MetaVote>) {
-        let _ = self.meta_votes.insert(peer_id, votes);
-    }
 }
 
 pub(crate) struct MetaElections<T: NetworkEvent, P: PublicId> {

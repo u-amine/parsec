@@ -458,11 +458,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             return false;
         }
 
-        let self_parent = if let Some(event) = self.self_parent(event) {
-            event
+        let self_parent = if let Some(self_parent) = self.self_parent(event) {
+            self_parent
         } else {
             log_or_panic!(
-                "{:?} has event {:?} with observarions, but not self-parent",
+                "{:?} has event {:?} with observations, but not self-parent",
                 self.our_pub_id(),
                 event
             );
