@@ -8,7 +8,7 @@
 
 use gossip::Event;
 use hash::Hash;
-use meta_voting::{BoolSet, MetaEvent, MetaVote, Step};
+use meta_voting::{BoolSet, MetaElectionHandle, MetaEvent, MetaVote, Step};
 use mock::{PeerId, Transaction};
 use observation::Observation;
 use peer_list::{PeerList, PeerState};
@@ -59,8 +59,10 @@ impl ParsedContents {
         unwrap!(self.peer_list.add_event(&event));
 
         let hash = *event.hash();
+        let meta_event = MetaEvent::build(MetaElectionHandle::CURRENT, &event).finish();
+
         let _ = self.events.insert(hash, event);
-        let _ = self.meta_events.insert(hash, MetaEvent::new());
+        let _ = self.meta_events.insert(hash, meta_event);
         self.events_order.push(hash);
     }
 }
@@ -254,9 +256,12 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
 
         let hash = *parsed_event.hash();
         if !event.interesting_content.is_empty() || !mv.meta_votes.is_empty() {
-            let mut meta_event = MetaEvent::new();
-            meta_event.meta_votes = mv.meta_votes;
-            meta_event.interesting_content = event.interesting_content;
+            let meta_event = {
+                let mut builder = MetaEvent::build(MetaElectionHandle::CURRENT, &parsed_event);
+                builder.set_interesting_content(event.interesting_content);
+                builder.set_meta_votes(mv.meta_votes);
+                builder.finish()
+            };
 
             let _ = meta_events.insert(hash, meta_event);
         }
