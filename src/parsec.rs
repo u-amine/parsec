@@ -24,7 +24,8 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::{iter, mem, u64};
 use vote::Vote;
 
-pub type IsInterestingEventFn<P> = fn(did_vote: &BTreeSet<P>, can_vote: &BTreeSet<P>) -> bool;
+pub type IsInterestingEventFn<P> =
+    fn(peers_that_did_vote: &BTreeSet<P>, peers_that_can_vote: &BTreeSet<P>) -> bool;
 
 /// Returns whether `small` is more than two thirds of `large`.
 pub fn is_more_than_two_thirds(small: usize, large: usize) -> bool {
@@ -446,11 +447,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn is_observer(&self, builder: &MetaEventBuilder<T, S::PublicId>) -> bool {
-        // An event is an observer if it has a supermajority of observations and its self-parent
+        // An event is an observer if it has a supermajority of observees and its self-parent
         // does not.
         let voter_count = self.voter_count(builder.election());
 
-        if !is_more_than_two_thirds(builder.observation_count(), voter_count) {
+        if !is_more_than_two_thirds(builder.observee_count(), voter_count) {
             return false;
         }
 
@@ -475,7 +476,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .meta_elections
             .meta_event(builder.election(), self_parent.hash())
         {
-            !is_more_than_two_thirds(meta_parent.observations.len(), voter_count)
+            !is_more_than_two_thirds(meta_parent.observees.len(), voter_count)
         } else {
             log_or_panic!(
                 "{:?} doesn't have meta-event for event {:?} (self-parent of {:?}) in meta-election {:?}",
@@ -757,7 +758,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             let mut builder = MetaEvent::build(election, event);
 
             self.set_interesting_content(&mut builder);
-            self.set_observations(&mut builder);
+            self.set_observees(&mut builder);
             self.set_meta_votes(&mut builder)?;
 
             (builder.finish(), event.creator().clone())
@@ -772,7 +773,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     // Any payloads which this event sees as "interesting".  If this returns a non-empty set, then
     // this event is classed as an interesting one.
     fn set_interesting_content(&self, builder: &mut MetaEventBuilder<T, S::PublicId>) {
-        let can_vote = self.voters(builder.election());
+        let peers_that_can_vote = self.voters(builder.election());
 
         let indexed_payloads_map: BTreeMap<_, _> = self
             .peer_list
@@ -790,12 +791,18 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     this_payload,
                 )
             }).filter_map(|this_payload| {
-                let did_vote =
-                    self.ancestors_carrying_payload(&can_vote, builder.event(), this_payload);
-                if (self.is_interesting_event)(&did_vote.keys().cloned().collect(), &can_vote) {
+                let peers_that_did_vote = self.ancestors_carrying_payload(
+                    &peers_that_can_vote,
+                    builder.event(),
+                    this_payload,
+                );
+                if (self.is_interesting_event)(
+                    &peers_that_did_vote.keys().cloned().collect(),
+                    &peers_that_can_vote,
+                ) {
                     Some((
                         this_payload.clone(),
-                        did_vote
+                        peers_that_did_vote
                             .get(builder.event().creator())
                             .cloned()
                             // Sometimes the interesting event's creator won't have voted for the
@@ -816,7 +823,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .map(|(payload, _index)| payload)
             .collect();
 
-        let _ = builder.set_interesting_content(payloads);
+        builder.set_interesting_content(payloads);
     }
 
     fn ancestors_carrying_payload(
@@ -843,8 +850,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             }).collect()
     }
 
-    fn set_observations(&self, builder: &mut MetaEventBuilder<T, S::PublicId>) {
-        let observations = self
+    fn set_observees(&self, builder: &mut MetaEventBuilder<T, S::PublicId>) {
+        let observees = self
             .meta_elections
             .interesting_events(builder.election())
             .filter_map(|(peer, hashes)| {
@@ -858,7 +865,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             }).cloned()
             .collect();
 
-        let _ = builder.set_observations(observations);
+        builder.set_observees(observees);
     }
 
     fn set_meta_votes(&self, builder: &mut MetaEventBuilder<T, S::PublicId>) -> Result<()> {
@@ -904,7 +911,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     )
                 };
 
-                let _ = builder.add_meta_votes(peer_id.clone(), new_meta_votes);
+                builder.add_meta_votes(peer_id.clone(), new_meta_votes);
             }
         } else if self.is_observer(builder) {
             // Start meta votes for this event.
@@ -915,9 +922,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     peer_id,
                     builder.event(),
                 );
-                let initial_estimate = builder.has_observation(peer_id);
+                let initial_estimate = builder.has_observee(peer_id);
 
-                let _ = builder.add_meta_votes(
+                builder.add_meta_votes(
                     peer_id.clone(),
                     MetaVote::new(initial_estimate, &other_votes, voters.len()),
                 );

@@ -55,13 +55,13 @@ struct MetaElection<T: NetworkEvent, P: PublicId> {
 }
 
 impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
-    fn new(voters: BTreeSet<P>) -> Self {
+    fn new(voters: BTreeSet<P>, consensus_len: usize) -> Self {
         MetaElection {
             meta_events: BTreeMap::new(),
             round_hashes: BTreeMap::new(),
             undecided_peers: voters,
             interesting_events: BTreeMap::new(),
-            consensus_len: 0,
+            consensus_len,
             outcome: None,
         }
     }
@@ -122,7 +122,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
     pub fn new(voters: BTreeSet<P>) -> Self {
         MetaElections {
             next_index: 0,
-            current_election: MetaElection::new(voters),
+            current_election: MetaElection::new(voters, 0),
             previous_elections: BTreeMap::new(),
             consensus_history: Vec::new(),
         }
@@ -161,12 +161,13 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
 
         // Update round hashes.
         for (peer_id, event_votes) in &meta_event.meta_votes {
+            let hashes = if let Some(hashes) = election.round_hashes.get_mut(&peer_id) {
+                hashes
+            } else {
+                continue;
+            };
+
             for meta_vote in event_votes {
-                let hashes = if let Some(hashes) = election.round_hashes.get_mut(&peer_id) {
-                    hashes
-                } else {
-                    continue;
-                };
                 while hashes.len() < meta_vote.round + 1 {
                     let next_round_hash = hashes[hashes.len() - 1].increment_round();
                     hashes.push(next_round_hash);
@@ -273,11 +274,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
 
         // Already consensused?
         let hash = payload.create_hash();
-        if self.consensus_history()[..election.consensus_len].contains(&hash) {
-            return false;
-        }
-
-        true
+        !self.consensus_history()[..election.consensus_len].contains(&hash)
     }
 
     /// Creates new election and returns handle of the previous elections.
@@ -295,8 +292,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         let hash = payload.create_hash();
         self.consensus_history.push(hash);
 
-        let mut new = MetaElection::new(voters.clone());
-        new.consensus_len = self.consensus_history.len();
+        let new = MetaElection::new(voters.clone(), self.consensus_history.len());
 
         let mut previous = mem::replace(&mut self.current_election, new);
         previous.outcome = Some(Outcome { payload, voters });

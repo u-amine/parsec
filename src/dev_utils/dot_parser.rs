@@ -655,6 +655,10 @@ mod tests {
             assert_eq!(gossip_graph, parsed_result.events);
 
             // The dumped dot file doesn't contain all the meta_votes
+            // NOTE: We only serialise meta-votes in the core file, not complete meta-events.
+            // This is why we compare the number of meta-votes (from the core) to the number of
+            // meta-events (in the parsed result) here. There is, however, one-to-one mapping
+            // between meta-events and sets of meta-votes, so this is correct.
             assert!(meta_votes.len() >= parsed_result.meta_events.len());
             for (hash, meta_event) in &parsed_result.meta_events {
                 let ori_meta_vote = unwrap!(meta_votes.get(hash));

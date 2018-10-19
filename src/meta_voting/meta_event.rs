@@ -18,7 +18,7 @@ use std::collections::BTreeSet;
 pub(crate) struct MetaEvent<T: NetworkEvent, P: PublicId> {
     // The set of peers for which this event can strongly-see an event by that peer which carries a
     // valid block.  If there are a supermajority of peers here, this event is an "observer".
-    pub observations: BTreeSet<P>,
+    pub observees: BTreeSet<P>,
     // Payloads of all the votes deemed interesting by this event.
     pub interesting_content: Vec<Observation<T, P>>,
     pub meta_votes: MetaVotes<P>,
@@ -30,7 +30,7 @@ impl<T: NetworkEvent, P: PublicId> MetaEvent<T, P> {
             election,
             event,
             meta_event: MetaEvent {
-                observations: BTreeSet::new(),
+                observees: BTreeSet::new(),
                 interesting_content: Vec::new(),
                 meta_votes: MetaVotes::new(),
             },
@@ -53,16 +53,16 @@ impl<'a, T: NetworkEvent + 'a, P: PublicId + 'a> MetaEventBuilder<'a, T, P> {
         self.event
     }
 
-    pub fn observation_count(&self) -> usize {
-        self.meta_event.observations.len()
+    pub fn observee_count(&self) -> usize {
+        self.meta_event.observees.len()
     }
 
-    pub fn has_observation(&self, peer_id: &P) -> bool {
-        self.meta_event.observations.contains(peer_id)
+    pub fn has_observee(&self, peer_id: &P) -> bool {
+        self.meta_event.observees.contains(peer_id)
     }
 
-    pub fn set_observations(&mut self, observations: BTreeSet<P>) {
-        self.meta_event.observations = observations;
+    pub fn set_observees(&mut self, observees: BTreeSet<P>) {
+        self.meta_event.observees = observees;
     }
 
     pub fn set_interesting_content(&mut self, content: Vec<Observation<T, P>>) {
