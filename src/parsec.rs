@@ -1181,6 +1181,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 return;
             };
 
+            if event.creator() == self.our_pub_id() {
+                return;
+            }
+
             if let Some(other_parent) = self.other_parent(event) {
                 (
                     event.creator().clone(),
@@ -1192,13 +1196,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             }
         };
 
-        if self.peer_list.is_membership_list_initialised(&creator) {
+        if self.peer_list.is_peer_membership_list_initialised(&creator) {
             return;
         }
 
         let membership_list = self
             .peer_list
-            .membership_list_at(&other_parent_creator, other_parent_index);
+            .peer_membership_list_at(&other_parent_creator, other_parent_index);
         self.peer_list
             .initialise_peer_membership_list(&creator, membership_list);
     }
@@ -1650,16 +1654,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 return;
             };
 
-            let membership_list = if let Some(peer) = self.peer_list.peer(event.creator()) {
-                peer.membership_list()
-            } else {
-                log_or_panic!(
-                    "{:?} tried to detect malice on event with unknown creator: {:?}",
-                    self.our_pub_id(),
-                    event.creator()
-                );
-                return;
-            };
+            let membership_list =
+                if let Some(list) = self.peer_list.peer_membership_list(event.creator()) {
+                    list
+                } else {
+                    // The membership list is not yet initialised - skip the detection.
+                    return;
+                };
 
             // Find an event X created by someone that the creator of `event` should not know about,
             // where X is seen by `event` but not seen by `event`'s parent. If there is such an
@@ -1671,10 +1672,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .all_ids()
                 .filter(|peer_id| *peer_id != event.creator() && !membership_list.contains(peer_id))
                 .filter_map(|peer_id| {
-                    let index = *event.last_ancestors().get(peer_id)?;
-                    let hash = self.peer_list.event_by_index(peer_id, index)?;
-                    self.get_known_event(hash).ok()
-                }).any(|invalid_event| !parent.sees(invalid_event))
+                    event
+                        .last_ancestors()
+                        .get(peer_id)
+                        .map(|index| (peer_id, *index))
+                }).flat_map(|(peer_id, index)| self.peer_list.events_by_index(peer_id, index))
+                .filter_map(|hash| self.get_known_event(hash).ok())
+                .any(|invalid_event| !parent.sees(invalid_event))
         };
 
         if detected {
