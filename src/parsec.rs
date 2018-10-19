@@ -1640,12 +1640,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn detect_invalid_gossip_creator(&mut self, event: &Event<T, S::PublicId>) {
-        // Skip this detection on ourselves, because our membership list is always empty so we
-        // would end up always accusing ourselves.
-        if event.creator() == self.our_pub_id() {
-            return;
-        }
-
         let detected = {
             let parent = if let Some(parent) = self.self_parent(event) {
                 parent
@@ -1670,7 +1664,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             // accusations of the same malice.
             self.peer_list
                 .all_ids()
-                .filter(|peer_id| *peer_id != event.creator() && !membership_list.contains(peer_id))
+                .filter(|peer_id| !membership_list.contains(peer_id))
                 .filter_map(|peer_id| {
                     event
                         .last_ancestors()

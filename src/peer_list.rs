@@ -17,6 +17,7 @@ use serialise;
 use std::collections::btree_map::{self, BTreeMap, Entry};
 use std::collections::BTreeSet;
 use std::fmt::{self, Debug, Formatter};
+use std::iter;
 use std::ops::{BitOr, BitOrAssign, Bound};
 
 pub(crate) struct PeerList<S: SecretId> {
@@ -98,7 +99,7 @@ impl<S: SecretId> PeerList<S> {
             }
         };
 
-        if changed && peer_id != *self.our_pub_id() {
+        if changed {
             self.record_our_membership_list_change(MembershipListChange::Add(peer_id))
         }
     }
@@ -115,9 +116,7 @@ impl<S: SecretId> PeerList<S> {
             return;
         }
 
-        if peer_id != self.our_pub_id() {
-            self.record_our_membership_list_change(MembershipListChange::Remove(peer_id.clone()))
-        }
+        self.record_our_membership_list_change(MembershipListChange::Remove(peer_id.clone()))
     }
 
     pub fn change_peer_state(&mut self, peer_id: &S::PublicId, state: PeerState) {
@@ -134,21 +133,20 @@ impl<S: SecretId> PeerList<S> {
             false
         };
 
-        if changed && peer_id != self.our_pub_id() {
+        if changed {
             self.record_our_membership_list_change(MembershipListChange::Add(peer_id.clone()))
         }
     }
 
     /// Add `other_peer_id` to `peer_id`'s membership list.
     /// If `peer_id` is ourselves, this function does nothing to prevent redundancy (the `PeerList`
-    /// itself is already out membership list). If `other_peer_id` equals `peer_id`, this function
-    /// also does nothing, as every peer implicitly knows themselves, so it too would be redundant.
+    /// itself is already our membership list).
     pub fn add_to_peer_membership_list(
         &mut self,
         peer_id: &S::PublicId,
         other_peer_id: S::PublicId,
     ) {
-        if *peer_id == *self.our_id.public_id() || *peer_id == other_peer_id {
+        if *peer_id == *self.our_id.public_id() {
             return;
         }
 
@@ -185,20 +183,17 @@ impl<S: SecretId> PeerList<S> {
     where
         I: IntoIterator<Item = S::PublicId>,
     {
-        // Do not populate our membership list, and do not put the peer into their own membership
-        // list, as it would be redundant.
-
+        // Do not populate our membership list as it would be redundant.
         if *peer_id == *self.our_id.public_id() {
             return;
         }
 
         if let Some(peer) = self.peers.get_mut(peer_id) {
-            for other_peer_id in membership_list
+            peer.membership_list = membership_list
                 .into_iter()
-                .filter(|other_peer_id| other_peer_id != peer_id)
-            {
-                peer.change_membership_list(MembershipListChange::Add(other_peer_id));
-            }
+                .chain(iter::once(peer_id.clone()))
+                .collect();
+            peer.membership_list_changes.clear();
         } else {
             log_or_panic!(
                 "{:?} tried to initialise membership list of unknown peer {:?}",
@@ -232,7 +227,7 @@ impl<S: SecretId> PeerList<S> {
     }
 
     /// Returns the historic membership list at the time the event at `index` was the last event of
-    /// the given peer.
+    /// the given peer (which can also be ourselves).
     pub fn peer_membership_list_at(
         &self,
         peer_id: &S::PublicId,
@@ -245,10 +240,7 @@ impl<S: SecretId> PeerList<S> {
         };
 
         let mut list = if peer_id == self.our_pub_id() {
-            self.voter_ids()
-                .filter(|other_peer_id| *other_peer_id != peer_id)
-                .cloned()
-                .collect()
+            self.voter_ids().cloned().collect()
         } else {
             peer.membership_list.clone()
         };
