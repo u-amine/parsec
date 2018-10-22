@@ -8,15 +8,12 @@
 
 mod bool_set;
 mod meta_elections;
+mod meta_event;
 mod meta_vote;
 mod meta_vote_counts;
 
 #[cfg(test)]
 pub(crate) use self::bool_set::BoolSet;
 pub(crate) use self::meta_elections::{MetaElectionHandle, MetaElections};
+pub(crate) use self::meta_event::{MetaEvent, MetaEventBuilder};
 pub(crate) use self::meta_vote::{MetaVote, Step};
-
-use hash::Hash;
-use std::collections::BTreeMap;
-
-pub(crate) type MetaVotes<P> = BTreeMap<Hash, BTreeMap<P, Vec<MetaVote>>>;

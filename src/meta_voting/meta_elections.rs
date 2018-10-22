@@ -6,14 +6,14 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use super::{MetaVote, MetaVotes};
+use super::meta_event::MetaEvent;
+use super::meta_vote::MetaVote;
 use hash::Hash;
 use id::PublicId;
 use network_event::NetworkEvent;
 use observation::Observation;
 use round_hash::RoundHash;
-use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{self, Debug};
 use std::{iter, mem, usize};
 
@@ -28,41 +28,45 @@ impl MetaElectionHandle {
 
 impl Debug for MetaElectionHandle {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "MetaElectionHandle");
+        write!(f, "MetaElectionHandle(")?;
 
         if *self == Self::CURRENT {
-            write!(f, "::CURRENT")
+            write!(f, "CURRENT")?
         } else {
-            write!(f, "({})", self.0)
+            write!(f, "{}", self.0)?
         }
+
+        write!(f, ")")
     }
 }
 
 struct MetaElection<T: NetworkEvent, P: PublicId> {
-    meta_votes: MetaVotes<P>,
+    meta_events: BTreeMap<Hash, MetaEvent<T, P>>,
     // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
     // the one for round `x` is held at index `x`.
     round_hashes: BTreeMap<P, Vec<RoundHash>>,
     // Set of peers who haven't decided this election yet.
     undecided_peers: BTreeSet<P>,
+    // The hashes of events for each peer that have a non-empty set of `interesting_content`.
+    interesting_events: BTreeMap<P, VecDeque<Hash>>,
+    // Length of `MetaElections::consensus_history` at the time this meta-election was created.
+    consensus_len: usize,
     outcome: Option<Outcome<T, P>>,
 }
 
 impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
-    fn new<'a, I>(voters: I) -> Self
-    where
-        I: IntoIterator<Item = &'a P>,
-        P: 'a,
-    {
+    fn new(voters: BTreeSet<P>, consensus_len: usize) -> Self {
         MetaElection {
-            meta_votes: BTreeMap::new(),
+            meta_events: BTreeMap::new(),
             round_hashes: BTreeMap::new(),
-            undecided_peers: voters.into_iter().cloned().collect(),
+            undecided_peers: voters,
+            interesting_events: BTreeMap::new(),
+            consensus_len,
             outcome: None,
         }
     }
 
-    fn initialise_round_hashes<'a, I>(&mut self, peer_ids: I, initial_hash: Hash)
+    fn initialise<'a, I>(&mut self, peer_ids: I, initial_hash: Hash)
     where
         I: IntoIterator<Item = &'a P>,
         P: 'a,
@@ -73,6 +77,25 @@ impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
                 let round_hash = RoundHash::new(peer_id, initial_hash);
                 (peer_id.clone(), vec![round_hash])
             }).collect();
+
+        // Clearing these caches is needed to be able to reprocess the whole graph outside of
+        // consensus, which we sometimes need in tests.
+        self.meta_events.clear();
+        self.interesting_events.clear();
+    }
+
+    fn is_already_interesting_content(&self, creator: &P, payload: &Observation<T, P>) -> bool {
+        self.interesting_events
+            .get(creator)
+            .map_or(false, |hashes| {
+                hashes.iter().any(|hash| {
+                    if let Some(meta_event) = self.meta_events.get(hash) {
+                        meta_event.interesting_content.contains(payload)
+                    } else {
+                        false
+                    }
+                })
+            })
     }
 }
 
@@ -80,32 +103,28 @@ impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
 struct Outcome<T: NetworkEvent, P: PublicId> {
     // Payload decided by this election
     payload: Observation<T, P>,
-    // Number of voters at the time this election was decided.
-    voter_count: usize,
+    // List of voters at the time this election was decided.
+    voters: BTreeSet<P>,
 }
 
 pub(crate) struct MetaElections<T: NetworkEvent, P: PublicId> {
+    // Index of next decided meta-election
+    next_index: usize,
     // Current ongoing meta-election.
     current_election: MetaElection<T, P>,
     // Meta-elections that are already decided by us, but not by all the other peers.
     previous_elections: BTreeMap<MetaElectionHandle, MetaElection<T, P>>,
     // Hashes of the consensused blocks in the order they were consensused.
     consensus_history: Vec<Hash>,
-    // Index of next decided meta-election
-    next_index: usize,
 }
 
 impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
-    pub fn new<'a, I>(voters: I) -> Self
-    where
-        I: IntoIterator<Item = &'a P>,
-        P: 'a,
-    {
+    pub fn new(voters: BTreeSet<P>) -> Self {
         MetaElections {
-            current_election: MetaElection::new(voters),
+            next_index: 0,
+            current_election: MetaElection::new(voters, 0),
             previous_elections: BTreeMap::new(),
             consensus_history: Vec::new(),
-            next_index: 0,
         }
     }
 
@@ -127,12 +146,65 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
             .map(|(handle, _)| *handle)
     }
 
+    pub fn add_meta_event(
+        &mut self,
+        handle: MetaElectionHandle,
+        event_hash: Hash,
+        creator: P,
+        meta_event: MetaEvent<T, P>,
+    ) {
+        let election = if let Some(election) = self.get_mut(handle) {
+            election
+        } else {
+            return;
+        };
+
+        // Update round hashes.
+        for (peer_id, event_votes) in &meta_event.meta_votes {
+            let hashes = if let Some(hashes) = election.round_hashes.get_mut(&peer_id) {
+                hashes
+            } else {
+                continue;
+            };
+
+            for meta_vote in event_votes {
+                while hashes.len() < meta_vote.round + 1 {
+                    let next_round_hash = hashes[hashes.len() - 1].increment_round();
+                    hashes.push(next_round_hash);
+                }
+            }
+        }
+
+        // Update interesting events
+        if !meta_event.interesting_content.is_empty() {
+            election
+                .interesting_events
+                .entry(creator)
+                .or_insert_with(VecDeque::new)
+                .push_back(event_hash);
+        }
+
+        // Insert the meta-event itself.
+        let _ = election.meta_events.insert(event_hash, meta_event);
+    }
+
+    pub fn meta_event(
+        &self,
+        handle: MetaElectionHandle,
+        event_hash: &Hash,
+    ) -> Option<&MetaEvent<T, P>> {
+        self.get(handle)
+            .and_then(|election| election.meta_events.get(event_hash))
+    }
+
     pub fn meta_votes(
         &self,
         handle: MetaElectionHandle,
         event_hash: &Hash,
     ) -> Option<&BTreeMap<P, Vec<MetaVote>>> {
-        self.get(handle).and_then(|e| e.meta_votes.get(event_hash))
+        self.get(handle)
+            .and_then(|election| election.meta_events.get(event_hash))
+            .map(|meta_event| &meta_event.meta_votes)
     }
 
     pub fn round_hashes(&self, handle: MetaElectionHandle, peer_id: &P) -> Option<&Vec<RoundHash>> {
@@ -146,15 +218,63 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
             .map(|outcome| &outcome.payload)
     }
 
-    /// Number of voters at the time the given meta-election was decided. `None` if not yet decided.
-    pub fn decided_voter_count(&self, handle: MetaElectionHandle) -> Option<usize> {
+    /// List of voters at the time the given meta-election was decided. `None` if not yet decided.
+    pub fn decided_voters(&self, handle: MetaElectionHandle) -> Option<&BTreeSet<P>> {
         self.get(handle)
             .and_then(|election| election.outcome.as_ref())
-            .map(|outcome| outcome.voter_count)
+            .map(|outcome| &outcome.voters)
     }
 
     pub fn consensus_history(&self) -> &[Hash] {
         &self.consensus_history
+    }
+
+    pub fn interesting_events(
+        &self,
+        handle: MetaElectionHandle,
+    ) -> impl Iterator<Item = (&P, &VecDeque<Hash>)> {
+        self.get(handle)
+            .into_iter()
+            .flat_map(|election| &election.interesting_events)
+    }
+
+    pub fn first_interesting_content_by(
+        &self,
+        handle: MetaElectionHandle,
+        creator: &P,
+    ) -> Option<&Observation<T, P>> {
+        let election = self.get(handle)?;
+        let event_hash = election
+            .interesting_events
+            .get(creator)
+            .and_then(VecDeque::front)?;
+        let meta_event = election.meta_events.get(event_hash)?;
+
+        meta_event.interesting_content.first()
+    }
+
+    /// Is the given payload candidate for being interesting from the point of view of an event by
+    /// the given creator?
+    pub fn is_interesting_content_candidate(
+        &self,
+        handle: MetaElectionHandle,
+        creator: &P,
+        payload: &Observation<T, P>,
+    ) -> bool {
+        let election = if let Some(election) = self.get(handle) {
+            election
+        } else {
+            return false;
+        };
+
+        // Already interesting?
+        if election.is_already_interesting_content(creator, payload) {
+            return false;
+        }
+
+        // Already consensused?
+        let hash = payload.create_hash();
+        !self.consensus_history()[..election.consensus_len].contains(&hash)
     }
 
     /// Creates new election and returns handle of the previous elections.
@@ -167,19 +287,18 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         I: IntoIterator<Item = &'a P>,
         P: 'a,
     {
+        let voters: BTreeSet<_> = voters.into_iter().cloned().collect();
+
         let hash = payload.create_hash();
-        let new = MetaElection::new(voters);
-        let voter_count = new.undecided_peers.len();
+        self.consensus_history.push(hash);
+
+        let new = MetaElection::new(voters.clone(), self.consensus_history.len());
 
         let mut previous = mem::replace(&mut self.current_election, new);
-        previous.outcome = Some(Outcome {
-            payload,
-            voter_count,
-        });
+        previous.outcome = Some(Outcome { payload, voters });
 
         let handle = self.next_handle();
         let _ = self.previous_elections.insert(handle, previous);
-        self.consensus_history.push(hash);
 
         handle
     }
@@ -212,68 +331,25 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         }
     }
 
-    pub fn insert(
-        &mut self,
-        handle: MetaElectionHandle,
-        event_hash: Hash,
-        meta_votes: BTreeMap<P, Vec<MetaVote>>,
-    ) {
-        if let Some(election) = self.get_mut(handle) {
-            let _ = election.meta_votes.insert(event_hash, meta_votes);
-        }
-    }
-
-    pub fn restart_current_election_round_hashes<'a, I>(&mut self, peer_ids: I)
+    pub fn restart_current_election<'a, I>(&mut self, peer_ids: I)
     where
         I: IntoIterator<Item = &'a P>,
         P: 'a,
     {
         let hash = self.consensus_history.last().cloned().unwrap_or(Hash::ZERO);
-        self.initialise_current_election_round_hashes(peer_ids, hash);
+        self.current_election.initialise(peer_ids, hash);
     }
 
-    pub fn update_round_hashes(&mut self, handle: MetaElectionHandle, event_hash: &Hash) {
-        let election = if let Some(election) = self.get_mut(handle) {
-            election
-        } else {
-            return;
-        };
-
-        let meta_votes = if let Some(meta_votes) = election.meta_votes.get(event_hash) {
-            meta_votes
-        } else {
-            return;
-        };
-
-        for (peer_id, event_votes) in meta_votes {
-            for meta_vote in event_votes {
-                let hashes = if let Some(hashes) = election.round_hashes.get_mut(&peer_id) {
-                    hashes
-                } else {
-                    continue;
-                };
-                while hashes.len() < meta_vote.round + 1 {
-                    let next_round_hash = hashes[hashes.len() - 1].increment_round();
-                    hashes.push(next_round_hash);
-                }
-            }
-        }
-    }
-
-    pub fn initialise_current_election_round_hashes<'a, I>(
-        &mut self,
-        peer_ids: I,
-        initial_hash: Hash,
-    ) where
+    pub fn initialise_current_election<'a, I>(&mut self, peer_ids: I, initial_hash: Hash)
+    where
         I: IntoIterator<Item = &'a P>,
         P: 'a,
     {
-        self.current_election
-            .initialise_round_hashes(peer_ids, initial_hash);
+        self.current_election.initialise(peer_ids, initial_hash);
     }
 
-    pub fn current_meta_votes(&self) -> &MetaVotes<P> {
-        &self.current_election.meta_votes
+    pub fn current_meta_events(&self) -> &BTreeMap<Hash, MetaEvent<T, P>> {
+        &self.current_election.meta_events
     }
 
     fn get(&self, handle: MetaElectionHandle) -> Option<&MetaElection<T, P>> {
@@ -317,13 +393,30 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
 
 #[cfg(test)]
 impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
-    pub fn new_from_parsed<'a, I>(voters: I, votes: MetaVotes<P>) -> Self
+    pub fn new_from_parsed<'a, I>(
+        voters: I,
+        meta_events: BTreeMap<Hash, MetaEvent<T, P>>,
+        mut creators: BTreeMap<Hash, P>,
+    ) -> Self
     where
         I: IntoIterator<Item = &'a P>,
         P: 'a,
     {
-        let mut new = Self::new(voters);
-        new.current_election.meta_votes = votes;
+        let mut new = Self::new(voters.into_iter().cloned().collect());
+
+        for (hash, meta_event) in &meta_events {
+            if !meta_event.interesting_content.is_empty() {
+                if let Some(creator) = creators.remove(hash) {
+                    new.current_election
+                        .interesting_events
+                        .entry(creator)
+                        .or_insert_with(VecDeque::new)
+                        .push_back(*hash);
+                }
+            }
+        }
+
+        new.current_election.meta_events = meta_events;
         new
     }
 }

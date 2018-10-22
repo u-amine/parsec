@@ -9,7 +9,7 @@
 use gossip::Event;
 use hash::Hash;
 use id::SecretId;
-use meta_voting::MetaVote;
+use meta_voting::MetaEvent;
 use network_event::NetworkEvent;
 use peer_list::PeerList;
 use std::collections::BTreeMap;
@@ -33,16 +33,16 @@ pub(crate) fn init() {
 pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
     owner_id: &S::PublicId,
     gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
-    meta_votes: &BTreeMap<Hash, BTreeMap<S::PublicId, Vec<MetaVote>>>,
+    meta_events: &BTreeMap<Hash, MetaEvent<T, S::PublicId>>,
     peer_list: &PeerList<S>,
 ) {
-    detail::to_file(owner_id, gossip_graph, meta_votes, peer_list)
+    detail::to_file(owner_id, gossip_graph, meta_events, peer_list)
 }
 #[cfg(not(feature = "dump-graphs"))]
 pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
     _: &S::PublicId,
     _: &BTreeMap<Hash, Event<T, S::PublicId>>,
-    _: &BTreeMap<Hash, BTreeMap<S::PublicId, Vec<MetaVote>>>,
+    _: &BTreeMap<Hash, MetaEvent<T, S::PublicId>>,
     _: &PeerList<S>,
 ) {
 }
@@ -55,7 +55,7 @@ mod detail {
     use gossip::Event;
     use hash::Hash;
     use id::{PublicId, SecretId};
-    use meta_voting::MetaVote;
+    use meta_voting::MetaEvent;
     use network_event::NetworkEvent;
     use peer_list::PeerList;
     use rand::{self, Rng};
@@ -108,10 +108,15 @@ mod detail {
     fn catch_dump<T: NetworkEvent, P: PublicId>(
         mut file_path: PathBuf,
         gossip_graph: &BTreeMap<Hash, Event<T, P>>,
-        meta_votes: &BTreeMap<Hash, BTreeMap<P, Vec<MetaVote>>>,
+        meta_events: &BTreeMap<Hash, MetaEvent<T, P>>,
     ) {
         if let Some("dev_utils::dot_parser::tests::dot_parser") = thread::current().name() {
+            let meta_votes: BTreeMap<_, _> = meta_events
+                .into_iter()
+                .map(|(hash, me)| (*hash, me.meta_votes.clone()))
+                .collect();
             let dumped_info = serialise(&(gossip_graph, meta_votes));
+
             assert!(file_path.set_extension("core"));
             let mut file = unwrap!(File::create(&file_path));
             unwrap!(file.write_all(&dumped_info));
@@ -125,7 +130,7 @@ mod detail {
     pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
         owner_id: &S::PublicId,
         gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
-        meta_votes: &BTreeMap<Hash, BTreeMap<S::PublicId, Vec<MetaVote>>>,
+        meta_events: &BTreeMap<Hash, MetaEvent<T, S::PublicId>>,
         peer_list: &PeerList<S>,
     ) {
         let id = format!("{:?}", owner_id);
@@ -136,7 +141,7 @@ mod detail {
             *count
         });
         let file_path = DIR.with(|dir| dir.join(format!("{}-{:03}.dot", id, call_count)));
-        catch_dump(file_path.clone(), gossip_graph, meta_votes);
+        catch_dump(file_path.clone(), gossip_graph, meta_events);
 
         if let Ok(mut file) = File::create(&file_path) {
             let initial_events: Vec<Hash> = gossip_graph
@@ -151,7 +156,7 @@ mod detail {
             if let Err(error) = write_gossip_graph_dot(
                 &mut file,
                 gossip_graph,
-                meta_votes,
+                meta_events,
                 peer_list,
                 &initial_events,
             ) {
@@ -277,13 +282,13 @@ mod detail {
     fn write_evaluates<T: NetworkEvent, P: PublicId>(
         writer: &mut Write,
         gossip_graph: &BTreeMap<Hash, Event<T, P>>,
-        meta_votes: &BTreeMap<Hash, BTreeMap<P, Vec<MetaVote>>>,
+        meta_events: &BTreeMap<Hash, MetaEvent<T, P>>,
         initial_events: &[Hash],
     ) -> io::Result<()> {
         writeln!(writer, "/// meta-vote section")?;
         for (event_hash, event) in gossip_graph.iter() {
             write!(writer, " \"{:?}\" [", event.hash())?;
-            if meta_votes.contains_key(event_hash) {
+            if meta_events.contains_key(event_hash) {
                 write!(writer, " shape=rectangle, ")?;
             }
             write!(writer, "fillcolor=white, label=\"{}", event.short_name())?;
@@ -292,19 +297,19 @@ mod detail {
                 write!(writer, "\n{:?}", event_payload)?;
             }
 
-            // Write the `interesting_content` if have
-            if !event.interesting_content.is_empty() {
-                write!(writer, "\n{:?}", event.interesting_content)?;
-            }
+            if let Some(meta_event) = meta_events.get(event_hash) {
+                // Write the `interesting_content` if have
+                if !meta_event.interesting_content.is_empty() {
+                    write!(writer, "\n{:?}", meta_event.interesting_content)?;
+                }
 
-            // Write the `meta_votes` if have
-            if let Some(event_meta_votes) = meta_votes.get(event_hash) {
-                if event_meta_votes.len() >= initial_events.len() {
-                    let mut peer_ids: Vec<&P> = event_meta_votes.keys().collect();
+                // Write the `meta_votes` if have
+                if meta_event.meta_votes.len() >= initial_events.len() {
+                    let mut peer_ids: Vec<&P> = meta_event.meta_votes.keys().collect();
                     peer_ids.sort_by(|lhs, rhs| first_char(lhs).cmp(&first_char(rhs)));
 
                     for peer in &peer_ids {
-                        if let Some(votes) = event_meta_votes.get(peer) {
+                        if let Some(votes) = meta_event.meta_votes.get(peer) {
                             if votes.is_empty() {
                                 write!(writer, "\n{}: []", first_char(peer).unwrap_or('?'))?;
                             } else {
@@ -323,7 +328,11 @@ mod detail {
             }
             writeln!(writer, "\"]")?;
             // Add any styling
-            if !event.interesting_content.is_empty() {
+            if meta_events
+                .get(event_hash)
+                .map(|meta_event| !meta_event.interesting_content.is_empty())
+                .unwrap_or(false)
+            {
                 writeln!(
                     writer,
                     " \"{:?}\" [shape=rectangle, style=filled, fillcolor=crimson]",
@@ -391,7 +400,7 @@ mod detail {
     fn write_gossip_graph_dot<T: NetworkEvent, S: SecretId>(
         writer: &mut Write,
         gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
-        meta_votes: &BTreeMap<Hash, BTreeMap<S::PublicId, Vec<MetaVote>>>,
+        meta_events: &BTreeMap<Hash, MetaEvent<T, S::PublicId>>,
         peer_list: &PeerList<S>,
         initial_events: &[Hash],
     ) -> io::Result<()> {
@@ -414,8 +423,9 @@ mod detail {
 
         write_peerlist_to_dot(writer, peer_list)?;
 
-        for event in gossip_graph.values() {
-            event.write_to_dot_format(writer)?;
+        for (hash, event) in gossip_graph {
+            let meta_event = meta_events.get(hash);
+            write_event_to_dot(writer, event, meta_event)?;
         }
 
         for node in &nodes {
@@ -433,7 +443,7 @@ mod detail {
             write_other_parents(writer, &events)?;
         }
 
-        write_evaluates(writer, gossip_graph, meta_votes, initial_events)?;
+        write_evaluates(writer, gossip_graph, meta_events, initial_events)?;
 
         write_nodes(writer, &nodes)?;
         writeln!(writer, "}}")
@@ -449,6 +459,28 @@ mod detail {
             .map(|(peer_id, peer)| (peer_id, format!("{:?}", peer.state())))
             .collect::<BTreeMap<_, _>>();
         writeln!(writer, "/// peer_states: {:?}", peer_states)
+    }
+
+    fn write_event_to_dot<T: NetworkEvent, P: PublicId>(
+        writer: &mut Write,
+        event: &Event<T, P>,
+        meta_event: Option<&MetaEvent<T, P>>,
+    ) -> io::Result<()> {
+        writeln!(writer, "/// {{ {:?}", event.hash())?;
+        event.write_cause_to_dot_format(writer)?;
+
+        if let Some(meta_event) = meta_event {
+            writeln!(
+                writer,
+                "/// interesting_content: {:?}",
+                meta_event.interesting_content
+            )?;
+        } else {
+            writeln!(writer, "/// interesting_content: []",)?;
+        }
+
+        writeln!(writer, "/// last_ancestors: {:?}", event.last_ancestors())?;
+        writeln!(writer, "/// }}")
     }
 
     #[cfg(unix)]

@@ -8,7 +8,7 @@
 
 use gossip::Event;
 use hash::Hash;
-use meta_voting::{BoolSet, MetaVote, Step};
+use meta_voting::{BoolSet, MetaElectionHandle, MetaEvent, MetaVote, Step};
 use mock::{PeerId, Transaction};
 use observation::Observation;
 use peer_list::{PeerList, PeerState};
@@ -24,7 +24,7 @@ pub(crate) struct ParsedContents {
     pub our_id: PeerId,
     pub events: BTreeMap<Hash, Event<Transaction, PeerId>>,
     pub events_order: Vec<Hash>,
-    pub meta_votes: BTreeMap<Hash, BTreeMap<PeerId, Vec<MetaVote>>>,
+    pub meta_events: BTreeMap<Hash, MetaEvent<Transaction, PeerId>>,
     pub peer_list: PeerList<PeerId>,
 }
 
@@ -37,7 +37,7 @@ impl ParsedContents {
             our_id,
             events: BTreeMap::new(),
             events_order: Vec::new(),
-            meta_votes: BTreeMap::new(),
+            meta_events: BTreeMap::new(),
             peer_list,
         }
     }
@@ -48,6 +48,7 @@ impl ParsedContents {
         let event = self.events.remove(&hash)?;
 
         self.peer_list.remove_event(&event);
+        let _ = self.meta_events.remove(&hash);
 
         Some(event)
     }
@@ -58,7 +59,10 @@ impl ParsedContents {
         unwrap!(self.peer_list.add_event(&event));
 
         let hash = *event.hash();
+        let meta_event = MetaEvent::build(MetaElectionHandle::CURRENT, &event).finish();
+
         let _ = self.events.insert(hash, event);
+        let _ = self.meta_events.insert(hash, meta_event);
         self.events_order.push(hash);
     }
 }
@@ -101,7 +105,6 @@ struct ParsedEvent {
     other_parent: Option<String>,
     interesting_content: Vec<Observation<Transaction, PeerId>>,
     last_ancestors: BTreeMap<PeerId, u64>,
-    observations: BTreeSet<PeerId>,
 }
 
 impl ParsedEvent {
@@ -112,7 +115,6 @@ impl ParsedEvent {
         other_parent: Option<String>,
         interesting_content_string: &str,
         last_ancestors_string: &str,
-        observations: BTreeSet<PeerId>,
     ) -> Self {
         let interesting_content = parse_interesting_content(interesting_content_string);
         let last_ancestors = parse_peer_entries(last_ancestors_string)
@@ -126,7 +128,6 @@ impl ParsedEvent {
             other_parent,
             interesting_content,
             last_ancestors,
-            observations,
         }
     }
 }
@@ -227,7 +228,7 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
     let mut events = BTreeMap::new();
     let mut events_order = Vec::new();
     let mut name_hash_map: BTreeMap<String, Hash> = BTreeMap::new();
-    let mut meta_votes = BTreeMap::new();
+    let mut meta_events = BTreeMap::new();
     let length = parsing_events.len();
 
     while !parsing_events.is_empty() {
@@ -251,12 +252,18 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
             other_parent,
             mv.event_index,
             event.last_ancestors,
-            event.interesting_content,
         );
 
         let hash = *parsed_event.hash();
-        if !mv.meta_votes.is_empty() {
-            let _ = meta_votes.insert(hash, mv.meta_votes);
+        if !event.interesting_content.is_empty() || !mv.meta_votes.is_empty() {
+            let meta_event = {
+                let mut builder = MetaEvent::build(MetaElectionHandle::CURRENT, &parsed_event);
+                builder.set_interesting_content(event.interesting_content);
+                builder.set_meta_votes(mv.meta_votes);
+                builder.finish()
+            };
+
+            let _ = meta_events.insert(hash, meta_event);
         }
 
         let _ = events.insert(hash, parsed_event);
@@ -273,7 +280,7 @@ fn read(mut file: File) -> io::Result<ParsedContents> {
         our_id,
         events,
         events_order,
-        meta_votes,
+        meta_events,
         peer_list,
     })
 }
@@ -360,7 +367,6 @@ fn parse_event_graph(contents: &str) -> BTreeMap<String, ParsedEvent> {
                         other_parent,
                         info.interesting_content,
                         info.last_ancestors,
-                        BTreeSet::new(),
                     ),
                 );
             }
@@ -646,16 +652,17 @@ mod tests {
             let parsed_result = unwrap!(parse_dot_file(&dot_file_path));
 
             assert_eq!(gossip_graph.len(), parsed_result.events_order.len());
-            for event in &mut gossip_graph.values_mut() {
-                event.observations.clear();
-            }
             assert_eq!(gossip_graph, parsed_result.events);
 
             // The dumped dot file doesn't contain all the meta_votes
-            assert!(meta_votes.len() >= parsed_result.meta_votes.len());
-            for (hash, meta_vote) in &parsed_result.meta_votes {
+            // NOTE: We only serialise meta-votes in the core file, not complete meta-events.
+            // This is why we compare the number of meta-votes (from the core) to the number of
+            // meta-events (in the parsed result) here. There is, however, one-to-one mapping
+            // between meta-events and sets of meta-votes, so this is correct.
+            assert!(meta_votes.len() >= parsed_result.meta_events.len());
+            for (hash, meta_event) in &parsed_result.meta_events {
                 let ori_meta_vote = unwrap!(meta_votes.get(hash));
-                assert_eq!(ori_meta_vote, meta_vote);
+                assert_eq!(*ori_meta_vote, meta_event.meta_votes);
             }
         }
         assert_ne!(num_of_files, 0u8);

@@ -13,7 +13,6 @@ use id::{PublicId, SecretId};
 #[cfg(test)]
 use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
-use parsec::is_more_than_two_thirds;
 use serialise;
 use std::collections::btree_map::{self, BTreeMap, Entry};
 use std::collections::BTreeSet;
@@ -23,8 +22,6 @@ use std::ops::{BitOr, BitOrAssign};
 pub(crate) struct PeerList<S: SecretId> {
     our_id: S,
     peers: BTreeMap<S::PublicId, Peer<S::PublicId>>,
-    // Map of Hash(peer_id) => peer_id.
-    peer_id_hashes: Vec<(Hash, S::PublicId)>,
 }
 
 impl<S: SecretId> PeerList<S> {
@@ -32,7 +29,6 @@ impl<S: SecretId> PeerList<S> {
         PeerList {
             our_id,
             peers: BTreeMap::new(),
-            peer_id_hashes: vec![],
         }
     }
 
@@ -54,9 +50,9 @@ impl<S: SecretId> PeerList<S> {
         self.voters().map(|(id, _)| id)
     }
 
-    /// Returns an unsorted map of Hash(peer_id) => peer_id.
-    pub fn peer_id_hashes(&self) -> &Vec<(Hash, S::PublicId)> {
-        &self.peer_id_hashes
+    /// Returns an unsorted map of peer_id => Hash(peer_id).
+    pub fn peer_id_hashes(&self) -> impl Iterator<Item = (&S::PublicId, &Hash)> {
+        self.peers.iter().map(|(id, peer)| (id, &peer.id_hash))
     }
 
     /// Returns an iterator of peers.
@@ -95,10 +91,8 @@ impl<S: SecretId> PeerList<S> {
                 );
             }
             Entry::Vacant(entry) => {
-                let peer_id = entry.key().clone();
-                self.peer_id_hashes
-                    .push((Hash::from(serialise(&peer_id).as_slice()), peer_id));
-                let _ = entry.insert(Peer::new(state));
+                let peer = Peer::new(entry.key(), state);
+                let _ = entry.insert(peer);
             }
         };
     }
@@ -217,11 +211,6 @@ impl<S: SecretId> PeerList<S> {
         }
     }
 
-    /// Checks whether the input count becomes the super majority of the members that can vote.
-    pub fn is_super_majority(&self, count: usize) -> bool {
-        is_more_than_two_thirds(count, self.voters().count())
-    }
-
     /// Returns the hash of the last event created by this peer. Returns `None` if cannot find.
     pub fn last_event(&self, peer_id: &S::PublicId) -> Option<&Hash> {
         self.peers
@@ -299,7 +288,6 @@ impl<S: SecretId> Debug for PeerList<S> {
         for peer in &self.peers {
             writeln!(formatter, "    {:?},", peer)?;
         }
-        writeln!(formatter, "    {:?}", self.peer_id_hashes)?;
         write!(formatter, "}}")
     }
 }
@@ -313,7 +301,6 @@ impl PeerList<PeerId> {
         peer_states: &BTreeMap<PeerId, PeerState>,
     ) -> Self {
         let mut peers = BTreeMap::new();
-        let mut peer_id_hashes = Vec::new();
         for (peer_id, &state) in peer_states {
             let mut events = BTreeMap::new();
             for event in events_graph.values() {
@@ -334,18 +321,13 @@ impl PeerList<PeerId> {
                 }
             }
 
-            let mut peer = Peer::new(state);
+            let mut peer = Peer::new(peer_id, state);
             peer.events = events;
+
             let _ = peers.insert(peer_id.clone(), peer);
-
-            peer_id_hashes.push((Hash::from(serialise(&peer_id).as_slice()), peer_id.clone()))
         }
 
-        PeerList {
-            our_id,
-            peers,
-            peer_id_hashes,
-        }
+        PeerList { our_id, peers }
     }
 }
 
@@ -440,6 +422,7 @@ impl Debug for PeerState {
 
 #[derive(Debug)]
 pub struct Peer<P: PublicId> {
+    id_hash: Hash,
     state: PeerState,
     events: BTreeMap<u64, Hash>,
     membership_list: BTreeSet<P>,
@@ -447,8 +430,9 @@ pub struct Peer<P: PublicId> {
 }
 
 impl<P: PublicId> Peer<P> {
-    fn new(state: PeerState) -> Self {
+    fn new(id: &P, state: PeerState) -> Self {
         Self {
+            id_hash: Hash::from(serialise(id).as_slice()),
             state,
             events: BTreeMap::new(),
             membership_list: BTreeSet::new(),
