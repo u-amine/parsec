@@ -58,7 +58,7 @@ pub enum Malice {
     /// A node incorrectly accused other node of malice. Contains hash of the invalid Accusation
     /// event.
     InvalidAccusation(Hash),
-    /// We receive a gossip containing a event whose creator should not be known to the sender.
+    /// We receive a gossip containing an event whose creator should not be known to the sender.
     /// Contains hash of the sync event whose ancestor has the invalid creator.
     InvalidGossipCreator(Hash),
     // TODO: add other malice variants

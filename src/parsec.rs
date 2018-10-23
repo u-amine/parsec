@@ -582,6 +582,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
 
         let creator = self.get_known_event(event_hash)?.creator().clone();
+        let mut restart = false;
 
         if let Some(payload) = self.compute_consensus(MetaElectionHandle::CURRENT, event_hash) {
             let payload_hash = payload.create_hash();
@@ -617,23 +618,24 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             }
 
             if cont {
-                self.detect_malice_after_consensus(event_hash);
-                self.restart_consensus();
+                restart = true;
+            } else {
+                return Ok(());
             }
         } else if creator != *self.our_pub_id() {
-            let mut consensus = false;
             let undecided: Vec<_> = self.meta_elections.undecided_by(&creator).collect();
             for election in undecided {
                 if let Some(payload) = self.compute_consensus(election, event_hash) {
                     self.meta_elections.mark_as_decided(election, &creator);
                     self.handle_peer_consensus(&creator, &payload);
-                    consensus = true;
                 }
             }
+        }
 
-            if consensus {
-                self.detect_malice_after_consensus(event_hash);
-            }
+        self.detect_malice_after_consensus(event_hash);
+
+        if restart {
+            self.restart_consensus();
         }
 
         Ok(())
