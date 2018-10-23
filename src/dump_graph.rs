@@ -485,7 +485,21 @@ mod detail {
 
     #[cfg(unix)]
     fn symlink_dir<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) -> io::Result<()> {
+        use std::io::ErrorKind;
         use std::os::unix::fs::symlink;
+
+        // Try to overwrite the destination if it exists, but only if it is a symlink, to prevent
+        // accidental data loss.
+        match fs::symlink_metadata(&dst) {
+            Err(ref error) if error.kind() == ErrorKind::NotFound => (),
+            Err(error) => return Err(error),
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() {
+                    let _ = fs::remove_file(&dst);
+                }
+            }
+        }
+
         symlink(src, dst)
     }
 
