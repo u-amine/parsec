@@ -12,12 +12,350 @@ use meta_voting::{BoolSet, MetaElectionHandle, MetaEvent, MetaVote, Step};
 use mock::{PeerId, Transaction};
 use observation::Observation;
 use peer_list::{PeerList, PeerState};
+use pom::char_class::{self, *};
+use pom::parser::*;
+use pom::Result as PomResult;
+use pom::{DataInput, Parser};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{self, Read};
-use std::iter;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::thread;
+
+fn next_line() -> Parser<u8, ()> {
+    none_of(b"\r\n").repeat(0..) * one_of(b"\r\n").discard()
+}
+
+fn multispace() -> Parser<u8, ()> {
+    is_a(char_class::multispace).repeat(0..).discard()
+}
+
+#[derive(Debug)]
+struct ParsedFile {
+    our_id: PeerId,
+    peer_states: BTreeMap<PeerId, PeerState>,
+    details: BTreeMap<String, EventDetails>,
+    graph: BTreeMap<String, ParsedEvent>,
+    meta_votes: BTreeMap<String, ParsedMetaVotes>,
+}
+
+fn parse_file() -> Parser<u8, ParsedFile> {
+    (next_line().repeat(3) * parse_our_id()
+        + parse_peer_states()
+        + parse_event_details()
+        + parse_graph()
+        + parse_meta_votes()
+        - parse_footer()).map(|((((oid, pstates), details), graph), mv)| ParsedFile {
+        our_id: oid,
+        peer_states: pstates,
+        details,
+        graph,
+        meta_votes: mv,
+    })
+}
+
+fn parse_peer_id() -> Parser<u8, PeerId> {
+    is_a(alphanum)
+        .repeat(1..)
+        .collect()
+        .convert(String::from_utf8)
+        .map(|s| PeerId::new(&s))
+}
+
+fn parse_our_id() -> Parser<u8, PeerId> {
+    seq(b"/// our_id: ") * parse_peer_id() - multispace()
+}
+
+fn parse_peer_states() -> Parser<u8, BTreeMap<PeerId, PeerState>> {
+    let list_defs = seq(b"/// peer_states: {") * list(
+        parse_peer_id() - seq(b": \"") + parse_peer_state() - sym(b'"'),
+        seq(b", "),
+    ) - sym(b'}') * multispace();
+    list_defs.map(|defs| defs.into_iter().collect())
+}
+
+fn parse_peer_state() -> Parser<u8, PeerState> {
+    let state = seq(b"PeerState(") * list(parse_single_state(), sym(b'|')) - sym(b')');
+    state.map(|states| {
+        states
+            .into_iter()
+            .fold(PeerState::inactive(), |s1, s2| s1 | s2)
+    })
+}
+
+fn parse_single_state() -> Parser<u8, PeerState> {
+    seq(b"VOTE").map(|_| PeerState::VOTE)
+        | seq(b"SEND").map(|_| PeerState::SEND)
+        | seq(b"RECV").map(|_| PeerState::RECV)
+}
+
+fn parse_peers() -> Parser<u8, BTreeSet<PeerId>> {
+    (sym(b'{') * list(parse_peer_id(), seq(b", ")) - sym(b'}')).map(|v| v.into_iter().collect())
+}
+
+fn parse_event_details() -> Parser<u8, BTreeMap<String, EventDetails>> {
+    parse_single_event_detail()
+        .repeat(1..)
+        .map(|details| details.into_iter().collect())
+}
+
+#[derive(Debug)]
+struct EventDetails {
+    cause: String,
+    interesting_content: Vec<Observation<Transaction, PeerId>>,
+    last_ancestors: BTreeMap<PeerId, u64>,
+}
+
+fn parse_single_event_detail() -> Parser<u8, (String, EventDetails)> {
+    (parse_id_line() + parse_cause() + parse_interesting_content() + parse_last_ancestors()
+        - next_line()).map(|(((id, cause), interesting_content), last_ancestors)| {
+        (
+            id,
+            EventDetails {
+                cause,
+                interesting_content,
+                last_ancestors,
+            },
+        )
+    })
+}
+
+fn parse_id_line() -> Parser<u8, String> {
+    seq(b"/// { ") * parse_event_id() - next_line()
+}
+
+fn parse_event_id() -> Parser<u8, String> {
+    (is_a(hex_digit).repeat(6..) - seq(b"..")).convert(String::from_utf8)
+}
+
+fn parse_cause() -> Parser<u8, String> {
+    (seq(b"/// cause: ") * none_of(b"\r\n").repeat(1..) - one_of(b"\r\n").repeat(1..))
+        .convert(String::from_utf8)
+}
+
+fn parse_interesting_content() -> Parser<u8, Vec<Observation<Transaction, PeerId>>> {
+    seq(b"/// interesting_content: [") * list(parse_observation(), seq(b", "))
+        - sym(b']')
+        - next_line()
+}
+
+fn parse_observation() -> Parser<u8, Observation<Transaction, PeerId>> {
+    parse_genesis() | parse_add() | parse_remove() | parse_opaque()
+}
+
+fn parse_genesis() -> Parser<u8, Observation<Transaction, PeerId>> {
+    (seq(b"Genesis(") * parse_peers() - seq(b")")).map(Observation::Genesis)
+}
+
+fn parse_add() -> Parser<u8, Observation<Transaction, PeerId>> {
+    (seq(b"Add(") * parse_peer_id() - seq(b")")).map(Observation::Add)
+}
+
+fn parse_remove() -> Parser<u8, Observation<Transaction, PeerId>> {
+    (seq(b"Remove(") * parse_peer_id() - seq(b")")).map(Observation::Remove)
+}
+
+fn parse_opaque() -> Parser<u8, Observation<Transaction, PeerId>> {
+    (seq(b"OpaquePayload(") * parse_transaction() - seq(b")"))
+        .map(|s| Transaction::new(&s))
+        .map(Observation::OpaquePayload)
+}
+
+fn parse_transaction() -> Parser<u8, String> {
+    is_a(alphanum).repeat(1..).convert(String::from_utf8)
+}
+
+fn parse_last_ancestors() -> Parser<u8, BTreeMap<PeerId, u64>> {
+    (seq(b"/// last_ancestors: {") * list(
+        parse_peer_id() - seq(b": ") + is_a(digit)
+            .repeat(1..)
+            .convert(String::from_utf8)
+            .convert(|s| u64::from_str(&s)),
+        seq(b", "),
+    ) - next_line()).map(|v| v.into_iter().collect())
+}
+
+#[derive(Debug)]
+struct ParsedEvent {
+    creator: PeerId,
+    self_parent: Option<String>,
+    other_parent: Option<String>,
+}
+
+fn parse_graph() -> Parser<u8, BTreeMap<String, ParsedEvent>> {
+    parse_subgraph().repeat(1..).map(|graphs| {
+        let mut graph = BTreeMap::new();
+        for subgraph in graphs {
+            let mut self_parent = None;
+            for event in subgraph.events {
+                let other_parent = subgraph.other_parents.get(&event).cloned();
+                let _ = graph.insert(
+                    event.clone(),
+                    ParsedEvent {
+                        creator: subgraph.creator.clone(),
+                        self_parent: self_parent.clone(),
+                        other_parent,
+                    },
+                );
+                self_parent = Some(event);
+            }
+        }
+        graph
+    })
+}
+
+#[derive(Debug)]
+struct ParsedEdge {
+    start: String,
+    end: String,
+}
+
+#[derive(Debug)]
+struct ParsedSubgraph {
+    creator: PeerId,
+    events: Vec<String>,
+    other_parents: BTreeMap<String, String>,
+}
+
+fn parse_subgraph() -> Parser<u8, ParsedSubgraph> {
+    let id = next_line() * multispace() * seq(b"subgraph cluster_") * parse_peer_id()
+        - next_line().repeat(3);
+    let data =
+        id + parse_first_edge() + parse_edge().repeat(0..) - multispace() - sym(b'}') - next_line()
+            + parse_edge().repeat(0..)
+            - next_line();
+    // edges1 will contain the creator's line - we are only interested in the set of events at the
+    // end of edges
+    data.map(|(((id, first_edge), edges1), edges2)| ParsedSubgraph {
+        creator: id,
+        events: {
+            let mut events = vec![first_edge];
+            events.extend(edges1.into_iter().map(|edge| edge.end));
+            events
+        },
+        other_parents: edges2
+            .into_iter()
+            .map(|edge| (edge.end, edge.start))
+            .collect(),
+    })
+}
+
+fn parse_first_edge() -> Parser<u8, String> {
+    multispace() * parse_peer_id() * seq(b" -> \"") * parse_event_id() - next_line()
+}
+
+fn parse_edge() -> Parser<u8, ParsedEdge> {
+    (multispace() * sym(b'"') * parse_event_id() - seq(b"\" -> \"") + parse_event_id()
+        - next_line()).map(|(id1, id2)| ParsedEdge {
+        start: id1,
+        end: id2,
+    })
+}
+
+type ParsedMetaVotes = BTreeMap<PeerId, Vec<MetaVote>>;
+
+fn parse_meta_votes() -> Parser<u8, BTreeMap<String, ParsedMetaVotes>> {
+    seq(b"/// meta-vote section") * next_line() * parse_event_entry().repeat(1..).map(|v| {
+        v.into_iter()
+            .filter_map(|(id, opt_mv)| opt_mv.map(|mv| (id, mv)))
+            .collect()
+    })
+}
+
+fn parse_event_entry() -> Parser<u8, (String, Option<ParsedMetaVotes>)> {
+    (multispace() * sym(b'"').name("start event id") * parse_event_id()
+        - sym(b'"').name("end event id")
+        - multispace()
+        - sym(b'[')
+        - none_of(b"\"]").repeat(0..)
+        + parse_label().opt()
+        - sym(b']')
+        - next_line())
+}
+
+fn parse_label() -> Parser<u8, ParsedMetaVotes> {
+    let interesting_content =
+        sym(b'[') * none_of(b"]").repeat(1..) * sym(b']') * next_line().discard();
+    sym(b'"').name("start label")
+        * ((next_line()
+            * (parse_observation() * next_line()).opt()
+            * interesting_content.opt()
+            * (parse_peer_meta_votes() - one_of(b"\r\n")).repeat(0..)
+            + parse_peer_meta_votes()).map(|(mut mvs_vec, mvs)| {
+            mvs_vec.push(mvs);
+            mvs_vec
+                .into_iter()
+                .map(|(peer_initial, votes)| {
+                    (PeerId::from_initial(char::from(peer_initial)), votes)
+                }).collect()
+        }) | none_of(b"\"").repeat(0..).map(|_| BTreeMap::new()))
+        - sym(b'"').name("end label")
+}
+
+fn parse_peer_meta_votes() -> Parser<u8, (u8, Vec<MetaVote>)> {
+    is_a(alphanum) - sym(b':') - multispace() - sym(b'[') - multispace()
+        + list(parse_meta_vote(), one_of(b"\r\n").repeat(1..))
+        - multispace()
+        - sym(b']')
+}
+
+fn parse_meta_vote() -> Parser<u8, MetaVote> {
+    (sym(b'{') * multispace() * parse_number() - sym(b'/') + parse_number() - seq(b", est:")
+        + parse_bool_set()
+        - seq(b" bin:")
+        + parse_bool_set()
+        - seq(b" aux:")
+        + parse_opt_bool()
+        - seq(b" dec:")
+        + parse_opt_bool()
+        - seq(b" }")).map(|(((((round, step), est), bin), aux), dec)| MetaVote {
+        round: round as usize,
+        step: match step {
+            0 => Step::ForcedTrue,
+            1 => Step::ForcedFalse,
+            2 => Step::GenuineFlip,
+            _ => unreachable!(),
+        },
+        estimates: est,
+        bin_values: bin,
+        aux_value: aux,
+        decision: dec,
+    })
+}
+
+fn parse_number() -> Parser<u8, u64> {
+    is_a(digit)
+        .repeat(1..)
+        .convert(String::from_utf8)
+        .convert(|s| u64::from_str(&s))
+}
+
+fn parse_bool() -> Parser<u8, bool> {
+    sym(b't').map(|_| true) | sym(b'f').map(|_| false)
+}
+
+fn parse_bool_set() -> Parser<u8, BoolSet> {
+    (sym(b'{') * list(parse_bool(), seq(b", ")) - sym(b'}')).map(|v| {
+        v.into_iter().fold(BoolSet::default(), |mut bs, v| {
+            let _ = bs.insert(v);
+            bs
+        })
+    })
+}
+
+fn parse_opt_bool() -> Parser<u8, Option<bool>> {
+    sym(b'{') * parse_bool().opt() - sym(b'}')
+}
+
+fn parse_footer() -> Parser<u8, ()> {
+    // check that it's actually the end
+    one_of(b" \r\n").repeat(2..).discard()
+        - sym(b'{')
+        - (none_of(b"}").repeat(0..) * sym(b'}')).repeat(2)
+        - multispace()
+        - end()
+}
 
 /// The event graph and associated info that were parsed from the dumped dot file.
 pub(crate) struct ParsedContents {
@@ -48,7 +386,6 @@ impl ParsedContents {
         let event = self.events.remove(&hash)?;
 
         self.peer_list.remove_event(&event);
-        let _ = self.meta_events.remove(&hash);
 
         Some(event)
     }
@@ -59,17 +396,16 @@ impl ParsedContents {
         unwrap!(self.peer_list.add_event(&event));
 
         let hash = *event.hash();
-        let meta_event = MetaEvent::build(MetaElectionHandle::CURRENT, &event).finish();
 
         let _ = self.events.insert(hash, event);
-        let _ = self.meta_events.insert(hash, meta_event);
         self.events_order.push(hash);
     }
 }
 
 /// Read a dumped dot file and return with parsed event graph and associated info.
 pub(crate) fn parse_dot_file(full_path: &Path) -> io::Result<ParsedContents> {
-    read(File::open(full_path)?)
+    let result = unwrap!(read(File::open(full_path)?));
+    Ok(convert_into_parsed_contents(result))
 }
 
 /// For use by functional/unit tests which provide a dot file for the test setup.  This reads and
@@ -93,509 +429,108 @@ pub(crate) fn parse_test_dot_file(filename: &str) -> ParsedContents {
     )
 }
 
-pub(crate) fn parse_peer_ids(input: &str) -> BTreeSet<PeerId> {
-    parse_entries(input).map(PeerId::new).collect()
-}
-
-#[derive(Clone, Debug)]
-struct ParsedEvent {
-    creator: String,
-    cause: String,
-    self_parent: Option<String>,
-    other_parent: Option<String>,
-    interesting_content: Vec<Observation<Transaction, PeerId>>,
-    last_ancestors: BTreeMap<PeerId, u64>,
-}
-
-impl ParsedEvent {
-    fn new(
-        creator: String,
-        cause: String,
-        self_parent: Option<String>,
-        other_parent: Option<String>,
-        interesting_content_string: &str,
-        last_ancestors_string: &str,
-    ) -> Self {
-        let interesting_content = parse_interesting_content(interesting_content_string);
-        let last_ancestors = parse_peer_entries(last_ancestors_string)
-            .map(|(peer, index)| (peer, unwrap!(index.parse())))
-            .collect();
-
-        ParsedEvent {
-            creator,
-            cause,
-            self_parent,
-            other_parent,
-            interesting_content,
-            last_ancestors,
-        }
-    }
-}
-
-fn parse_interesting_content(input: &str) -> Vec<Observation<Transaction, PeerId>> {
-    let mut input = input;
-
-    skip_whitespace(&mut input);
-    assert!(skip_string(&mut input, "interesting_content:"));
-    skip_whitespace(&mut input);
-    assert!(skip_string(&mut input, "["));
-
-    let mut result = vec![];
-
-    while !skip_string(&mut input, "]") {
-        result.push(parse_observation(&mut input));
-        let _ = skip_string(&mut input, ",");
-    }
-
-    result
-}
-
-fn parse_observation(input: &mut &str) -> Observation<Transaction, PeerId> {
-    skip_whitespace(input);
-
-    if let Some(observation) = parse_genesis_observation(input) {
-        return observation;
-    }
-
-    if let Some(observation) = parse_add_observation(input) {
-        return observation;
-    }
-
-    if let Some(observation) = parse_remove_observation(input) {
-        return observation;
-    }
-
-    if let Some(observation) = parse_opaque_payload_observation(input) {
-        return observation;
-    }
-
-    panic!("Failed to parse Observation: {:?}", input);
-}
-
-fn parse_genesis_observation(input: &mut &str) -> Option<Observation<Transaction, PeerId>> {
-    let _ = parse_string(input, "Genesis")?;
-    assert!(skip_string(input, "("));
-    let content = unwrap!(parse_until(input, ")"));
-    Some(Observation::Genesis(parse_peer_ids(content)))
-}
-
-fn parse_add_observation(input: &mut &str) -> Option<Observation<Transaction, PeerId>> {
-    let _ = parse_string(input, "Add")?;
-    assert!(skip_string(input, "("));
-    let name = unwrap!(parse_until(input, ")"));
-    Some(Observation::Add(PeerId::new(name)))
-}
-
-fn parse_remove_observation(input: &mut &str) -> Option<Observation<Transaction, PeerId>> {
-    let _ = parse_string(input, "Remove")?;
-    assert!(skip_string(input, "("));
-    let name = unwrap!(parse_until(input, ")"));
-    Some(Observation::Remove(PeerId::new(name)))
-}
-
-fn parse_opaque_payload_observation(input: &mut &str) -> Option<Observation<Transaction, PeerId>> {
-    let _ = parse_string(input, "OpaquePayload")?;
-    assert!(skip_string(input, "("));
-    let content = unwrap!(parse_until(input, ")"));
-    Some(Observation::OpaquePayload(Transaction::new(content)))
-}
-
-fn parse_peer_entries(input: &str) -> impl Iterator<Item = (PeerId, &str)> {
-    parse_entries(input).map(|entry| {
-        let mut it = entry.split(": ");
-        let peer_id = PeerId::new(unwrap!(it.next()));
-        let value = unwrap!(it.next());
-
-        (peer_id, value)
-    })
-}
-
-fn parse_entries(input: &str) -> impl Iterator<Item = &str> {
-    extract_between(input, "{", "}")
-        .split(',')
-        .map(|s| s.trim())
-}
-
-fn read(mut file: File) -> io::Result<ParsedContents> {
+fn read(mut file: File) -> PomResult<ParsedFile> {
     let mut contents = String::new();
-    let _ = file.read_to_string(&mut contents)?;
-    // Consistently use '\n' line endings on all platforms.
-    contents = contents.replace("\r\n", "\n");
-    contents = contents.replace("\r", "\n");
+    if file.read_to_string(&mut contents).is_err() {
+        return Err(::pom::Error::Custom {
+            message: "file not found".to_string(),
+            position: 0,
+            inner: None,
+        });
+    }
 
-    let mut parsing_events = parse_event_graph(&contents);
-    let mut parsing_mvs = parse_meta_votes(&contents);
-    let mut events = BTreeMap::new();
-    let mut events_order = Vec::new();
-    let mut name_hash_map: BTreeMap<String, Hash> = BTreeMap::new();
-    let mut meta_events = BTreeMap::new();
-    let length = parsing_events.len();
+    let mut input = DataInput::new(contents.as_bytes());
+    parse_file().parse(&mut input)
+}
 
-    while !parsing_events.is_empty() {
-        let ordered_event = next_ordered_event(&parsing_events);
-        assert!(!ordered_event.is_empty());
+fn convert_into_parsed_contents(result: ParsedFile) -> ParsedContents {
+    let ParsedFile {
+        our_id,
+        peer_states,
+        mut graph,
+        details,
+        meta_votes,
+    } = result;
+    let mut parsed_contents = ParsedContents::new(our_id.clone());
+    create_events(&mut graph, &details, &meta_votes, &mut parsed_contents);
+    let peer_list = PeerList::new_from_dot_input(our_id, &parsed_contents.events, &peer_states);
+    parsed_contents.peer_list = peer_list;
+    parsed_contents
+}
 
-        let event = unwrap!(parsing_events.remove(&ordered_event));
-        let mv = unwrap!(parsing_mvs.remove(&ordered_event));
+fn create_events(
+    graph: &mut BTreeMap<String, ParsedEvent>,
+    details: &BTreeMap<String, EventDetails>,
+    meta_votes: &BTreeMap<String, BTreeMap<PeerId, Vec<MetaVote>>>,
+    parsed_contents: &mut ParsedContents,
+) {
+    let mut counts_per_creator = BTreeMap::new();
+    let mut event_hashes = BTreeMap::new();
+    while !graph.is_empty() {
+        let (ev_id, next_parsed_event) = next_topological_event(graph, &event_hashes);
+        let next_event_details = unwrap!(details.get(&ev_id));
+        let mvs = unwrap!(meta_votes.get(&ev_id));
 
-        let self_parent = event
-            .self_parent
-            .and_then(|name| Some(name_hash_map[&name]));
-        let other_parent = event
-            .other_parent
-            .and_then(|name| Some(name_hash_map[&name]));
-
-        let parsed_event: Event<Transaction, PeerId> = Event::new_from_dot_input(
-            &PeerId::new(&event.creator),
-            event.cause.as_ref(),
-            self_parent,
-            other_parent,
-            mv.event_index,
-            event.last_ancestors,
+        let next_event = Event::new_from_dot_input(
+            &next_parsed_event.creator,
+            &next_event_details.cause,
+            next_parsed_event
+                .self_parent
+                .and_then(|ref id| event_hashes.get(id).cloned()),
+            next_parsed_event
+                .other_parent
+                .and_then(|ref id| event_hashes.get(id).cloned()),
+            *counts_per_creator
+                .get(&next_parsed_event.creator)
+                .unwrap_or(&0),
+            next_event_details.last_ancestors.clone(),
         );
 
-        let hash = *parsed_event.hash();
-        if !event.interesting_content.is_empty() || !mv.meta_votes.is_empty() {
+        if !next_event_details.interesting_content.is_empty() || !mvs.is_empty() {
             let meta_event = {
-                let mut builder = MetaEvent::build(MetaElectionHandle::CURRENT, &parsed_event);
-                builder.set_interesting_content(event.interesting_content);
-                builder.set_meta_votes(mv.meta_votes);
+                let mut builder = MetaEvent::build(MetaElectionHandle::CURRENT, &next_event);
+                builder.set_interesting_content(next_event_details.interesting_content.clone());
+                builder.set_meta_votes(mvs.clone());
                 builder.finish()
             };
 
-            let _ = meta_events.insert(hash, meta_event);
+            let _ = parsed_contents
+                .meta_events
+                .insert(*next_event.hash(), meta_event);
         }
 
-        let _ = events.insert(hash, parsed_event);
-        events_order.push(hash);
-        let _ = name_hash_map.insert(ordered_event.to_string(), hash);
-    }
-
-    assert_eq!(events.len(), length);
-
-    let our_id = PeerId::new(extract_between(&contents, "/// our_id: ", "\n").trim());
-    let peer_list =
-        PeerList::new_from_dot_input(our_id.clone(), &events, &parse_peer_states(&contents));
-    Ok(ParsedContents {
-        our_id,
-        events,
-        events_order,
-        meta_events,
-        peer_list,
-    })
-}
-
-fn parse_peer_states(contents: &str) -> BTreeMap<PeerId, PeerState> {
-    let mut input = extract_between(contents, "/// peer_states:", "\n");
-
-    skip_whitespace(&mut input);
-    assert!(skip_string(&mut input, "{"));
-
-    let mut result = BTreeMap::new();
-
-    loop {
-        skip_whitespace(&mut input);
-        let name = unwrap!(parse_until(&mut input, ":"));
-        let peer_id = PeerId::new(name);
-
-        let state = parse_peer_state(&mut input);
-        let _ = result.insert(peer_id, state);
-
-        skip_whitespace(&mut input);
-        if !skip_string(&mut input, ",") {
-            break;
-        }
-    }
-
-    result
-}
-
-fn parse_peer_state(input: &mut &str) -> PeerState {
-    skip_whitespace(input);
-    assert!(skip_string(input, "\"PeerState("));
-
-    let mut result = PeerState::inactive();
-
-    loop {
-        skip_whitespace(input);
-
-        if skip_string(input, "VOTE") {
-            result |= PeerState::VOTE;
-        } else if skip_string(input, "SEND") {
-            result |= PeerState::SEND;
-        } else if skip_string(input, "RECV") {
-            result |= PeerState::RECV;
-        } else {
-            panic!("Invalid peer state {:?}", input);
-        }
-
-        skip_whitespace(input);
-        if !skip_string(input, "|") {
-            break;
-        }
-    }
-
-    assert!(skip_string(input, ")\""));
-
-    result
-}
-
-fn parse_event_graph(contents: &str) -> BTreeMap<String, ParsedEvent> {
-    let split_events = split_events(contents);
-    let meta_votes = split_meta_votes(contents);
-
-    let mut parsing_events = BTreeMap::new();
-    for (name, events) in &split_events.nodes {
-        for (index, event) in events.iter().enumerate() {
-            if let Some(info) = meta_votes.get(event) {
-                let self_parent: Option<String> = if index == 0 {
-                    None
-                } else {
-                    Some(events[index - 1].to_string())
-                };
-                let other_parent: Option<String> = split_events
-                    .other_parents
-                    .get(event)
-                    .and_then(|s| Some(s.to_string()));
-
-                let _ = parsing_events.insert(
-                    event.to_string(),
-                    ParsedEvent::new(
-                        name.to_string(),
-                        info.cause.to_string(),
-                        self_parent,
-                        other_parent,
-                        info.interesting_content,
-                        info.last_ancestors,
-                    ),
-                );
-            }
-        }
-    }
-    parsing_events
-}
-
-#[derive(Debug)]
-struct ParsedMetaVotes {
-    event_index: u64,
-    meta_votes: BTreeMap<PeerId, Vec<MetaVote>>,
-}
-
-impl ParsedMetaVotes {
-    fn new(event_index: u64) -> Self {
-        ParsedMetaVotes {
-            event_index,
-            meta_votes: BTreeMap::new(),
-        }
-    }
-
-    fn add(&mut self, peer_id: PeerId, meta_vote: MetaVote) {
-        let _ = self
-            .meta_votes
-            .entry(peer_id)
-            .and_modify(|meta_votes| meta_votes.push(meta_vote.clone()))
-            .or_insert_with(|| iter::once(meta_vote).collect());
+        *counts_per_creator
+            .entry(next_parsed_event.creator.clone())
+            .or_insert(0) += 1;
+        let _ = event_hashes.insert(ev_id, *next_event.hash());
+        parsed_contents.events_order.push(*next_event.hash());
+        let _ = parsed_contents
+            .events
+            .insert(*next_event.hash(), next_event);
     }
 }
 
-fn parse_meta_votes(contents: &str) -> BTreeMap<String, ParsedMetaVotes> {
-    let mut parsing_mvs = BTreeMap::new();
-    let mut event_name = String::new();
-    let mut peer_id = PeerId::new("");
-    for line in contents
-        .lines()
-        .skip_while(|line| line.trim() != "/// meta-vote section")
-    {
-        if line.contains("label") {
-            event_name = unwrap!(line.split('\"').nth(1)).to_string();
-            let event_index =
-                unwrap!(unwrap!(unwrap!(line.split('_').nth(1)).split('\"').next()).parse());
-            let _ = parsing_mvs.insert(event_name.clone(), ParsedMetaVotes::new(event_index));
-        } else if line.contains("aux") {
-            let meta_vote = if line.contains(": [ ") {
-                let split_line = line.split(": [ ").collect::<Vec<_>>();
-                peer_id = PeerId::from_initial(unwrap!(split_line[0].chars().next()));
-                parse_meta_vote(split_line[1])
-            } else {
-                parse_meta_vote(line)
-            };
-
-            let mut mv = unwrap!(parsing_mvs.get_mut(&event_name));
-            mv.add(peer_id.clone(), meta_vote);
-        }
-    }
-    parsing_mvs
-}
-
-fn next_ordered_event(parsing_events: &BTreeMap<String, ParsedEvent>) -> String {
-    let mut candidate = String::default();
-    for (name, event) in parsing_events {
-        let is_ordered = match (event.self_parent.clone(), event.other_parent.clone()) {
-            (None, None) => true,
-            (Some(ref self_parent), None) => !parsing_events.contains_key(self_parent),
-            (None, Some(ref other_parent)) => !parsing_events.contains_key(other_parent),
-            (Some(ref self_parent), Some(ref other_parent)) => {
-                !parsing_events.contains_key(self_parent)
-                    && !parsing_events.contains_key(other_parent)
-            }
-        };
-        if is_ordered {
-            candidate = name.to_string();
-            break;
-        }
-    }
-    candidate
-}
-
-struct SplitEvents<'a> {
-    // Vec<(node_name, hashes_of_events_created_by_that_node)>
-    nodes: Vec<(&'a str, Vec<&'a str>)>,
-    // BTreeMap<event_hash, other_parent_hash>
-    other_parents: BTreeMap<&'a str, &'a str>,
-}
-
-fn split_events(contents: &str) -> SplitEvents {
-    let mut other_parents = BTreeMap::new();
-    let nodes = contents
-        .split("subgraph")
-        .map(|s| s.trim())
-        .filter(|s| s.starts_with("cluster_"))
-        .map(|s| {
-            let name = unwrap!(unwrap!(s.split("cluster_").last()).split(' ').next());
-            let split_content = unwrap!(s.split('{').nth(1)).split('}').collect::<Vec<_>>();
-
-            let events = split_content[0]
-                .lines()
-                .filter(|s| s.contains("->"))
-                .map(|s| unwrap!(s.split("->").nth(1)))
-                .map(|s| unwrap!(s.split('\"').nth(1)))
-                .collect::<Vec<_>>();
-
-            let edges = unwrap!(split_content[1].split("\n\n").next());
-            for edge in edges.lines() {
-                if edge.contains("->") {
-                    let split_edge = edge.split('\"').collect::<Vec<_>>();
-                    let _ = other_parents.insert(split_edge[3], split_edge[1]);
-                }
-            }
-            (name, events)
-        }).collect::<Vec<_>>();
-    SplitEvents {
-        nodes,
-        other_parents,
-    }
-}
-
-struct SplitMetaVote<'a> {
-    cause: &'a str,
-    interesting_content: &'a str,
-    last_ancestors: &'a str,
-}
-
-// Returns with: BTreeMap<event_hash, SplitMetaVote>
-fn split_meta_votes<'a>(contents: &'a str) -> BTreeMap<&'a str, SplitMetaVote> {
-    let mut meta_votes = BTreeMap::new();
-    let _ = contents
-        .split("/// {")
-        .filter(|s| s.contains("/// }"))
-        .map(|s| unwrap!(s.split("/// }").next()))
-        .map(|s| s.trim())
-        .map(|s| {
-            let split_info = s.split("///").map(|s| s.trim()).collect::<Vec<_>>();
-            let _ = meta_votes.insert(
-                split_info[0],
-                SplitMetaVote {
-                    cause: split_info[1],
-                    interesting_content: split_info[2],
-                    last_ancestors: split_info[3],
-                },
-            );
-        }).collect::<Vec<_>>();
-    meta_votes
-}
-
-fn parse_meta_vote(line: &str) -> MetaVote {
-    // in the format of `{ 0/0, est:{f} bin:{t, f} aux:{f} dec:{} }`
-    let split_line = line.split(':').collect::<Vec<_>>();
-    let round: usize =
-        unwrap!(unwrap!(unwrap!(split_line[0].split('/').next()).split(' ').nth(1)).parse());
-    let step_index: u8 = unwrap!(extract_between(split_line[0], "/", ",").parse());
-    let estimates = parse_boolset(unwrap!(split_line[1].split(" bin").next()));
-    let bin_values = parse_boolset(unwrap!(split_line[2].split(" aux").next()));
-    let aux_value = parse_option_bool(unwrap!(split_line[3].split(" dec").next()));
-    let decision = parse_option_bool(unwrap!(split_line[4].split(" }").next()));
-    MetaVote {
-        round,
-        step: parse_step(step_index),
-        estimates,
-        bin_values,
-        aux_value,
-        decision,
-    }
-}
-
-fn parse_step(index: u8) -> Step {
-    match index {
-        0 => Step::ForcedTrue,
-        1 => Step::ForcedFalse,
-        2 => Step::GenuineFlip,
-        _ => panic!("Improper Step index {:?}", index),
-    }
-}
-
-fn parse_boolset(line: &str) -> BoolSet {
-    match line {
-        "{t}" => BoolSet::Single(true),
-        "{f}" => BoolSet::Single(false),
-        "{t, f}" => BoolSet::Both,
-        "{}" => BoolSet::default(),
-        _ => panic!("Not a proper BoolSet : {:?}", line),
-    }
-}
-
-fn parse_option_bool(line: &str) -> Option<bool> {
-    match line {
-        "{t}" => Some(true),
-        "{f}" => Some(false),
-        "{}" => None,
-        _ => panic!("Not a proper Option<bool> : {:?}", line),
-    }
-}
-
-fn extract_between<'a>(input: &'a str, left: &str, right: &str) -> &'a str {
-    unwrap!(unwrap!(input.split(left).nth(1)).split(right).next())
-}
-
-fn parse_string<'a>(input: &mut &'a str, content: &str) -> Option<&'a str> {
-    if input.starts_with(content) {
-        let (result, rest) = input.split_at(content.len());
-        *input = rest;
-        Some(result)
-    } else {
-        None
-    }
-}
-
-// Extract the portion of `input` from the beginning until the given delimiter.
-// The delimiter is consumed, but not appended to the result.
-fn parse_until<'a>(input: &mut &'a str, stop: &str) -> Option<&'a str> {
-    for cursor in 0..input.len() {
-        if input[cursor..].starts_with(stop) {
-            let result = &input[..cursor];
-            *input = &input[(cursor + stop.len())..];
-            return Some(result);
-        }
-    }
-
-    None
-}
-
-fn skip_whitespace(input: &mut &str) {
-    *input = input.trim_left();
-}
-
-fn skip_string(input: &mut &str, content: &str) -> bool {
-    parse_string(input, content).is_some()
+fn next_topological_event(
+    graph: &mut BTreeMap<String, ParsedEvent>,
+    hashes: &BTreeMap<String, Hash>,
+) -> (String, ParsedEvent) {
+    let next_key = unwrap!(
+        graph
+            .iter()
+            .filter(|&(_, ref event)| event
+                .self_parent
+                .as_ref()
+                .map(|ev_id| hashes.contains_key(ev_id))
+                .unwrap_or(true)
+                && event
+                    .other_parent
+                    .as_ref()
+                    .map(|ev_id| hashes.contains_key(ev_id))
+                    .unwrap_or(true)).map(|(key, _)| key)
+            .next()
+    ).clone();
+    let ev = unwrap!(graph.remove(&next_key));
+    (next_key, ev)
 }
 
 #[cfg(all(test, feature = "dump-graphs"))]

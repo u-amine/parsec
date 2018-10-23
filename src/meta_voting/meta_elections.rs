@@ -18,7 +18,7 @@ use std::fmt::{self, Debug};
 use std::{iter, mem, usize};
 
 /// Handle that uniquely identifies a `MetaElection`.
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub(crate) struct MetaElectionHandle(usize);
 
 impl MetaElectionHandle {
@@ -40,6 +40,8 @@ impl Debug for MetaElectionHandle {
     }
 }
 
+#[serde(bound = "")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct MetaElection<T: NetworkEvent, P: PublicId> {
     meta_events: BTreeMap<Hash, MetaEvent<T, P>>,
     // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
@@ -104,6 +106,8 @@ impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
     }
 }
 
+#[serde(bound = "")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct MetaElections<T: NetworkEvent, P: PublicId> {
     // Index of next decided meta-election
     next_index: usize,

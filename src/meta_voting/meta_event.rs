@@ -14,7 +14,8 @@ use network_event::NetworkEvent;
 use observation::Observation;
 use std::collections::BTreeSet;
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[serde(bound = "")]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub(crate) struct MetaEvent<T: NetworkEvent, P: PublicId> {
     // The set of peers for which this event can strongly-see an event by that peer which carries a
     // valid block.  If there are a supermajority of peers here, this event is an "observer".

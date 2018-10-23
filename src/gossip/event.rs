@@ -389,25 +389,21 @@ impl Event<Transaction, PeerId> {
         index: u64,
         last_ancestors: BTreeMap<PeerId, u64>,
     ) -> Self {
-        use dev_utils::parse_peer_ids;
-
         let cause = match cause {
-            "cause: Initial" => Cause::Initial,
+            "Initial" => Cause::Initial,
             // For the dot file contains only partial graph, we have to manually change the info of
             // ancestor to null for some events. In that case, populate ancestors with empty hash.
-            "cause: Request" => Cause::Request {
+            "Request" => Cause::Request {
                 self_parent: self_parent.unwrap_or(Hash::ZERO),
                 other_parent: other_parent.unwrap_or(Hash::ZERO),
             },
-            "cause: Response" => Cause::Response {
+            "Response" => Cause::Response {
                 self_parent: self_parent.unwrap_or(Hash::ZERO),
                 other_parent: other_parent.unwrap_or(Hash::ZERO),
             },
             _ => {
                 let content = unwrap!(unwrap!(cause.split('(').nth(2)).split(')').next());
-                let observation = if cause.contains("Genesis") {
-                    Observation::Genesis(parse_peer_ids(content))
-                } else if cause.contains("OpaquePayload") {
+                let observation = if cause.contains("OpaquePayload") {
                     Observation::OpaquePayload(Transaction::new(content))
                 } else if cause.contains("Genesis") {
                     // `content` will contain e.g. "{Alice, Bob, Carol, Dave, Eric}".
