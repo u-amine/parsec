@@ -100,7 +100,14 @@ impl<S: SecretId> PeerList<S> {
         };
 
         if changed {
-            self.record_our_membership_list_change(MembershipListChange::Add(peer_id))
+            if peer_id == *self.our_pub_id() {
+                let other_peer_ids: Vec<_> = self.peers.keys().cloned().collect();
+                for other_peer_id in other_peer_ids {
+                    self.record_our_membership_list_change(MembershipListChange::Add(other_peer_id))
+                }
+            } else {
+                self.record_our_membership_list_change(MembershipListChange::Add(peer_id))
+            }
         }
     }
 
@@ -146,19 +153,7 @@ impl<S: SecretId> PeerList<S> {
         peer_id: &S::PublicId,
         other_peer_id: S::PublicId,
     ) {
-        if *peer_id == *self.our_id.public_id() {
-            return;
-        }
-
-        if let Some(peer) = self.peers.get_mut(peer_id) {
-            peer.change_membership_list(MembershipListChange::Add(other_peer_id));
-        } else {
-            log_or_panic!(
-                "{:?} tried to add to membership list of unknown peer {:?}",
-                self.our_id.public_id(),
-                peer_id
-            )
-        }
+        self.change_peer_membership_list(peer_id, MembershipListChange::Add(other_peer_id))
     }
 
     /// Remove `other_peer_id` from `peer_id`'s membership list.
@@ -167,11 +162,23 @@ impl<S: SecretId> PeerList<S> {
         peer_id: &S::PublicId,
         other_peer_id: S::PublicId,
     ) {
+        self.change_peer_membership_list(peer_id, MembershipListChange::Remove(other_peer_id))
+    }
+
+    pub fn change_peer_membership_list(
+        &mut self,
+        peer_id: &S::PublicId,
+        change: MembershipListChange<S::PublicId>,
+    ) {
+        if *peer_id == *self.our_id.public_id() {
+            return;
+        }
+
         if let Some(peer) = self.peers.get_mut(peer_id) {
-            peer.change_membership_list(MembershipListChange::Remove(other_peer_id))
+            peer.change_membership_list(change)
         } else {
             log_or_panic!(
-                "{:?} tried to remove from membership list of unknown peer {:?}",
+                "{:?} tried to change membership list of unknown peer {:?}",
                 self.our_id.public_id(),
                 peer_id
             )
@@ -189,11 +196,14 @@ impl<S: SecretId> PeerList<S> {
         }
 
         if let Some(peer) = self.peers.get_mut(peer_id) {
-            peer.membership_list = membership_list
+            let changes = membership_list
                 .into_iter()
                 .chain(iter::once(peer_id.clone()))
-                .collect();
-            peer.membership_list_changes.clear();
+                .map(MembershipListChange::Add);
+
+            for change in changes {
+                peer.change_membership_list(change)
+            }
         } else {
             log_or_panic!(
                 "{:?} tried to initialise membership list of unknown peer {:?}",
@@ -210,43 +220,57 @@ impl<S: SecretId> PeerList<S> {
             .map_or(false, |peer| !peer.membership_list.is_empty())
     }
 
-    /// Returns the current membership list of the given peer. Return `None` if the peer is
-    /// ourselves, does not exists, or the membership list is not initialised yet.
-    pub fn peer_membership_list(&self, peer_id: &S::PublicId) -> Option<&BTreeSet<S::PublicId>> {
-        if peer_id == self.our_pub_id() {
-            None
-        } else {
-            self.peers.get(peer_id).and_then(|peer| {
-                if peer.membership_list.is_empty() {
-                    None
-                } else {
-                    Some(&peer.membership_list)
-                }
-            })
-        }
-    }
-
-    /// Returns the historic membership list at the time the event at `index` was the last event of
-    /// the given peer (which can also be ourselves).
-    pub fn peer_membership_list_at(
+    /// Returns the historic snapshot of the membership list at the time the event at `index` was
+    /// the last event of the given peer.
+    pub fn peer_membership_list_snapshot(
         &self,
         peer_id: &S::PublicId,
         event_index: u64,
-    ) -> BTreeSet<S::PublicId> {
-        let peer = if let Some(peer) = self.peers.get(peer_id) {
-            peer
-        } else {
-            return BTreeSet::new();
-        };
+    ) -> Option<BTreeSet<S::PublicId>> {
+        let (mut list, changes) = self.peer_membership_list_and_changes(peer_id)?;
 
-        let mut list = if peer_id == self.our_pub_id() {
-            self.voter_ids().cloned().collect()
-        } else {
-            peer.membership_list.clone()
-        };
+        for (index, change) in changes.iter().rev() {
+            if *index <= event_index {
+                break;
+            }
+            let _ = change.unapply(&mut list);
+        }
 
-        apply_membership_list_changes(&mut list, &peer.membership_list_changes, event_index);
-        list
+        Some(list)
+    }
+
+    /// Same as `peer_membership_list_shapshot` except if there is a `Remove` at `event_index`,
+    /// then that `Remove` won't be applied to the resulting list.
+    pub fn peer_membership_list_snapshot_excluding_last_remove(
+        &self,
+        peer_id: &S::PublicId,
+        event_index: u64,
+    ) -> Option<BTreeSet<S::PublicId>> {
+        let (mut list, changes) = self.peer_membership_list_and_changes(peer_id)?;
+
+        for (index, change) in changes.iter().rev() {
+            if *index == event_index && !change.is_remove() {
+                continue;
+            }
+            if *index < event_index {
+                break;
+            }
+            let _ = change.unapply(&mut list);
+        }
+
+        Some(list)
+    }
+
+    /// Returns the history of changes to the membership list of the given peer.
+    pub fn peer_membership_list_changes(
+        &self,
+        peer_id: &S::PublicId,
+    ) -> &[(u64, MembershipListChange<S::PublicId>)] {
+        if let Some(peer) = self.peers.get(peer_id) {
+            &peer.membership_list_changes
+        } else {
+            &[]
+        }
     }
 
     /// Returns the hash of the last event created by this peer. Returns `None` if cannot find.
@@ -313,6 +337,24 @@ impl<S: SecretId> PeerList<S> {
     fn record_our_membership_list_change(&mut self, change: MembershipListChange<S::PublicId>) {
         if let Some(us) = self.peers.get_mut(self.our_id.public_id()) {
             us.record_membership_list_change(change)
+        }
+    }
+
+    fn peer_membership_list_and_changes(
+        &self,
+        peer_id: &S::PublicId,
+    ) -> Option<MembershipListWithChanges<S::PublicId>> {
+        let peer = self.peers.get(peer_id)?;
+        let list = if peer_id == self.our_pub_id() {
+            self.voter_ids().cloned().collect()
+        } else {
+            peer.membership_list.clone()
+        };
+
+        if list.is_empty() {
+            None
+        } else {
+            Some((list, &peer.membership_list_changes))
         }
     }
 }
@@ -510,14 +552,19 @@ impl<P: PublicId> Peer<P> {
     }
 
     fn record_membership_list_change(&mut self, change: MembershipListChange<P>) {
-        if let Some(index) = self.events.iter().rev().next().map(|(index, _)| *index) {
-            self.membership_list_changes.push((index, change));
-        }
+        let index = self
+            .events
+            .iter()
+            .rev()
+            .next()
+            .map(|(index, _)| *index)
+            .unwrap_or(0);
+        self.membership_list_changes.push((index, change));
     }
 }
 
-#[derive(Debug)]
-enum MembershipListChange<P> {
+#[derive(Clone, Debug)]
+pub(crate) enum MembershipListChange<P> {
     Add(P),
     Remove(P),
 }
@@ -536,19 +583,13 @@ impl<P: Clone + Ord> MembershipListChange<P> {
             MembershipListChange::Remove(ref peer_id) => peers.insert(peer_id.clone()),
         }
     }
-}
 
-fn apply_membership_list_changes<P: PublicId>(
-    membership_list: &mut BTreeSet<P>,
-    changes: &[(u64, MembershipListChange<P>)],
-    event_index: u64,
-) {
-    for change in changes
-        .iter()
-        .rev()
-        .take_while(|(index, _)| *index >= event_index)
-        .map(|(_, ref change)| change)
-    {
-        let _ = change.unapply(membership_list);
+    fn is_remove(&self) -> bool {
+        match *self {
+            MembershipListChange::Remove(_) => true,
+            MembershipListChange::Add(_) => false,
+        }
     }
 }
+
+type MembershipListWithChanges<'a, P> = (BTreeSet<P>, &'a [(u64, MembershipListChange<P>)]);

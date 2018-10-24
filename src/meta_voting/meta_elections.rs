@@ -45,13 +45,17 @@ struct MetaElection<T: NetworkEvent, P: PublicId> {
     // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
     // the one for round `x` is held at index `x`.
     round_hashes: BTreeMap<P, Vec<RoundHash>>,
-    // Set of peers who haven't decided this election yet.
-    undecided_peers: BTreeSet<P>,
+    // Set of peers participating in this meta-election, i.e. all voters at the time this
+    // meta-election has been created.
+    all_voters: BTreeSet<P>,
+    // Set of peers which we haven't yet detected deciding this meta-election.
+    undecided_voters: BTreeSet<P>,
     // The hashes of events for each peer that have a non-empty set of `interesting_content`.
     interesting_events: BTreeMap<P, VecDeque<Hash>>,
     // Length of `MetaElections::consensus_history` at the time this meta-election was created.
     consensus_len: usize,
-    outcome: Option<Outcome<T, P>>,
+    // Payload decided by this meta-election.
+    payload: Option<Observation<T, P>>,
 }
 
 impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
@@ -59,10 +63,11 @@ impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
         MetaElection {
             meta_events: BTreeMap::new(),
             round_hashes: BTreeMap::new(),
-            undecided_peers: voters,
+            all_voters: voters.clone(),
+            undecided_voters: voters,
             interesting_events: BTreeMap::new(),
             consensus_len,
-            outcome: None,
+            payload: None,
         }
     }
 
@@ -97,14 +102,6 @@ impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
                 })
             })
     }
-}
-
-// Outcome of a meta-election.
-struct Outcome<T: NetworkEvent, P: PublicId> {
-    // Payload decided by this election
-    payload: Observation<T, P>,
-    // List of voters at the time this election was decided.
-    voters: BTreeSet<P>,
 }
 
 pub(crate) struct MetaElections<T: NetworkEvent, P: PublicId> {
@@ -142,7 +139,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
     ) -> impl Iterator<Item = MetaElectionHandle> + 'a {
         self.previous_elections
             .iter()
-            .filter(move |(_, election)| election.undecided_peers.contains(peer_id))
+            .filter(move |(_, election)| election.undecided_voters.contains(peer_id))
             .map(|(handle, _)| *handle)
     }
 
@@ -214,15 +211,12 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
     /// Payload decided by the given meta-election, if any.
     pub fn decided_payload(&self, handle: MetaElectionHandle) -> Option<&Observation<T, P>> {
         self.get(handle)
-            .and_then(|election| election.outcome.as_ref())
-            .map(|outcome| &outcome.payload)
+            .and_then(|election| election.payload.as_ref())
     }
 
-    /// List of voters at the time the given meta-election was decided. `None` if not yet decided.
-    pub fn decided_voters(&self, handle: MetaElectionHandle) -> Option<&BTreeSet<P>> {
-        self.get(handle)
-            .and_then(|election| election.outcome.as_ref())
-            .map(|outcome| &outcome.voters)
+    /// List of voters participating in the given meta-election.
+    pub fn voters(&self, handle: MetaElectionHandle) -> Option<&BTreeSet<P>> {
+        self.get(handle).map(|election| &election.all_voters)
     }
 
     pub fn consensus_history(&self) -> &[Hash] {
@@ -277,25 +271,19 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         !self.consensus_history()[..election.consensus_len].contains(&hash)
     }
 
-    /// Creates new election and returns handle of the previous elections.
-    pub fn new_election<'a, I>(
+    /// Creates new election and returns handle of the previous election.
+    pub fn new_election(
         &mut self,
         payload: Observation<T, P>,
-        voters: I,
-    ) -> MetaElectionHandle
-    where
-        I: IntoIterator<Item = &'a P>,
-        P: 'a,
-    {
-        let voters: BTreeSet<_> = voters.into_iter().cloned().collect();
-
+        voters: BTreeSet<P>,
+    ) -> MetaElectionHandle {
         let hash = payload.create_hash();
         self.consensus_history.push(hash);
 
-        let new = MetaElection::new(voters.clone(), self.consensus_history.len());
+        let new = MetaElection::new(voters, self.consensus_history.len());
 
         let mut previous = mem::replace(&mut self.current_election, new);
-        previous.outcome = Some(Outcome { payload, voters });
+        previous.payload = Some(payload);
 
         let handle = self.next_handle();
         let _ = self.previous_elections.insert(handle, previous);
@@ -307,8 +295,8 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
     /// the election is removed.
     pub fn mark_as_decided(&mut self, handle: MetaElectionHandle, peer_id: &P) {
         if let Entry::Occupied(mut entry) = self.previous_elections.entry(handle) {
-            let _ = entry.get_mut().undecided_peers.remove(peer_id);
-            if entry.get().undecided_peers.is_empty() {
+            let _ = entry.get_mut().undecided_voters.remove(peer_id);
+            if entry.get().undecided_voters.is_empty() {
                 let _ = entry.remove();
             }
         } else {
@@ -317,15 +305,15 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
     }
 
     pub fn handle_peer_removed(&mut self, peer_id: &P) {
-        let mut to_remove = Vec::new();
+        let _ = self.current_election.undecided_voters.remove(peer_id);
 
+        let mut to_remove = Vec::new();
         for (handle, election) in &mut self.previous_elections {
-            let _ = election.undecided_peers.remove(peer_id);
-            if election.undecided_peers.is_empty() {
+            let _ = election.undecided_voters.remove(peer_id);
+            if election.undecided_voters.is_empty() {
                 to_remove.push(*handle);
             }
         }
-
         for handle in to_remove {
             let _ = self.previous_elections.remove(&handle);
         }
