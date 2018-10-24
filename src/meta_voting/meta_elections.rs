@@ -19,7 +19,7 @@ use std::{iter, mem, usize};
 
 /// Handle that uniquely identifies a `MetaElection`.
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
-pub(crate) struct MetaElectionHandle(usize);
+pub(crate) struct MetaElectionHandle(pub(crate) usize);
 
 impl MetaElectionHandle {
     /// Handle to the current election.
@@ -42,22 +42,22 @@ impl Debug for MetaElectionHandle {
 
 #[serde(bound = "")]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct MetaElection<T: NetworkEvent, P: PublicId> {
-    meta_events: BTreeMap<Hash, MetaEvent<T, P>>,
+pub(crate) struct MetaElection<T: NetworkEvent, P: PublicId> {
+    pub(crate) meta_events: BTreeMap<Hash, MetaEvent<T, P>>,
     // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
     // the one for round `x` is held at index `x`.
-    round_hashes: BTreeMap<P, Vec<RoundHash>>,
+    pub(crate) round_hashes: BTreeMap<P, Vec<RoundHash>>,
     // Set of peers participating in this meta-election, i.e. all voters at the time this
     // meta-election has been created.
-    all_voters: BTreeSet<P>,
+    pub(crate) all_voters: BTreeSet<P>,
     // Set of peers which we haven't yet detected deciding this meta-election.
-    undecided_voters: BTreeSet<P>,
+    pub(crate) undecided_voters: BTreeSet<P>,
     // The hashes of events for each peer that have a non-empty set of `interesting_content`.
-    interesting_events: BTreeMap<P, VecDeque<Hash>>,
+    pub(crate) interesting_events: BTreeMap<P, VecDeque<Hash>>,
     // Length of `MetaElections::consensus_history` at the time this meta-election was created.
-    consensus_len: usize,
+    pub(crate) consensus_len: usize,
     // Payload decided by this meta-election.
-    payload: Option<Observation<T, P>>,
+    pub(crate) payload: Option<Observation<T, P>>,
 }
 
 impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
@@ -126,6 +126,20 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
             current_election: MetaElection::new(voters, 0),
             previous_elections: BTreeMap::new(),
             consensus_history: Vec::new(),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn from_map_and_history(
+        mut elections_map: BTreeMap<MetaElectionHandle, MetaElection<T, P>>,
+        history: Vec<Hash>,
+    ) -> Self {
+        let current_election = unwrap!(elections_map.remove(&MetaElectionHandle::CURRENT));
+        MetaElections {
+            next_index: history.len(),
+            current_election,
+            previous_elections: elections_map,
+            consensus_history: history,
         }
     }
 
@@ -340,11 +354,12 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         self.current_election.initialise(peer_ids, initial_hash);
     }
 
+    #[cfg(any(test, feature = "dump-graphs"))]
     pub fn current_meta_events(&self) -> &BTreeMap<Hash, MetaEvent<T, P>> {
         &self.current_election.meta_events
     }
 
-    fn get(&self, handle: MetaElectionHandle) -> Option<&MetaElection<T, P>> {
+    pub(crate) fn get(&self, handle: MetaElectionHandle) -> Option<&MetaElection<T, P>> {
         if handle == MetaElectionHandle::CURRENT {
             Some(&self.current_election)
         } else if let Some(election) = self.previous_elections.get(&handle) {
@@ -380,35 +395,5 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         }
 
         handle
-    }
-}
-
-#[cfg(test)]
-impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
-    pub fn new_from_parsed<'a, I>(
-        voters: I,
-        meta_events: BTreeMap<Hash, MetaEvent<T, P>>,
-        mut creators: BTreeMap<Hash, P>,
-    ) -> Self
-    where
-        I: IntoIterator<Item = &'a P>,
-        P: 'a,
-    {
-        let mut new = Self::new(voters.into_iter().cloned().collect());
-
-        for (hash, meta_event) in &meta_events {
-            if !meta_event.interesting_content.is_empty() {
-                if let Some(creator) = creators.remove(hash) {
-                    new.current_election
-                        .interesting_events
-                        .entry(creator)
-                        .or_insert_with(VecDeque::new)
-                        .push_back(*hash);
-                }
-            }
-        }
-
-        new.current_election.meta_events = meta_events;
-        new
     }
 }

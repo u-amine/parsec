@@ -70,11 +70,6 @@ impl<'a, T: NetworkEvent + 'a, P: PublicId + 'a> MetaEventBuilder<'a, T, P> {
         self.meta_event.interesting_content = content;
     }
 
-    #[cfg(test)]
-    pub fn set_meta_votes(&mut self, votes: MetaVotes<P>) {
-        self.meta_event.meta_votes = votes;
-    }
-
     pub fn add_meta_votes(&mut self, peer_id: P, votes: Vec<MetaVote>) {
         let _ = self.meta_event.meta_votes.insert(peer_id, votes);
     }

@@ -57,4 +57,14 @@ impl BoolSet {
     pub fn from_bool(val: bool) -> Self {
         BoolSet::Single(val)
     }
+
+    #[cfg(feature = "dump-graphs")]
+    pub(crate) fn as_short_string(&self) -> &'static str {
+        match *self {
+            BoolSet::Empty => "-",
+            BoolSet::Single(true) => "t",
+            BoolSet::Single(false) => "f",
+            BoolSet::Both => "b",
+        }
+    }
 }

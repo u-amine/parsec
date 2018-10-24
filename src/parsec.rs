@@ -609,7 +609,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         dump_graph::to_file(
             self.our_pub_id(),
             &self.events,
-            self.meta_elections.current_meta_events(),
+            &self.meta_elections,
             &self.peer_list,
         );
 
@@ -1759,7 +1759,7 @@ impl<T: NetworkEvent, S: SecretId> Drop for Parsec<T, S> {
             dump_graph::to_file(
                 self.our_pub_id(),
                 &self.events,
-                self.meta_elections.current_meta_events(),
+                &self.meta_elections,
                 &self.peer_list,
             );
         }
@@ -1772,7 +1772,11 @@ impl Parsec<Transaction, PeerId> {
         let mut parsec = Parsec::empty(parsed_contents.our_id, &BTreeSet::new(), is_supermajority);
 
         // Populate `observations` cache using `interesting_content`, to support partial graphs...
-        for meta_event in parsed_contents.meta_events.values() {
+        for meta_event in parsed_contents
+            .meta_elections
+            .current_meta_events()
+            .values()
+        {
             for payload in &meta_event.interesting_content {
                 let hash = payload.create_hash();
                 let _ = parsec.observations.insert(hash, ObservationInfo::default());
@@ -1794,18 +1798,8 @@ impl Parsec<Transaction, PeerId> {
             }
         }
 
-        let creators: BTreeMap<_, _> = parsed_contents
-            .events
-            .values()
-            .map(|event| (*event.hash(), event.creator().clone()))
-            .collect();
-
         parsec.events = parsed_contents.events;
-        parsec.meta_elections = MetaElections::new_from_parsed(
-            parsed_contents.peer_list.voter_ids(),
-            parsed_contents.meta_events,
-            creators,
-        );
+        parsec.meta_elections = parsed_contents.meta_elections;
         parsec.peer_list = parsed_contents.peer_list;
         parsec
     }
@@ -1838,7 +1832,7 @@ mod functional_tests {
         peer_list: BTreeMap<PeerId, (PeerState, BTreeMap<u64, Hash>)>,
         events: BTreeSet<Hash>,
         consensused_blocks: VecDeque<Block<Transaction, PeerId>>,
-        meta_events: BTreeMap<Hash, MetaEvent<Transaction, PeerId>>,
+        meta_elections: MetaElections<Transaction, PeerId>,
     }
 
     impl Snapshot {
@@ -1863,7 +1857,7 @@ mod functional_tests {
                 peer_list,
                 events,
                 consensused_blocks: parsec.consensused_blocks.clone(),
-                meta_events: parsec.meta_elections.current_meta_events().clone(),
+                meta_elections: parsec.meta_elections.clone(),
             }
         }
     }
@@ -2070,16 +2064,13 @@ mod functional_tests {
         let parsec = Parsec::from_parsed_contents(parsed_contents);
         assert_eq!(parsed_contents_comparison.events, parsec.events);
         assert_eq!(
-            &parsed_contents_comparison.meta_events,
-            parsec.meta_elections.current_meta_events()
+            parsed_contents_comparison.meta_elections,
+            parsec.meta_elections
         );
 
         let parsed_contents_other = parse_test_dot_file("1.dot");
         assert_ne!(parsed_contents_other.events, parsec.events);
-        assert_ne!(
-            &parsed_contents_other.meta_events,
-            parsec.meta_elections.current_meta_events()
-        );
+        assert_ne!(parsed_contents_other.meta_elections, parsec.meta_elections);
     }
 
     #[test]
@@ -2100,7 +2091,7 @@ mod functional_tests {
 
         let mut alice = Parsec::from_parsed_contents(parsed_contents);
         initialise_membership_lists(&mut alice.peer_list);
-        let genesis_group: BTreeSet<_> = alice.peer_list.all_ids().cloned().collect();
+        let genesis_group: BTreeSet<_> = alice.peer_list.all_ids().into_iter().cloned().collect();
 
         let fred_id = PeerId::new("Fred");
         assert!(!alice.peer_list.all_ids().any(|peer_id| *peer_id == fred_id));
@@ -2381,7 +2372,7 @@ mod functional_tests {
         let a_0_hash = *nth_event(&alice.events, 0).hash();
         let a_1_hash = *nth_event(&alice.events, 1).hash();
 
-        // Create Dave where the first event is a genesis event containing both Alice and Dave.
+        // Create Dave where the first event is a geneneis event containing both Alice and Dave.
         let mut dave = initialise_parsec(dave_id.clone(), genesis, None);
         assert!(!dave.events.contains_key(&a_0_hash));
         assert!(!dave.events.contains_key(&a_1_hash));

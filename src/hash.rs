@@ -10,7 +10,8 @@ use std::cmp::Ordering;
 use std::fmt::{self, Debug, Formatter};
 use tiny_keccak;
 
-const HASH_LEN: usize = 32;
+pub const HASH_LEN: usize = 32;
+pub const HEX_DIGITS_PER_BYTE: usize = 2;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Hash([u8; HASH_LEN]);
@@ -28,6 +29,18 @@ impl Hash {
             }
         }
         Ordering::Equal
+    }
+
+    pub fn from_bytes(bytes: [u8; HASH_LEN]) -> Self {
+        Hash(bytes)
+    }
+
+    pub fn as_full_string(&self) -> String {
+        let mut result = String::with_capacity(HEX_DIGITS_PER_BYTE * HASH_LEN);
+        for i in 0..HASH_LEN {
+            result.push_str(&format!("{:02x}", self.0[i]));
+        }
+        result
     }
 }
 

@@ -244,8 +244,9 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     }
 
     #[cfg(feature = "dump-graphs")]
-    pub fn write_cause_to_dot_format(&self, writer: &mut Write) -> io::Result<()> {
-        writeln!(writer, "/// cause: {}", self.content.cause)
+    pub fn write_to_dot_format(&self, writer: &mut Write) -> io::Result<()> {
+        writeln!(writer, "/// cause: {}", self.content.cause)?;
+        writeln!(writer, "/// last_ancestors: {:?}", self.last_ancestors)
     }
 }
 

@@ -559,6 +559,11 @@ impl<P: PublicId> Peer<P> {
             .unwrap_or(0);
         self.membership_list_changes.push((index, change));
     }
+
+    #[cfg(feature = "dump-graphs")]
+    pub(crate) fn membership_list(&self) -> &BTreeSet<P> {
+        &self.membership_list
+    }
 }
 
 #[derive(Clone, Debug)]
