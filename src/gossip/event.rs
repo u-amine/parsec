@@ -19,7 +19,7 @@ use observation::Observation;
 use peer_list::PeerList;
 use serialise;
 use std::cmp;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 #[cfg(feature = "dump-graphs")]
 use std::io::{self, Write};
@@ -36,6 +36,8 @@ pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
     index: u64,
     // Index of each peer's latest event that is an ancestor of this event.
     last_ancestors: BTreeMap<P, u64>,
+    // Peers with a fork having both sides seen by this event.
+    forking_peers: BTreeSet<P>,
 }
 
 impl<T: NetworkEvent, P: PublicId> Event<T, P> {
@@ -45,6 +47,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         other_parent: Hash,
         events: &BTreeMap<Hash, Event<T, P>>,
         peer_list: &PeerList<S>,
+        forking_peers: &BTreeSet<S::PublicId>,
     ) -> Self {
         Self::new(
             Cause::Request {
@@ -53,6 +56,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             },
             events,
             peer_list,
+            forking_peers,
         )
     }
 
@@ -62,6 +66,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         other_parent: Hash,
         events: &BTreeMap<Hash, Event<T, P>>,
         peer_list: &PeerList<S>,
+        forking_peers: &BTreeSet<S::PublicId>,
     ) -> Self {
         Self::new(
             Cause::Response {
@@ -70,6 +75,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             },
             events,
             peer_list,
+            forking_peers,
         )
     }
 
@@ -81,12 +87,22 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         peer_list: &PeerList<S>,
     ) -> Self {
         let vote = Vote::new(peer_list.our_id(), observation);
-        Self::new(Cause::Observation { self_parent, vote }, events, peer_list)
+        Self::new(
+            Cause::Observation { self_parent, vote },
+            events,
+            peer_list,
+            &BTreeSet::new(),
+        )
     }
 
     // Creates an initial event.  This is the first event by its creator in the graph.
     pub fn new_initial<S: SecretId<PublicId = P>>(peer_list: &PeerList<S>) -> Self {
-        Self::new(Cause::Initial, &BTreeMap::new(), peer_list)
+        Self::new(
+            Cause::Initial,
+            &BTreeMap::new(),
+            peer_list,
+            &BTreeSet::new(),
+        )
     }
 
     // Creates an event from a `PackedEvent`.
@@ -100,6 +116,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         packed_event: PackedEvent<T, P>,
         events: &BTreeMap<Hash, Event<T, P>>,
         peer_list: &PeerList<S>,
+        forking_peers: &BTreeSet<P>,
     ) -> Result<Option<Self>, Error> {
         let serialised_content = serialise(&packed_event.content);
         let hash = if packed_event
@@ -115,6 +132,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             return Ok(None);
         }
 
+        let forking_peers = Self::join_forking_peers(&packed_event.content, events, forking_peers);
         let (index, last_ancestors) =
             Self::index_and_last_ancestors(&packed_event.content, events, peer_list)?;
 
@@ -125,6 +143,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             hash,
             index,
             last_ancestors,
+            forking_peers,
         }))
     }
 
@@ -137,9 +156,11 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     }
 
     // Returns whether this event can see `other`, i.e. whether there's a directed path from `other`
-    // to `self` in the graph.
+    // to `self` in the graph, and no two events created by `other`'s creator are ancestors to
+    // `self` (fork).
     pub fn sees(&self, other: &Event<T, P>) -> bool {
-        self.last_ancestors
+        !self.forking_peers.contains(other.creator()) && self
+            .last_ancestors
             .get(other.creator())
             .map_or(false, |last_index| *last_index >= other.index())
     }
@@ -206,6 +227,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         cause: Cause<T, P>,
         events: &BTreeMap<Hash, Event<T, P>>,
         peer_list: &PeerList<S>,
+        forking_peers: &BTreeSet<S::PublicId>,
     ) -> Self {
         let content = Content {
             creator: peer_list.our_id().public_id().clone(),
@@ -226,12 +248,15 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
                 }
             };
 
+        let forking_peers = Self::join_forking_peers(&content, events, forking_peers);
+
         Self {
             content,
             signature: peer_list.our_id().sign_detached(&serialised_content),
             hash: Hash::from(serialised_content.as_slice()),
             index,
             last_ancestors,
+            forking_peers,
         }
     }
 
@@ -282,6 +307,32 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         }
         let _ = last_ancestors.insert(content.creator.clone(), index);
         Ok((index, last_ancestors))
+    }
+
+    // An event's forking_peers list is a union inherited from its self_parent and other_parent.
+    // The event shall only put forking peer into the list when have direct path to both sides of
+    // the fork.
+    fn join_forking_peers(
+        content: &Content<T, P>,
+        events: &BTreeMap<Hash, Event<T, P>>,
+        prev_forking_peers: &BTreeSet<P>,
+    ) -> BTreeSet<P> {
+        let mut forking_peers = content
+            .self_parent()
+            .and_then(|self_parent| events.get(self_parent))
+            .map_or_else(BTreeSet::new, |self_parent| {
+                self_parent.forking_peers.clone()
+            });
+        forking_peers.append(
+            &mut content
+                .other_parent()
+                .and_then(|other_parent| events.get(other_parent))
+                .map_or_else(BTreeSet::new, |other_parent| {
+                    other_parent.forking_peers.clone()
+                }),
+        );
+        forking_peers.append(&mut prev_forking_peers.clone());
+        forking_peers
     }
 
     #[cfg(feature = "dump-graphs")]
@@ -377,6 +428,7 @@ impl Event<Transaction, PeerId> {
             hash: Hash::from(serialised_content.as_slice()),
             index,
             last_ancestors,
+            forking_peers: BTreeSet::new(),
         }
     }
 }
@@ -407,7 +459,7 @@ mod tests {
     use mock::{PeerId, Transaction};
     use observation::Observation;
     use peer_list::{PeerList, PeerState};
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
 
     struct PeerListAndEvent {
         peer_list: PeerList<PeerId>,
@@ -549,6 +601,7 @@ mod tests {
             bob_initial_hash,
             &events,
             &alice.peer_list,
+            &BTreeSet::new(),
         );
 
         assert_eq!(
@@ -575,6 +628,7 @@ mod tests {
             bob_initial_hash,
             &events,
             &alice.peer_list,
+            &BTreeSet::new(),
         );
     }
 
@@ -591,6 +645,7 @@ mod tests {
             bob_initial_hash,
             &events,
             &alice.peer_list,
+            &BTreeSet::new(),
         );
     }
 
@@ -605,6 +660,7 @@ mod tests {
             bob_initial_hash,
             &events,
             &alice.peer_list,
+            &BTreeSet::new(),
         );
 
         assert_eq!(
@@ -638,7 +694,8 @@ mod tests {
         let unpacked_event = unwrap!(unwrap!(Event::<Transaction, PeerId>::unpack(
             packed_event.clone(),
             &events,
-            &alice.peer_list
+            &alice.peer_list,
+            &BTreeSet::new(),
         )));
 
         assert_eq!(event_from_observation, unpacked_event);
@@ -651,7 +708,8 @@ mod tests {
             unwrap!(Event::<Transaction, PeerId>::unpack(
                 packed_event,
                 &events,
-                &alice.peer_list
+                &alice.peer_list,
+                &BTreeSet::new()
             )).is_none()
         );
     }
@@ -678,7 +736,8 @@ mod tests {
         let error = unwrap_err!(Event::<Transaction, PeerId>::unpack(
             packed_event,
             &events,
-            &alice.peer_list
+            &alice.peer_list,
+            &BTreeSet::new()
         ));
         if let Error::SignatureFailure = error {
         } else {
