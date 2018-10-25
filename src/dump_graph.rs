@@ -174,7 +174,7 @@ mod detail {
         }
 
         // Create symlink so it's easier to find the latest graphs.
-        let _ = symlink_dir(&*ROOT_DIR, ROOT_DIR_PREFIX.join("latest"));
+        let _ = force_symlink_dir(&*ROOT_DIR, ROOT_DIR_PREFIX.join("latest"));
     }
 
     fn first_char<D: Debug>(id: &D) -> Option<char> {
@@ -483,10 +483,8 @@ mod detail {
         writeln!(writer, "/// }}")
     }
 
-    #[cfg(unix)]
-    fn symlink_dir<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) -> io::Result<()> {
+    fn force_symlink_dir<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) -> io::Result<()> {
         use std::io::ErrorKind;
-        use std::os::unix::fs::symlink;
 
         // Try to overwrite the destination if it exists, but only if it is a symlink, to prevent
         // accidental data loss.
@@ -495,17 +493,33 @@ mod detail {
             Err(error) => return Err(error),
             Ok(metadata) => {
                 if metadata.file_type().is_symlink() {
-                    let _ = fs::remove_file(&dst);
+                    let _ = remove_symlink_dir(&dst);
                 }
             }
         }
 
+        symlink_dir(src, dst)
+    }
+
+    #[cfg(unix)]
+    fn symlink_dir<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) -> io::Result<()> {
+        use std::os::unix::fs::symlink;
         symlink(src, dst)
+    }
+
+    #[cfg(unix)]
+    fn remove_symlink_dir<P: AsRef<Path>>(path: P) -> io::Result<()> {
+        fs::remove_file(path)
     }
 
     #[cfg(windows)]
     fn symlink_dir<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) -> io::Result<()> {
         use std::os::windows::fs::symlink_dir;
         symlink_dir(src, dst)
+    }
+
+    #[cfg(windows)]
+    fn remove_symlink_dir<P: AsRef<Path>>(path: P) -> io::Result<()> {
+        fs::remove_dir(path)
     }
 }
