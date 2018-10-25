@@ -1802,19 +1802,26 @@ impl Parsec<Transaction, PeerId> {
     pub(crate) fn from_parsed_contents(parsed_contents: ParsedContents) -> Self {
         let mut parsec = Parsec::empty(parsed_contents.our_id, &BTreeSet::new(), is_supermajority);
 
-        // Populate the `observations` cache using the payloads carried by events...
-        for event in parsed_contents.events.values() {
-            if let Some(payload) = event.vote().map(Vote::payload) {
+        // Populate `observations` cache using `interesting_content`, to support partial graphs...
+        for meta_event in parsed_contents.meta_events.values() {
+            for payload in &meta_event.interesting_content {
                 let hash = payload.create_hash();
                 let _ = parsec.observations.insert(hash, ObservationInfo::default());
             }
         }
 
-        // ..and also `interesting_content`, to support partial graphs.
-        for meta_event in parsed_contents.meta_events.values() {
-            for payload in &meta_event.interesting_content {
-                let hash = payload.create_hash();
-                let _ = parsec.observations.insert(hash, ObservationInfo::default());
+        // ..and also the payloads carried by events.
+        let our_pub_id = parsec.our_pub_id().clone();
+        for event in parsed_contents.events.values() {
+            if let Some(payload) = event.vote().map(Vote::payload) {
+                let observation = parsec
+                    .observations
+                    .entry(payload.create_hash())
+                    .or_insert_with(ObservationInfo::default);
+
+                if *event.creator() == our_pub_id {
+                    observation.created_by_us = true;
+                }
             }
         }
 
@@ -2403,7 +2410,7 @@ mod functional_tests {
         let a_0_hash = alice.events_order[0];
         let a_1_hash = alice.events_order[1];
 
-        // Create Dave where the first event is a geneneis event containing both Alice and Dave.
+        // Create Dave where the first event is a genesis event containing both Alice and Dave.
         let mut dave = initialise_parsec(dave_id.clone(), genesis, None);
         assert!(!dave.events.contains_key(&a_0_hash));
         assert!(!dave.events.contains_key(&a_1_hash));
