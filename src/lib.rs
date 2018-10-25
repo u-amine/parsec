@@ -66,6 +66,8 @@ extern crate lazy_static;
 extern crate log;
 #[macro_use]
 extern crate maidsafe_utilities;
+#[cfg(test)]
+extern crate pom;
 #[cfg(any(test, feature = "testing"))]
 #[macro_use]
 extern crate proptest as proptest_crate;
