@@ -585,9 +585,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let creator = self.get_known_event(event_hash)?.creator().clone();
 
         if let Some(payload) = self.compute_consensus(MetaElectionHandle::CURRENT, event_hash) {
-            let payload_hash = payload.create_hash();
-
-            self.output_consensus_info(&payload, &payload_hash);
+            self.output_consensus_info(&payload);
 
             let restart = self.handle_self_consensus(&payload) == PostConsensusAction::Continue;
             if creator != *self.our_pub_id() {
@@ -605,16 +603,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
             let block = self.create_block(payload.clone())?;
             self.consensused_blocks.push_back(block);
-
-            if let Some(info) = self.observations.get_mut(&payload_hash) {
-                info.consensused = true;
-            } else {
-                log_or_panic!(
-                    "{:?} doesn't know about observation with hash {:?}",
-                    self.peer_list.our_pub_id(),
-                    payload_hash
-                );
-            }
+            self.mark_observation_as_consensused(&payload);
 
             if restart {
                 self.restart_consensus();
@@ -632,7 +621,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Ok(())
     }
 
-    fn output_consensus_info(&self, payload: &Observation<T, S::PublicId>, payload_hash: &Hash) {
+    fn output_consensus_info(&self, payload: &Observation<T, S::PublicId>) {
+        use log::LogLevel;
+
         dump_graph::to_file(
             self.our_pub_id(),
             &self.events,
@@ -640,13 +631,28 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             &self.peer_list,
         );
 
-        info!(
-            "{:?} got consensus on block {} with payload {:?} and payload hash {:?}",
-            self.our_pub_id(),
-            self.meta_elections.consensus_history().len() - 1,
-            payload,
-            payload_hash
-        );
+        if log_enabled!(LogLevel::Info) {
+            info!(
+                "{:?} got consensus on block {} with payload {:?} and payload hash {:?}",
+                self.our_pub_id(),
+                self.meta_elections.consensus_history().len() - 1,
+                payload,
+                payload.create_hash()
+            )
+        }
+    }
+
+    fn mark_observation_as_consensused(&mut self, payload: &Observation<T, S::PublicId>) {
+        let payload_hash = payload.create_hash();
+        if let Some(info) = self.observations.get_mut(&payload_hash) {
+            info.consensused = true;
+        } else {
+            log_or_panic!(
+                "{:?} doesn't know about observation with hash {:?}",
+                self.peer_list.our_pub_id(),
+                payload_hash
+            );
+        }
     }
 
     /// Handles consensus reached by us.
@@ -1722,7 +1728,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                         .map(|index| (peer_id, *index))
                 }).flat_map(|(peer_id, index)| self.peer_list.events_by_index(peer_id, index))
                 .filter_map(|hash| self.get_known_event(hash).ok())
-                .any(|invalid_event| !parent.sees(invalid_event));
+                .any(|invalid_event| !parent.is_descendant_of(invalid_event));
             if detected {
                 Some(event.creator().clone())
             } else {

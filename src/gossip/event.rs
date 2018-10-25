@@ -155,14 +155,19 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         }
     }
 
+    // Returns whether this event is descendant of `other`, i.e. whether there's a directed path
+    // from `other` to `self`.
+    pub fn is_descendant_of(&self, other: &Event<T, P>) -> bool {
+        self.last_ancestors
+            .get(other.creator())
+            .map_or(false, |last_index| *last_index >= other.index())
+    }
+
     // Returns whether this event can see `other`, i.e. whether there's a directed path from `other`
     // to `self` in the graph, and no two events created by `other`'s creator are ancestors to
     // `self` (fork).
     pub fn sees(&self, other: &Event<T, P>) -> bool {
-        !self.forking_peers.contains(other.creator()) && self
-            .last_ancestors
-            .get(other.creator())
-            .map_or(false, |last_index| *last_index >= other.index())
+        !self.forking_peers.contains(other.creator()) && self.is_descendant_of(other)
     }
 
     /// Returns `Some(vote)` if the event is for a vote of network event, otherwise returns `None`.
