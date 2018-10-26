@@ -1802,19 +1802,26 @@ impl Parsec<Transaction, PeerId> {
     pub(crate) fn from_parsed_contents(parsed_contents: ParsedContents) -> Self {
         let mut parsec = Parsec::empty(parsed_contents.our_id, &BTreeSet::new(), is_supermajority);
 
-        // Populate the `observations` cache using the payloads carried by events...
-        for event in parsed_contents.events.values() {
-            if let Some(payload) = event.vote().map(Vote::payload) {
+        // Populate `observations` cache using `interesting_content`, to support partial graphs...
+        for meta_event in parsed_contents.meta_events.values() {
+            for payload in &meta_event.interesting_content {
                 let hash = payload.create_hash();
                 let _ = parsec.observations.insert(hash, ObservationInfo::default());
             }
         }
 
-        // ..and also `interesting_content`, to support partial graphs.
-        for meta_event in parsed_contents.meta_events.values() {
-            for payload in &meta_event.interesting_content {
-                let hash = payload.create_hash();
-                let _ = parsec.observations.insert(hash, ObservationInfo::default());
+        // ..and also the payloads carried by events.
+        let our_pub_id = parsec.our_pub_id().clone();
+        for event in parsed_contents.events.values() {
+            if let Some(payload) = event.vote().map(Vote::payload) {
+                let observation = parsec
+                    .observations
+                    .entry(payload.create_hash())
+                    .or_insert_with(ObservationInfo::default);
+
+                if *event.creator() == our_pub_id {
+                    observation.created_by_us = true;
+                }
             }
         }
 
@@ -2123,7 +2130,7 @@ mod functional_tests {
 
         let mut alice = Parsec::from_parsed_contents(parsed_contents);
         initialise_membership_lists(&mut alice.peer_list);
-        let genesis_group: BTreeSet<_> = alice.peer_list.all_ids().into_iter().cloned().collect();
+        let genesis_group: BTreeSet<_> = alice.peer_list.all_ids().cloned().collect();
 
         let fred_id = PeerId::new("Fred");
         assert!(!alice.peer_list.all_ids().any(|peer_id| *peer_id == fred_id));
@@ -2403,7 +2410,7 @@ mod functional_tests {
         let a_0_hash = alice.events_order[0];
         let a_1_hash = alice.events_order[1];
 
-        // Create Dave where the first event is a geneneis event containing both Alice and Dave.
+        // Create Dave where the first event is a genesis event containing both Alice and Dave.
         let mut dave = initialise_parsec(dave_id.clone(), genesis, None);
         assert!(!dave.events.contains_key(&a_0_hash));
         assert!(!dave.events.contains_key(&a_1_hash));
@@ -2606,5 +2613,71 @@ mod functional_tests {
         );
         assert_eq!(offender, alice.our_pub_id());
         assert_eq!(*hash, a_6_hash);
+    }
+
+    #[test]
+    fn unpolled_and_unconsensused_observations() {
+        let mut alice_contents = parse_test_dot_file("alice.dot");
+        let b_17 = unwrap!(alice_contents.remove_latest_event());
+
+        let mut alice = Parsec::from_parsed_contents(alice_contents);
+        alice.restart_consensus(); // This is needed so the Genesis observation is consensused.
+
+        // `Add(Eric)` should still be unconsensused since B_17 would be the first gossip event to
+        // reach consensus on `Add(Eric)`, but it was removed from the graph.
+        assert!(alice.has_unconsensused_observations());
+
+        // Since we haven't called `poll()` yet, our votes for `Genesis` and `Add(Eric)` should be
+        // returned by `our_unpolled_observations()`.
+        let add_eric = Observation::Add(PeerId::new("Eric"));
+        let genesis = Observation::Genesis(mock::create_ids(4).into_iter().collect());
+        {
+            let mut unpolled_observations = alice.our_unpolled_observations();
+            assert_eq!(*unwrap!(unpolled_observations.next()), genesis);
+            assert_eq!(*unwrap!(unpolled_observations.next()), add_eric);
+            assert!(unpolled_observations.next().is_none());
+        }
+
+        // Call `poll()` and retry - should only return our vote for `Add(Eric)`.
+        unwrap!(alice.poll());
+        assert!(alice.poll().is_none());
+        assert!(alice.has_unconsensused_observations());
+        assert_eq!(alice.our_unpolled_observations().count(), 1);
+        assert_eq!(*unwrap!(alice.our_unpolled_observations().next()), add_eric);
+
+        // Have Alice process B_17 to get consensus on `Add(Eric)`.
+        unwrap!(alice.add_event(b_17));
+
+        // Since we haven't call `poll()` again yet, should still return our vote for `Add(Eric)`.
+        // However, `has_unconsensused_observations()` should now return false.
+        assert!(!alice.has_unconsensused_observations());
+        assert_eq!(alice.our_unpolled_observations().count(), 1);
+        assert_eq!(*unwrap!(alice.our_unpolled_observations().next()), add_eric);
+
+        // Call `poll()` and retry - should return none.
+        unwrap!(alice.poll());
+        assert!(alice.poll().is_none());
+        assert!(alice.our_unpolled_observations().next().is_none());
+
+        // Vote for a new observation and check it is returned as unpolled, and that
+        // `has_unconsensused_observations()` returns false again.
+        let vote = Observation::OpaquePayload(Transaction::new("ABCD"));
+        unwrap!(alice.vote_for(vote.clone()));
+
+        assert!(alice.has_unconsensused_observations());
+        assert_eq!(alice.our_unpolled_observations().count(), 1);
+        assert_eq!(*unwrap!(alice.our_unpolled_observations().next()), vote);
+
+        // Reset, and re-run, this time adding Alice's vote early to check that it is returned in
+        // the correct order, i.e. after `Add(Eric)` at the point where `Add(Eric)` is consensused
+        // but has not been returned by `poll()`.
+        alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
+        unwrap!(alice.vote_for(vote.clone()));
+        alice.restart_consensus(); // `Add(Eric)` is now consensused.
+        let mut unpolled_observations = alice.our_unpolled_observations();
+        assert_eq!(*unwrap!(unpolled_observations.next()), genesis);
+        assert_eq!(*unwrap!(unpolled_observations.next()), add_eric);
+        assert_eq!(*unwrap!(unpolled_observations.next()), vote);
+        assert!(unpolled_observations.next().is_none());
     }
 }
