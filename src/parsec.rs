@@ -2595,6 +2595,76 @@ mod functional_tests {
     }
 
     #[test]
+    fn handle_malice_invalid_gossip_creator() {
+        // Alice reports gossip to Bob from Carol that isn’t in their section.
+        let mut alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
+        initialise_membership_lists(&mut alice.peer_list);
+        let mut bob = Parsec::from_parsed_contents(parse_test_dot_file("bob.dot"));
+        initialise_membership_lists(&mut bob.peer_list);
+
+        // Verify peer lists
+        let alice_id = PeerId::new("Alice");
+        let bob_id = PeerId::new("Bob");
+        let mut alice_peer_list = PeerList::new(alice_id.clone());
+        alice_peer_list.add_peer(alice_id.clone(), PeerState::active());
+        alice_peer_list.add_peer(bob_id.clone(), PeerState::active());
+        assert_eq!(
+            alice.peer_list.peer_id_hashes().collect::<Vec<_>>(),
+            alice_peer_list.peer_id_hashes().collect::<Vec<_>>()
+        );
+        let mut bob_peer_list = PeerList::new(bob_id.clone());
+        bob_peer_list.add_peer(alice_id.clone(), PeerState::active());
+        bob_peer_list.add_peer(bob_id.clone(), PeerState::active());
+        assert_eq!(
+            bob.peer_list.peer_id_hashes().collect::<Vec<_>>(),
+            bob_peer_list.peer_id_hashes().collect::<Vec<_>>()
+        );
+
+        // Read the dot file again so we have a set of events we can manually add to Bob instead of
+        // sending gossip.
+        let mut alice_parsed_contents = parse_test_dot_file("alice.dot");
+
+        // Carol is marked as active peer so that Bob's peer_list will accept C_0, but Carol is not
+        // part of the membership_list
+        let carol_id = PeerId::new("Carol");
+        bob.peer_list.add_peer(carol_id, PeerState::active());
+        let c_0_hash = *unwrap!(find_event_by_short_name(
+            alice_parsed_contents.events.values(),
+            "C_0"
+        )).hash();
+        let c_0 = unwrap!(alice_parsed_contents.events.remove(&c_0_hash));
+        unwrap!(bob.peer_list.add_event(&c_0));
+
+        // This malice is setup in two events.
+        // A_2 has C_0 from Carol as other parent as Carol has gossiped to Alice. Carol is however
+        // not part of the section and Alice should not have accepted it.
+        let a_2_hash = *unwrap!(find_event_by_short_name(
+            alice_parsed_contents.events.values(),
+            "A_2"
+        )).hash();
+        let a_2 = unwrap!(alice_parsed_contents.events.remove(&a_2_hash));
+        unwrap!(bob.add_event(a_2));
+
+        // B_2 is the sync event created by Bob when he receives A_2 from Alice.
+        let b_2_hash = *unwrap!(find_event_by_short_name(
+            alice_parsed_contents.events.values(),
+            "B_2"
+        )).hash();
+        let b_2 = unwrap!(alice_parsed_contents.events.remove(&b_2_hash));
+        unwrap!(bob.add_event(b_2));
+
+        // Bob should now have seen that Alice in A_2 incorrectly reported gossip from Carol. Check
+        // that this triggers an accusation
+        let expected_accusations = (
+            alice.our_pub_id().clone(),
+            Malice::InvalidGossipCreator(a_2_hash),
+        );
+
+        assert!(bob.pending_accusations.contains(&expected_accusations));
+        assert!(bob.events.contains_key(&a_2_hash));
+    }
+
+    #[test]
     fn unpolled_and_unconsensused_observations() {
         let mut alice_contents = parse_test_dot_file("alice.dot");
         let b_17 = unwrap!(alice_contents.remove_latest_event());
