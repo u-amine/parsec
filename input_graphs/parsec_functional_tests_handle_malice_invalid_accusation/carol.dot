@@ -1,7 +1,7 @@
 digraph GossipGraph {
   splines=false
   rankdir=BT
-/// our_id: Alice
+/// our_id: Carol
 /// peer_states: {Alice: "PeerState(VOTE|SEND|RECV)", Bob: "PeerState(VOTE|SEND|RECV)", Carol: "PeerState(VOTE|SEND|RECV)", Dave: "PeerState(VOTE|SEND|RECV)"}
 /// { 098c1440cc..
 /// cause: Response
@@ -107,12 +107,12 @@ digraph GossipGraph {
     "e2873d8612.." -> "80b9b8f122.." [minlen=1]
     "80b9b8f122.." -> "83dc5a58b7.." [minlen=1]
     "83dc5a58b7.." -> "59735e66d0.." [minlen=1]
-    
+
   }
   "682aa6684e.." -> "80b9b8f122.." [constraint=false]
   "af91fcff5e.." -> "83dc5a58b7.." [constraint=false]
   "eedba06154.." -> "59735e66d0.." [constraint=false]
-  
+
     style=invis
   subgraph cluster_Dave {
     label=Dave
@@ -125,7 +125,7 @@ digraph GossipGraph {
   }
   "682aa6684e.." -> "eedba06154.." [constraint=false]
   "83dc5a58b7.." -> "3105bde98a.." [constraint=false]
-  
+
     style=invis
   subgraph cluster_Bob {
     label=Bob
@@ -140,7 +140,7 @@ digraph GossipGraph {
   "eedba06154.." -> "4c1a48932a.." [constraint=false]
   "80b9b8f122.." -> "098c1440cc.." [constraint=false]
   "3105bde98a.." -> "9b85359b6d.." [constraint=false]
-  
+
     style=invis
   subgraph cluster_Carol {
     label=Carol
@@ -155,7 +155,7 @@ digraph GossipGraph {
   "682aa6684e.." -> "fbb0f444d5.." [constraint=false]
   "59735e66d0.." -> "bd0fe471c9.." [constraint=false]
   "9b85359b6d.." -> "8158ee7022.." [constraint=false]
-  
+
 /// meta-vote section
  "098c1440cc.." [fillcolor=white, label="B_3
 [Genesis({Alice, Bob, Carol, Dave})]"]

@@ -525,7 +525,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn add_event(&mut self, event: Event<T, S::PublicId>) -> Result<()> {
-        self.detect_malice_before_process(&event)?;
+        let our = event.creator() == self.our_pub_id();
+        if !our {
+            self.detect_malice_before_process(&event)?;
+        }
 
         self.peer_list.add_event(&event)?;
         let event_hash = *event.hash();
@@ -571,7 +574,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         self.initialise_membership_list(&event_hash);
         self.process_event(&event_hash)?;
-        self.detect_malice_after_process(&event_hash);
+
+        if !our {
+            self.detect_malice_after_process(&event_hash);
+        }
 
         Ok(())
     }
@@ -1666,34 +1672,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 return;
             };
 
-            if event.creator() == self.our_pub_id() {
-                // Skip this detection for ourselves to prevent an edge case where we would end up
-                // incorrectly accusing ourselves of `InvalidGossipCreator`.
-                //
-                // Consider this example:
-                // Eric join existing section. As he's crunching through his first gossip, he has
-                // only his initial event (index = 0) in his graph. Then he arrives at event which
-                // decides `Remove(Bob)` for him. So he records the change to his membership list
-                // as `0 => Remove(Bob)`. Then he eventually inserts his own event (index = 1). Then
-                // he proceeds to detect `InvalidGossipCreator` on that event. He fetches his
-                // membership list snapshot at index = 1, which would already exclude Bob (because
-                // `Remove(Bob)` happens at index = 0). But the event being inserted has Bob's
-                // events as its ancestors, so Eric ends up accusing himself.
-                //
-                // To prevent this, we simply skip the detection for ourselves, which should be OK,
-                // because we trust ourselves to be honest anyway.
-                //
-                // Note that the above scenario does not happen for other peers. Consider the same
-                // situation from Alice's point of view:
-                // Alice processes Eric's event with index = 1. It is the first event that sees the
-                // event that decided `Remove(Bob)`, so Alice records Eric's membership list change
-                // `1 => Remove(Bob)`. Then she proceeds to detect `InvalidGossipCreator`, she
-                // fetches Eric's membership list at index 1 which would still include Bob (because
-                // `Remove(Bob)` happened at index = 1 and so is excluded). So she raises no
-                // accusation.
-                return;
-            }
-
             let parent = if let Some(parent) = self.self_parent(event) {
                 parent
             } else {
@@ -2596,7 +2574,8 @@ mod functional_tests {
         assert!(!carol.events.contains_key(&a_6_hash));
 
         // Send gossip from Alice to Carol
-        let message = unwrap!(alice.create_gossip(Some(&PeerId::new("Carol"))));
+        let message = unwrap!(alice.create_gossip(Some(carol.our_pub_id())));
+
         unwrap!(carol.handle_request(alice.our_pub_id(), message));
         assert!(carol.events.contains_key(&a_6_hash));
 
