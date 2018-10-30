@@ -1,107 +1,42 @@
+/// our_id: Carol
+/// peer_list: {
+///   Alice; PeerState(VOTE|SEND|RECV); peers: {Alice, Bob, Carol}
+///   Bob; PeerState(VOTE|SEND|RECV); peers: {Alice, Bob, Carol}
+///   Carol; PeerState(VOTE|SEND|RECV); peers: {Alice, Bob, Carol}
+/// }
 digraph GossipGraph {
   splines=false
   rankdir=BT
-/// our_id: Carol
-/// peer_states: {Alice: "PeerState(VOTE|SEND|RECV)", Bob: "PeerState(VOTE|SEND|RECV)", Carol: "PeerState(VOTE|SEND|RECV)"}
-/// { 1efae523fa..
-/// cause: Observation(Genesis({Alice, Bob, Carol}))
-/// interesting_content: []
-/// last_ancestors: {Bob: 1}
-/// }
-/// { 220b113af5..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Bob: 2, Carol: 1}
-/// }
-/// { 2f8e74239f..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 1, Carol: 2}
-/// }
-/// { 30d7e4394d..
-/// cause: Initial
-/// interesting_content: []
-/// last_ancestors: {Alice: 0}
-/// }
-/// { 3fae277c4b..
-/// cause: Observation(Genesis({Alice, Bob, Carol}))
-/// interesting_content: []
-/// last_ancestors: {Alice: 1}
-/// }
-/// { 59166adc88..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 2, Carol: 2}
-/// }
-/// { c9d0bed02c..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 1, Bob: 2, Carol: 3}
-/// }
-/// { dc8296fe22..
-/// cause: Initial
-/// interesting_content: []
-/// last_ancestors: {Bob: 0}
-/// }
-/// { f30cb2c50f..
-/// cause: Observation(Genesis({Alice, Bob, Carol}))
-/// interesting_content: []
-/// last_ancestors: {Carol: 1}
-/// }
-/// { fa13ad61fd..
-/// cause: Initial
-/// interesting_content: []
-/// last_ancestors: {Carol: 0}
-/// }
-    style=invis
+
+  style=invis
   subgraph cluster_Alice {
     label=Alice
     Alice [style=invis]
-    Alice -> "30d7e4394d.." [style=invis]
-    "30d7e4394d.." -> "3fae277c4b.." [minlen=1]
-    "3fae277c4b.." -> "59166adc88.." [minlen=2]
+    "Alice" -> "A_0" [style=invis]
+    "A_0" -> "A_1" [minlen=1]
   }
-  "2f8e74239f.." -> "59166adc88.." [constraint=false]
 
-    style=invis
+  style=invis
   subgraph cluster_Bob {
     label=Bob
     Bob [style=invis]
-    Bob -> "dc8296fe22.." [style=invis]
-    "dc8296fe22.." -> "1efae523fa.." [minlen=1]
-    "1efae523fa.." -> "220b113af5.." [minlen=1]
+    "Bob" -> "B_0" [style=invis]
+    "B_0" -> "B_1" [minlen=1]
+    "B_1" -> "B_2" [minlen=1]
   }
-  "f30cb2c50f.." -> "220b113af5.." [constraint=false]
+  "C_1" -> "B_2" [constraint=false]
 
-    style=invis
+  style=invis
   subgraph cluster_Carol {
     label=Carol
     Carol [style=invis]
-    Carol -> "fa13ad61fd.." [style=invis]
-    "fa13ad61fd.." -> "f30cb2c50f.." [minlen=1]
-    "f30cb2c50f.." -> "2f8e74239f.." [minlen=1]
-    "2f8e74239f.." -> "c9d0bed02c.." [minlen=1]
+    "Carol" -> "C_0" [style=invis]
+    "C_0" -> "C_1" [minlen=1]
+    "C_1" -> "C_2" [minlen=2]
+    "C_2" -> "C_3" [minlen=1]
   }
-  "3fae277c4b.." -> "2f8e74239f.." [constraint=false]
-  "220b113af5.." -> "c9d0bed02c.." [constraint=false]
-
-/// meta-vote section
- "1efae523fa.." [fillcolor=white, label="B_1
-Genesis({Alice, Bob, Carol})"]
- "1efae523fa.." [shape=rectangle, style=filled, fillcolor=cyan]
- "220b113af5.." [fillcolor=white, label="B_2"]
- "2f8e74239f.." [fillcolor=white, label="C_2"]
- "30d7e4394d.." [fillcolor=white, label="A_0"]
- "3fae277c4b.." [fillcolor=white, label="A_1
-Genesis({Alice, Bob, Carol})"]
- "3fae277c4b.." [shape=rectangle, style=filled, fillcolor=cyan]
- "59166adc88.." [fillcolor=white, label="A_2"]
- "c9d0bed02c.." [fillcolor=white, label="C_3"]
- "dc8296fe22.." [fillcolor=white, label="B_0"]
- "f30cb2c50f.." [fillcolor=white, label="C_1
-Genesis({Alice, Bob, Carol})"]
- "f30cb2c50f.." [shape=rectangle, style=filled, fillcolor=cyan]
- "fa13ad61fd.." [fillcolor=white, label="C_0"]
+  "A_1" -> "C_2" [constraint=false]
+  "B_2" -> "C_3" [constraint=false]
 
   {
     rank=same
@@ -110,4 +45,118 @@ Genesis({Alice, Bob, Carol})"]
     Carol [style=filled, color=white]
   }
   Alice -> Bob -> Carol [style=invis]
+
+/// ===== details of events =====
+  "A_0" [fillcolor=white, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_0</td></tr>
+</table>>]
+/// cause: Initial
+/// last_ancestors: {Alice: 0}
+
+  "A_1" [style=filled, fillcolor=cyan, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_1</td></tr>
+<tr><td colspan="6">Genesis({Alice, Bob, Carol})</td></tr>
+</table>>]
+/// cause: Observation(Genesis({Alice, Bob, Carol}))
+/// last_ancestors: {Alice: 1}
+
+  "B_0" [fillcolor=white, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_0</td></tr>
+</table>>]
+/// cause: Initial
+/// last_ancestors: {Bob: 0}
+
+  "B_1" [style=filled, fillcolor=cyan, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_1</td></tr>
+<tr><td colspan="6">Genesis({Alice, Bob, Carol})</td></tr>
+</table>>]
+/// cause: Observation(Genesis({Alice, Bob, Carol}))
+/// last_ancestors: {Bob: 1}
+
+  "B_2" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_2</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Bob: 2, Carol: 1}
+
+  "C_0" [fillcolor=white, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_0</td></tr>
+</table>>]
+/// cause: Initial
+/// last_ancestors: {Carol: 0}
+
+  "C_1" [style=filled, fillcolor=cyan, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_1</td></tr>
+<tr><td colspan="6">Genesis({Alice, Bob, Carol})</td></tr>
+</table>>]
+/// cause: Observation(Genesis({Alice, Bob, Carol}))
+/// last_ancestors: {Carol: 1}
+
+  "C_2" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_2</td></tr>
+</table>>]
+/// cause: Response
+/// last_ancestors: {Bob: 2, Carol: 2}
+
+  "C_3" [style=filled, fillcolor=crimson, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_3</td></tr>
+<tr><td colspan="6">[Genesis({Alice, Bob, Carol})]</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 1, Bob: 2, Carol: 3}
+
 }
+
+/// ===== meta-elections =====
+/// consensus_history:
+
+/// MetaElectionHandle(CURRENT)
+/// consensus_len: 0
+/// round_hashes: {
+///   Alice -> [
+///     RoundHash { round: 0, latest_block_hash: 0000000000000000000000000000000000000000000000000000000000000000 }
+///   ]
+///   Bob -> [
+///     RoundHash { round: 0, latest_block_hash: 0000000000000000000000000000000000000000000000000000000000000000 }
+///   ]
+///   Carol -> [
+///     RoundHash { round: 0, latest_block_hash: 0000000000000000000000000000000000000000000000000000000000000000 }
+///   ]
+/// }
+/// interesting_events: {
+/// }
+/// all_voters: {Alice, Bob, Carol}
+/// undecided_voters: {Alice, Bob, Carol}
+/// meta_events: {
+///   A_1 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   A_2 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   B_1 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   B_2 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   B_3 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   C_1 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   C_2 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   C_3 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+/// }

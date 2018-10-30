@@ -1,1445 +1,2529 @@
+/// our_id: Alice
+/// peer_list: {
+///   Alice; PeerState(VOTE|SEND|RECV); peers: {}
+///   Bob; PeerState(VOTE|SEND|RECV); peers: {Alice, Bob, Carol, Dave}
+///   Carol; PeerState(VOTE|SEND|RECV); peers: {Alice, Bob, Carol, Dave}
+///   Dave; PeerState(VOTE|SEND|RECV); peers: {Alice, Bob, Carol, Dave}
+/// }
 digraph GossipGraph {
   splines=false
   rankdir=BT
-/// our_id: Alice
-/// peer_states: {Alice: "PeerState(VOTE|SEND|RECV)", Bob: "PeerState(VOTE|SEND|RECV)", Carol: "PeerState(VOTE|SEND|RECV)", Dave: "PeerState(VOTE|SEND|RECV)"}
-/// { 0176a5a474..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 6, Bob: 6, Carol: 13, Dave: 12}
-/// }
-/// { 02f4913617..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 16, Carol: 19, Dave: 15}
-/// }
-/// { 0a729a5497..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 15, Bob: 13, Carol: 13, Dave: 15}
-/// }
-/// { 0d423028ab..
-/// cause: Observation(Add(Eric))
-/// interesting_content: []
-/// last_ancestors: {Alice: 6, Bob: 2, Carol: 5, Dave: 4}
-/// }
-/// { 0dc7daa42e..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 15, Bob: 14, Carol: 13, Dave: 17}
-/// }
-/// { 0ed8cef7eb..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 17, Bob: 20, Carol: 17, Dave: 16}
-/// }
-/// { 11914b3082..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 20, Bob: 20, Carol: 26, Dave: 19}
-/// }
-/// { 12aa85cabd..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 20, Bob: 25, Carol: 28, Dave: 22}
-/// }
-/// { 14bf55be11..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 14, Carol: 16, Dave: 14}
-/// }
-/// { 1714506ede..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 17, Bob: 22, Carol: 18, Dave: 19}
-/// }
-/// { 17612cf3d4..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 17, Bob: 21, Carol: 17, Dave: 16}
-/// }
-/// { 1cfa3b4c52..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 19, Carol: 17, Dave: 16}
-/// }
-/// { 1e094dc939..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 24, Bob: 25, Carol: 27, Dave: 24}
-/// }
-/// { 1ef88792f3..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 5, Bob: 2, Carol: 5, Dave: 7}
-/// }
-/// { 1f625db0e3..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 18, Bob: 20, Carol: 23, Dave: 19}
-/// }
-/// { 21cff5876d..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 20, Bob: 22, Carol: 26, Dave: 23}
-/// }
-/// { 2564335538..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 14, Bob: 13, Carol: 13, Dave: 15}
-/// }
-/// { 2c347ed12e..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 14, Carol: 18, Dave: 15}
-/// }
-/// { 2ecf1f8f60..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 17, Bob: 23, Carol: 24, Dave: 19}
-/// }
-/// { 30d7e4394d..
-/// cause: Initial
-/// interesting_content: []
-/// last_ancestors: {Alice: 0}
-/// }
-/// { 30e481b181..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Bob: 3, Carol: 2}
-/// }
-/// { 3597afa09c..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 16, Bob: 20, Carol: 25, Dave: 19}
-/// }
-/// { 36099e4269..
-/// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
-/// interesting_content: []
-/// last_ancestors: {Carol: 1}
-/// }
-/// { 36a3244919..
-/// cause: Observation(Add(Eric))
-/// interesting_content: []
-/// last_ancestors: {Bob: 2, Carol: 5, Dave: 5}
-/// }
-/// { 36b525c92a..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 15, Bob: 17, Carol: 22, Dave: 20}
-/// }
-/// { 3c56ac9602..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 17, Bob: 20, Carol: 26, Dave: 19}
-/// }
-/// { 3cee9c901f..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 7, Bob: 10, Carol: 13, Dave: 14}
-/// }
-/// { 41f4e4eb64..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 12, Carol: 12, Dave: 10}
-/// }
-/// { 4350c40345..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 14, Carol: 13, Dave: 14}
-/// }
-/// { 4541f98755..
-/// cause: Initial
-/// interesting_content: []
-/// last_ancestors: {Dave: 0}
-/// }
-/// { 4763351202..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 11, Bob: 10, Carol: 12, Dave: 10}
-/// }
-/// { 47dfaf2527..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 27, Bob: 32, Carol: 31, Dave: 26}
-/// }
-/// { 49c90b58c3..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 17, Carol: 20, Dave: 15}
-/// }
-/// { 4c65660aa2..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 20, Bob: 22, Carol: 26, Dave: 24}
-/// }
-/// { 4c73424ae1..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 29, Bob: 30, Carol: 33, Dave: 26}
-/// }
-/// { 4d98e2d754..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 13, Bob: 13, Carol: 12, Dave: 10}
-/// }
-/// { 4e69ff32cb..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 6, Bob: 5, Carol: 13, Dave: 9}
-/// }
-/// { 4e6c8de441..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 27, Bob: 27, Carol: 30, Dave: 26}
-/// }
-/// { 4f29a44a16..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 14, Carol: 17, Dave: 14}
-/// }
-/// { 5019de1415..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 14, Carol: 13, Dave: 16}
-/// }
-/// { 529c796df6..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 6, Bob: 7, Carol: 14, Dave: 9}
-/// }
-/// { 5300d0c8e4..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 6, Bob: 5, Carol: 11, Dave: 9}
-/// }
-/// { 545cced709..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 28, Bob: 27, Carol: 30, Dave: 28}
-/// }
-/// { 59d8f25af0..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 24, Bob: 27, Carol: 27, Dave: 24}
-/// }
-/// { 5fe9218ddb..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 19, Bob: 20, Carol: 25, Dave: 19}
-/// }
-/// { 62e5f20af8..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 20, Bob: 25, Carol: 27, Dave: 22}
-/// }
-/// { 639f740820..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 26, Bob: 28, Carol: 28, Dave: 26}
-/// }
-/// { 682aa6684e..
-/// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
-/// interesting_content: []
-/// last_ancestors: {Bob: 1}
-/// }
-/// { 6985b21a89..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 4, Bob: 2, Carol: 5, Dave: 6}
-/// }
-/// { 699f204743..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 6, Bob: 6, Carol: 9, Dave: 10}
-/// }
-/// { 6f9d07daaf..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 27, Bob: 29, Carol: 28, Dave: 26}
-/// }
-/// { 70c113e2bb..
-/// cause: Response
-/// interesting_content: [Add(Eric)]
-/// last_ancestors: {Alice: 6, Bob: 5, Carol: 10, Dave: 9}
-/// }
-/// { 73b028a986..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 16, Carol: 16, Dave: 14}
-/// }
-/// { 747db8119c..
-/// cause: Observation(Add(Eric))
-/// interesting_content: []
-/// last_ancestors: {Alice: 3, Bob: 2, Carol: 8, Dave: 4}
-/// }
-/// { 7c750f3b6d..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 5, Bob: 2, Carol: 5, Dave: 4}
-/// }
-/// { 7ee3a81be3..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 10, Carol: 12, Dave: 10}
-/// }
-/// { 7f70e2b4f4..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Bob: 2, Carol: 6, Dave: 4}
-/// }
-/// { 8026159887..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 6, Bob: 6, Carol: 13, Dave: 13}
-/// }
-/// { 8091ad8e1f..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 15, Bob: 17, Carol: 22, Dave: 19}
-/// }
-/// { 859050b96e..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Bob: 1, Carol: 4, Dave: 3}
-/// }
-/// { 85b7778035..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 17, Bob: 22, Carol: 22, Dave: 21}
-/// }
-/// { 8815629109..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 3, Bob: 2, Carol: 7, Dave: 4}
-/// }
-/// { 8b3755c1e6..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 3, Bob: 5, Carol: 9, Dave: 4}
-/// }
-/// { 8eb84dedcd..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 15, Bob: 17, Carol: 21, Dave: 19}
-/// }
-/// { 8f51a4ae3c..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 7, Bob: 9, Carol: 9, Dave: 10}
-/// }
-/// { 8fbf783bd5..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 17, Carol: 16, Dave: 14}
-/// }
-/// { 90af14937a..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 20, Bob: 26, Carol: 28, Dave: 26}
-/// }
-/// { 924040aabd..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Bob: 1, Carol: 3, Dave: 2}
-/// }
-/// { 928500a90f..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 20, Bob: 25, Carol: 28, Dave: 25}
-/// }
-/// { 941fbedb2e..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 7, Bob: 10, Carol: 9, Dave: 10}
-/// }
-/// { 949ff3d1a3..
-/// cause: Request
-/// interesting_content: [Add(Eric)]
-/// last_ancestors: {Alice: 6, Bob: 5, Carol: 9, Dave: 9}
-/// }
-/// { 9689249000..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 25, Bob: 26, Carol: 28, Dave: 27}
-/// }
-/// { 9dc1bfa13e..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 7, Bob: 2, Carol: 5, Dave: 8}
-/// }
-/// { a38d528788..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 27, Bob: 29, Carol: 31, Dave: 26}
-/// }
-/// { a4754c6037..
-/// cause: Observation(Add(Eric))
-/// interesting_content: []
-/// last_ancestors: {Bob: 4, Carol: 2}
-/// }
-/// { a6176ea05b..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Carol: 1, Dave: 3}
-/// }
-/// { a68a0f797a..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 2, Bob: 2, Carol: 1}
-/// }
-/// { a7a42216e3..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 15, Carol: 16, Dave: 14}
-/// }
-/// { ab0b610751..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 22, Bob: 22, Carol: 26, Dave: 24}
-/// }
-/// { ae3436bd8e..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 16, Bob: 20, Carol: 24, Dave: 19}
-/// }
-/// { af91fcff5e..
-/// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
-/// interesting_content: []
-/// last_ancestors: {Dave: 1}
-/// }
-/// { aff38c406d..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 20, Bob: 26, Carol: 27, Dave: 24}
-/// }
-/// { b0ec9f0760..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 25, Bob: 26, Carol: 28, Dave: 26}
-/// }
-/// { b1c417a10c..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 6, Bob: 7, Carol: 15, Dave: 13}
-/// }
-/// { b25313b3e4..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 9, Bob: 8, Carol: 12, Dave: 10}
-/// }
-/// { b28c8d03a3..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 17, Bob: 22, Carol: 27, Dave: 22}
-/// }
-/// { b302a036de..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 10, Bob: 9, Carol: 12, Dave: 10}
-/// }
-/// { b36b5993c3..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 27, Bob: 31, Carol: 30, Dave: 26}
-/// }
-/// { b4d19fc314..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 28, Bob: 27, Carol: 30, Dave: 26}
-/// }
-/// { b94ecc2479..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Bob: 2, Carol: 5, Dave: 3}
-/// }
-/// { bd5204c8ef..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 8, Bob: 11, Carol: 9, Dave: 10}
-/// }
-/// { bdbde3a09b..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 16, Bob: 20, Carol: 17, Dave: 16}
-/// }
-/// { bdf3bfab10..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 4, Bob: 2, Carol: 5, Dave: 4}
-/// }
-/// { bfd1904215..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 30, Bob: 33, Carol: 33, Dave: 28}
-/// }
-/// { c3c6c72d3e..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 6, Bob: 6, Carol: 11, Dave: 11}
-/// }
-/// { cb462236a8..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 27, Bob: 30, Carol: 30, Dave: 26}
-/// }
-/// { cbe1ec9f7b..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 3, Bob: 7, Carol: 9, Dave: 4}
-/// }
-/// { d26fcb95dd..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 26, Bob: 26, Carol: 28, Dave: 26}
-/// }
-/// { d497febcff..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 27, Bob: 27, Carol: 28, Dave: 26}
-/// }
-/// { d4d060bb5d..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Bob: 2, Carol: 5, Dave: 4}
-/// }
-/// { d4f8223c5b..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 3, Bob: 2, Carol: 4, Dave: 3}
-/// }
-/// { d5ae7660ff..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 20, Bob: 24, Carol: 26, Dave: 19}
-/// }
-/// { d5d85ac7cd..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 28, Bob: 30, Carol: 33, Dave: 26}
-/// }
-/// { d8c5b2adbc..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Bob: 5, Carol: 6, Dave: 4}
-/// }
-/// { d93c90e427..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 15, Bob: 14, Carol: 18, Dave: 18}
-/// }
-/// { dc8296fe22..
-/// cause: Initial
-/// interesting_content: []
-/// last_ancestors: {Bob: 0}
-/// }
-/// { dc8ebfb4f4..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Bob: 2, Carol: 1}
-/// }
-/// { e2873d8612..
-/// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
-/// interesting_content: []
-/// last_ancestors: {Alice: 1}
-/// }
-/// { e33eca991f..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Carol: 1, Dave: 2}
-/// }
-/// { e56fb66486..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 15, Bob: 14, Carol: 18, Dave: 19}
-/// }
-/// { e59c28e14c..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 17, Bob: 22, Carol: 26, Dave: 22}
-/// }
-/// { e5b64a004c..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 16, Bob: 17, Carol: 16, Dave: 15}
-/// }
-/// { e5f3bf7689..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 18, Carol: 17, Dave: 14}
-/// }
-/// { e8eed42d3b..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 23, Bob: 24, Carol: 26, Dave: 24}
-/// }
-/// { e95cd318ba..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 2, Bob: 6, Carol: 6, Dave: 4}
-/// }
-/// { eb0d2d8f56..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 27, Bob: 30, Carol: 32, Dave: 26}
-/// }
-/// { ec355338ae..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 21, Bob: 22, Carol: 26, Dave: 23}
-/// }
-/// { eea8674bb6..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 13, Carol: 12, Dave: 10}
-/// }
-/// { f34c0cb2b2..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 6, Bob: 2, Carol: 5, Dave: 8}
-/// }
-/// { f42acf430c..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 20, Bob: 25, Carol: 29, Dave: 25}
-/// }
-/// { f4476e008b..
-/// cause: Response
-/// interesting_content: []
-/// last_ancestors: {Alice: 30, Bob: 30, Carol: 33, Dave: 28}
-/// }
-/// { f4e4557b53..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 12, Bob: 10, Carol: 13, Dave: 15}
-/// }
-/// { f63ea6350b..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 16, Bob: 17, Carol: 23, Dave: 19}
-/// }
-/// { f6e3f2f6c6..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Alice: 6, Bob: 5, Carol: 12, Dave: 9}
-/// }
-/// { fa13ad61fd..
-/// cause: Initial
-/// interesting_content: []
-/// last_ancestors: {Carol: 0}
-/// }
-/// { fa709b1f1d..
-/// cause: Response
-/// interesting_content: [Add(Eric)]
-/// last_ancestors: {Alice: 6, Bob: 8, Carol: 9, Dave: 10}
-/// }
-/// { fbb0f444d5..
-/// cause: Request
-/// interesting_content: []
-/// last_ancestors: {Bob: 1, Carol: 2}
-/// }
-/// { fdfcc5a1c2..
-/// cause: Request
-/// interesting_content: [Add(Eric)]
-/// last_ancestors: {Alice: 8, Bob: 8, Carol: 9, Dave: 10}
-/// }
-    style=invis
+
+  style=invis
   subgraph cluster_Alice {
     label=Alice
     Alice [style=invis]
-    Alice -> "30d7e4394d.." [style=invis]
-    "30d7e4394d.." -> "e2873d8612.." [minlen=1]
-    "e2873d8612.." -> "a68a0f797a.." [minlen=2]
-    "a68a0f797a.." -> "d4f8223c5b.." [minlen=2]
-    "d4f8223c5b.." -> "bdf3bfab10.." [minlen=2]
-    "bdf3bfab10.." -> "7c750f3b6d.." [minlen=1]
-    "7c750f3b6d.." -> "0d423028ab.." [minlen=1]
-    "0d423028ab.." -> "9dc1bfa13e.." [minlen=2]
-    "9dc1bfa13e.." -> "fdfcc5a1c2.." [minlen=3]
-    "fdfcc5a1c2.." -> "b25313b3e4.." [minlen=1]
-    "b25313b3e4.." -> "b302a036de.." [minlen=1]
-    "b302a036de.." -> "4763351202.." [minlen=1]
-    "4763351202.." -> "7ee3a81be3.." [minlen=1]
-    "7ee3a81be3.." -> "4d98e2d754.." [minlen=3]
-    "4d98e2d754.." -> "2564335538.." [minlen=1]
-    "2564335538.." -> "0a729a5497.." [minlen=1]
-    "0a729a5497.." -> "e5b64a004c.." [minlen=3]
-    "e5b64a004c.." -> "0ed8cef7eb.." [minlen=3]
-    "0ed8cef7eb.." -> "1f625db0e3.." [minlen=1]
-    "1f625db0e3.." -> "5fe9218ddb.." [minlen=2]
-    "5fe9218ddb.." -> "11914b3082.." [minlen=1]
-    "11914b3082.." -> "ec355338ae.." [minlen=2]
-    "ec355338ae.." -> "ab0b610751.." [minlen=1]
-    "ab0b610751.." -> "e8eed42d3b.." [minlen=1]
-    "e8eed42d3b.." -> "1e094dc939.." [minlen=1]
-    "1e094dc939.." -> "b0ec9f0760.." [minlen=1]
-    "b0ec9f0760.." -> "d26fcb95dd.." [minlen=1]
-    "d26fcb95dd.." -> "d497febcff.." [minlen=1]
-    "d497febcff.." -> "b4d19fc314.." [minlen=2]
-    "b4d19fc314.." -> "4c73424ae1.." [minlen=3]
-    "4c73424ae1.." -> "f4476e008b.." [minlen=1]
-
-
+    "Alice" -> "A_0" [style=invis]
+    "A_0" -> "A_1" [minlen=1]
+    "A_1" -> "A_2" [minlen=3]
+    "A_2" -> "A_3" [minlen=1]
+    "A_3" -> "A_4" [minlen=1]
+    "A_4" -> "A_5" [minlen=2]
+    "A_5" -> "A_6" [minlen=4]
+    "A_6" -> "A_7" [minlen=1]
+    "A_7" -> "A_8" [minlen=1]
+    "A_8" -> "A_9" [minlen=1]
+    "A_9" -> "A_10" [minlen=3]
+    "A_10" -> "A_11" [minlen=1]
+    "A_11" -> "A_12" [minlen=1]
+    "A_12" -> "A_13" [minlen=6]
+    "A_13" -> "A_14" [minlen=1]
+    "A_14" -> "A_15" [minlen=1]
+    "A_15" -> "A_16" [minlen=2]
+    "A_16" -> "A_17" [minlen=1]
+    "A_17" -> "A_18" [minlen=1]
+    "A_18" -> "A_19" [minlen=2]
+    "A_19" -> "A_20" [minlen=8]
+    "A_20" -> "A_21" [minlen=1]
   }
-  "dc8ebfb4f4.." -> "a68a0f797a.." [constraint=false]
-  "859050b96e.." -> "d4f8223c5b.." [constraint=false]
-  "d4d060bb5d.." -> "bdf3bfab10.." [constraint=false]
-  "d4d060bb5d.." -> "7c750f3b6d.." [constraint=false]
-  "f34c0cb2b2.." -> "9dc1bfa13e.." [constraint=false]
-  "fa709b1f1d.." -> "fdfcc5a1c2.." [constraint=false]
-  "f6e3f2f6c6.." -> "b25313b3e4.." [constraint=false]
-  "8f51a4ae3c.." -> "b302a036de.." [constraint=false]
-  "941fbedb2e.." -> "4763351202.." [constraint=false]
-  "941fbedb2e.." -> "7ee3a81be3.." [constraint=false]
-  "eea8674bb6.." -> "4d98e2d754.." [constraint=false]
-  "f4e4557b53.." -> "2564335538.." [constraint=false]
-  "f4e4557b53.." -> "0a729a5497.." [constraint=false]
-  "8fbf783bd5.." -> "e5b64a004c.." [constraint=false]
-  "bdbde3a09b.." -> "0ed8cef7eb.." [constraint=false]
-  "f63ea6350b.." -> "1f625db0e3.." [constraint=false]
-  "3597afa09c.." -> "5fe9218ddb.." [constraint=false]
-  "3c56ac9602.." -> "11914b3082.." [constraint=false]
-  "21cff5876d.." -> "ec355338ae.." [constraint=false]
-  "4c65660aa2.." -> "ab0b610751.." [constraint=false]
-  "d5ae7660ff.." -> "e8eed42d3b.." [constraint=false]
-  "62e5f20af8.." -> "1e094dc939.." [constraint=false]
-  "90af14937a.." -> "b0ec9f0760.." [constraint=false]
-  "aff38c406d.." -> "d26fcb95dd.." [constraint=false]
-  "59d8f25af0.." -> "d497febcff.." [constraint=false]
-  "4e6c8de441.." -> "b4d19fc314.." [constraint=false]
-  "d5d85ac7cd.." -> "4c73424ae1.." [constraint=false]
-  "545cced709.." -> "f4476e008b.." [constraint=false]
+  "D_3" -> "A_2" [constraint=false]
+  "D_3" -> "A_3" [constraint=false]
+  "C_6" -> "A_5" [constraint=false]
+  "D_9" -> "A_6" [constraint=false]
+  "B_7" -> "A_7" [constraint=false]
+  "C_8" -> "A_8" [constraint=false]
+  "D_11" -> "A_9" [constraint=false]
+  "B_13" -> "A_10" [constraint=false]
+  "C_12" -> "A_11" [constraint=false]
+  "C_13" -> "A_12" [constraint=false]
+  "B_18" -> "A_13" [constraint=false]
+  "B_19" -> "A_14" [constraint=false]
+  "B_20" -> "A_15" [constraint=false]
+  "D_18" -> "A_16" [constraint=false]
+  "C_22" -> "A_17" [constraint=false]
+  "D_20" -> "A_18" [constraint=false]
+  "B_23" -> "A_19" [constraint=false]
+  "B_30" -> "A_20" [constraint=false]
+  "D_28" -> "A_21" [constraint=false]
 
-    style=invis
-  subgraph cluster_Dave {
-    label=Dave
-    Dave [style=invis]
-    Dave -> "4541f98755.." [style=invis]
-    "4541f98755.." -> "af91fcff5e.." [minlen=1]
-    "af91fcff5e.." -> "e33eca991f.." [minlen=1]
-    "e33eca991f.." -> "a6176ea05b.." [minlen=1]
-    "a6176ea05b.." -> "d4d060bb5d.." [minlen=3]
-    "d4d060bb5d.." -> "36a3244919.." [minlen=1]
-    "36a3244919.." -> "6985b21a89.." [minlen=1]
-    "6985b21a89.." -> "1ef88792f3.." [minlen=1]
-    "1ef88792f3.." -> "f34c0cb2b2.." [minlen=1]
-    "f34c0cb2b2.." -> "949ff3d1a3.." [minlen=1]
-    "949ff3d1a3.." -> "699f204743.." [minlen=1]
-    "699f204743.." -> "c3c6c72d3e.." [minlen=2]
-    "c3c6c72d3e.." -> "0176a5a474.." [minlen=2]
-    "0176a5a474.." -> "8026159887.." [minlen=1]
-    "8026159887.." -> "3cee9c901f.." [minlen=1]
-    "3cee9c901f.." -> "f4e4557b53.." [minlen=1]
-    "f4e4557b53.." -> "5019de1415.." [minlen=3]
-    "5019de1415.." -> "0dc7daa42e.." [minlen=2]
-    "0dc7daa42e.." -> "d93c90e427.." [minlen=1]
-    "d93c90e427.." -> "e56fb66486.." [minlen=1]
-    "e56fb66486.." -> "36b525c92a.." [minlen=3]
-    "36b525c92a.." -> "85b7778035.." [minlen=3]
-    "85b7778035.." -> "e59c28e14c.." [minlen=1]
-    "e59c28e14c.." -> "21cff5876d.." [minlen=1]
-    "21cff5876d.." -> "4c65660aa2.." [minlen=1]
-    "4c65660aa2.." -> "928500a90f.." [minlen=2]
-    "928500a90f.." -> "90af14937a.." [minlen=1]
-    "90af14937a.." -> "9689249000.." [minlen=2]
-    "9689249000.." -> "545cced709.." [minlen=4]
-
-
-  }
-  "36099e4269.." -> "e33eca991f.." [constraint=false]
-  "36099e4269.." -> "a6176ea05b.." [constraint=false]
-  "b94ecc2479.." -> "d4d060bb5d.." [constraint=false]
-  "bdf3bfab10.." -> "6985b21a89.." [constraint=false]
-  "7c750f3b6d.." -> "1ef88792f3.." [constraint=false]
-  "0d423028ab.." -> "f34c0cb2b2.." [constraint=false]
-  "8b3755c1e6.." -> "949ff3d1a3.." [constraint=false]
-  "e95cd318ba.." -> "699f204743.." [constraint=false]
-  "5300d0c8e4.." -> "c3c6c72d3e.." [constraint=false]
-  "4e69ff32cb.." -> "0176a5a474.." [constraint=false]
-  "4e69ff32cb.." -> "8026159887.." [constraint=false]
-  "941fbedb2e.." -> "3cee9c901f.." [constraint=false]
-  "7ee3a81be3.." -> "f4e4557b53.." [constraint=false]
-  "4350c40345.." -> "5019de1415.." [constraint=false]
-  "0a729a5497.." -> "0dc7daa42e.." [constraint=false]
-  "2c347ed12e.." -> "d93c90e427.." [constraint=false]
-  "2c347ed12e.." -> "e56fb66486.." [constraint=false]
-  "8091ad8e1f.." -> "36b525c92a.." [constraint=false]
-  "1714506ede.." -> "85b7778035.." [constraint=false]
-  "3c56ac9602.." -> "e59c28e14c.." [constraint=false]
-  "11914b3082.." -> "21cff5876d.." [constraint=false]
-  "11914b3082.." -> "4c65660aa2.." [constraint=false]
-  "12aa85cabd.." -> "928500a90f.." [constraint=false]
-  "aff38c406d.." -> "90af14937a.." [constraint=false]
-  "b0ec9f0760.." -> "9689249000.." [constraint=false]
-  "b4d19fc314.." -> "545cced709.." [constraint=false]
-
-    style=invis
+  style=invis
   subgraph cluster_Bob {
     label=Bob
     Bob [style=invis]
-    Bob -> "dc8296fe22.." [style=invis]
-    "dc8296fe22.." -> "682aa6684e.." [minlen=1]
-    "682aa6684e.." -> "dc8ebfb4f4.." [minlen=1]
-    "dc8ebfb4f4.." -> "30e481b181.." [minlen=1]
-    "30e481b181.." -> "a4754c6037.." [minlen=1]
-    "a4754c6037.." -> "d8c5b2adbc.." [minlen=4]
-    "d8c5b2adbc.." -> "e95cd318ba.." [minlen=1]
-    "e95cd318ba.." -> "cbe1ec9f7b.." [minlen=2]
-    "cbe1ec9f7b.." -> "fa709b1f1d.." [minlen=2]
-    "fa709b1f1d.." -> "8f51a4ae3c.." [minlen=1]
-    "8f51a4ae3c.." -> "941fbedb2e.." [minlen=1]
-    "941fbedb2e.." -> "bd5204c8ef.." [minlen=1]
-    "bd5204c8ef.." -> "41f4e4eb64.." [minlen=3]
-    "41f4e4eb64.." -> "eea8674bb6.." [minlen=1]
-    "eea8674bb6.." -> "4350c40345.." [minlen=1]
-    "4350c40345.." -> "a7a42216e3.." [minlen=2]
-    "a7a42216e3.." -> "73b028a986.." [minlen=1]
-    "73b028a986.." -> "8fbf783bd5.." [minlen=1]
-    "8fbf783bd5.." -> "e5f3bf7689.." [minlen=1]
-    "e5f3bf7689.." -> "1cfa3b4c52.." [minlen=1]
-    "1cfa3b4c52.." -> "bdbde3a09b.." [minlen=1]
-    "bdbde3a09b.." -> "17612cf3d4.." [minlen=2]
-    "17612cf3d4.." -> "1714506ede.." [minlen=1]
-    "1714506ede.." -> "2ecf1f8f60.." [minlen=1]
-    "2ecf1f8f60.." -> "d5ae7660ff.." [minlen=2]
-    "d5ae7660ff.." -> "62e5f20af8.." [minlen=1]
-    "62e5f20af8.." -> "aff38c406d.." [minlen=1]
-    "aff38c406d.." -> "59d8f25af0.." [minlen=3]
-    "59d8f25af0.." -> "639f740820.." [minlen=2]
-    "639f740820.." -> "6f9d07daaf.." [minlen=1]
-    "6f9d07daaf.." -> "cb462236a8.." [minlen=1]
-    "cb462236a8.." -> "b36b5993c3.." [minlen=1]
-    "b36b5993c3.." -> "47dfaf2527.." [minlen=1]
-    "47dfaf2527.." -> "bfd1904215.." [minlen=3]
-
-
+    "Bob" -> "B_0" [style=invis]
+    "B_0" -> "B_1" [minlen=1]
+    "B_1" -> "B_2" [minlen=1]
+    "B_2" -> "B_3" [minlen=1]
+    "B_3" -> "B_4" [minlen=1]
+    "B_4" -> "B_5" [minlen=1]
+    "B_5" -> "B_6" [minlen=3]
+    "B_6" -> "B_7" [minlen=1]
+    "B_7" -> "B_8" [minlen=2]
+    "B_8" -> "B_9" [minlen=1]
+    "B_9" -> "B_10" [minlen=1]
+    "B_10" -> "B_11" [minlen=2]
+    "B_11" -> "B_12" [minlen=1]
+    "B_12" -> "B_13" [minlen=1]
+    "B_13" -> "B_14" [minlen=1]
+    "B_14" -> "B_15" [minlen=2]
+    "B_15" -> "B_16" [minlen=2]
+    "B_16" -> "B_17" [minlen=2]
+    "B_17" -> "B_18" [minlen=1]
+    "B_18" -> "B_19" [minlen=1]
+    "B_19" -> "B_20" [minlen=1]
+    "B_20" -> "B_21" [minlen=4]
+    "B_21" -> "B_22" [minlen=1]
+    "B_22" -> "B_23" [minlen=1]
+    "B_23" -> "B_24" [minlen=1]
+    "B_24" -> "B_25" [minlen=1]
+    "B_25" -> "B_26" [minlen=1]
+    "B_26" -> "B_27" [minlen=1]
+    "B_27" -> "B_28" [minlen=1]
+    "B_28" -> "B_29" [minlen=1]
+    "B_29" -> "B_30" [minlen=2]
+    "B_30" -> "B_31" [minlen=3]
+    "B_31" -> "B_32" [minlen=2]
+    "B_32" -> "B_33" [minlen=1]
   }
-  "36099e4269.." -> "dc8ebfb4f4.." [constraint=false]
-  "fbb0f444d5.." -> "30e481b181.." [constraint=false]
-  "7f70e2b4f4.." -> "d8c5b2adbc.." [constraint=false]
-  "a68a0f797a.." -> "e95cd318ba.." [constraint=false]
-  "8b3755c1e6.." -> "cbe1ec9f7b.." [constraint=false]
-  "699f204743.." -> "fa709b1f1d.." [constraint=false]
-  "9dc1bfa13e.." -> "8f51a4ae3c.." [constraint=false]
-  "9dc1bfa13e.." -> "941fbedb2e.." [constraint=false]
-  "fdfcc5a1c2.." -> "bd5204c8ef.." [constraint=false]
-  "7ee3a81be3.." -> "41f4e4eb64.." [constraint=false]
-  "7ee3a81be3.." -> "eea8674bb6.." [constraint=false]
-  "3cee9c901f.." -> "4350c40345.." [constraint=false]
-  "14bf55be11.." -> "a7a42216e3.." [constraint=false]
-  "14bf55be11.." -> "73b028a986.." [constraint=false]
-  "14bf55be11.." -> "8fbf783bd5.." [constraint=false]
-  "4f29a44a16.." -> "e5f3bf7689.." [constraint=false]
-  "5019de1415.." -> "1cfa3b4c52.." [constraint=false]
-  "e5b64a004c.." -> "bdbde3a09b.." [constraint=false]
-  "0ed8cef7eb.." -> "17612cf3d4.." [constraint=false]
-  "e56fb66486.." -> "1714506ede.." [constraint=false]
-  "ae3436bd8e.." -> "2ecf1f8f60.." [constraint=false]
-  "11914b3082.." -> "d5ae7660ff.." [constraint=false]
-  "b28c8d03a3.." -> "62e5f20af8.." [constraint=false]
-  "4c65660aa2.." -> "aff38c406d.." [constraint=false]
-  "1e094dc939.." -> "59d8f25af0.." [constraint=false]
-  "d26fcb95dd.." -> "639f740820.." [constraint=false]
-  "d497febcff.." -> "6f9d07daaf.." [constraint=false]
-  "4e6c8de441.." -> "cb462236a8.." [constraint=false]
-  "4e6c8de441.." -> "b36b5993c3.." [constraint=false]
-  "a38d528788.." -> "47dfaf2527.." [constraint=false]
-  "f4476e008b.." -> "bfd1904215.." [constraint=false]
+  "C_1" -> "B_2" [constraint=false]
+  "D_2" -> "B_3" [constraint=false]
+  "C_2" -> "B_4" [constraint=false]
+  "D_5" -> "B_6" [constraint=false]
+  "A_4" -> "B_7" [constraint=false]
+  "D_8" -> "B_8" [constraint=false]
+  "C_7" -> "B_9" [constraint=false]
+  "C_9" -> "B_10" [constraint=false]
+  "D_11" -> "B_11" [constraint=false]
+  "C_10" -> "B_12" [constraint=false]
+  "A_9" -> "B_13" [constraint=false]
+  "C_12" -> "B_14" [constraint=false]
+  "C_15" -> "B_15" [constraint=false]
+  "D_14" -> "B_16" [constraint=false]
+  "C_18" -> "B_17" [constraint=false]
+  "A_12" -> "B_18" [constraint=false]
+  "A_12" -> "B_19" [constraint=false]
+  "A_12" -> "B_20" [constraint=false]
+  "D_19" -> "B_21" [constraint=false]
+  "D_19" -> "B_22" [constraint=false]
+  "C_24" -> "B_23" [constraint=false]
+  "D_20" -> "B_24" [constraint=false]
+  "A_19" -> "B_25" [constraint=false]
+  "C_24" -> "B_26" [constraint=false]
+  "D_24" -> "B_27" [constraint=false]
+  "C_25" -> "B_28" [constraint=false]
+  "D_27" -> "B_29" [constraint=false]
+  "C_29" -> "B_30" [constraint=false]
+  "D_32" -> "B_31" [constraint=false]
+  "D_33" -> "B_32" [constraint=false]
+  "A_21" -> "B_33" [constraint=false]
 
-    style=invis
+  style=invis
   subgraph cluster_Carol {
     label=Carol
     Carol [style=invis]
-    Carol -> "fa13ad61fd.." [style=invis]
-    "fa13ad61fd.." -> "36099e4269.." [minlen=1]
-    "36099e4269.." -> "fbb0f444d5.." [minlen=1]
-    "fbb0f444d5.." -> "924040aabd.." [minlen=1]
-    "924040aabd.." -> "859050b96e.." [minlen=1]
-    "859050b96e.." -> "b94ecc2479.." [minlen=1]
-    "b94ecc2479.." -> "7f70e2b4f4.." [minlen=2]
-    "7f70e2b4f4.." -> "8815629109.." [minlen=1]
-    "8815629109.." -> "747db8119c.." [minlen=1]
-    "747db8119c.." -> "8b3755c1e6.." [minlen=1]
-    "8b3755c1e6.." -> "70c113e2bb.." [minlen=2]
-    "70c113e2bb.." -> "5300d0c8e4.." [minlen=1]
-    "5300d0c8e4.." -> "f6e3f2f6c6.." [minlen=1]
-    "f6e3f2f6c6.." -> "4e69ff32cb.." [minlen=1]
-    "4e69ff32cb.." -> "529c796df6.." [minlen=1]
-    "529c796df6.." -> "b1c417a10c.." [minlen=2]
-    "b1c417a10c.." -> "14bf55be11.." [minlen=4]
-    "14bf55be11.." -> "4f29a44a16.." [minlen=1]
-    "4f29a44a16.." -> "2c347ed12e.." [minlen=1]
-    "2c347ed12e.." -> "02f4913617.." [minlen=1]
-    "02f4913617.." -> "49c90b58c3.." [minlen=1]
-    "49c90b58c3.." -> "8eb84dedcd.." [minlen=1]
-    "8eb84dedcd.." -> "8091ad8e1f.." [minlen=1]
-    "8091ad8e1f.." -> "f63ea6350b.." [minlen=1]
-    "f63ea6350b.." -> "ae3436bd8e.." [minlen=1]
-    "ae3436bd8e.." -> "3597afa09c.." [minlen=1]
-    "3597afa09c.." -> "3c56ac9602.." [minlen=1]
-    "3c56ac9602.." -> "b28c8d03a3.." [minlen=2]
-    "b28c8d03a3.." -> "12aa85cabd.." [minlen=2]
-    "12aa85cabd.." -> "f42acf430c.." [minlen=2]
-    "f42acf430c.." -> "4e6c8de441.." [minlen=4]
-    "4e6c8de441.." -> "a38d528788.." [minlen=1]
-    "a38d528788.." -> "eb0d2d8f56.." [minlen=1]
-    "eb0d2d8f56.." -> "d5d85ac7cd.." [minlen=1]
-
-
+    "Carol" -> "C_0" [style=invis]
+    "C_0" -> "C_1" [minlen=1]
+    "C_1" -> "C_2" [minlen=1]
+    "C_2" -> "C_3" [minlen=1]
+    "C_3" -> "C_4" [minlen=1]
+    "C_4" -> "C_5" [minlen=1]
+    "C_5" -> "C_6" [minlen=2]
+    "C_6" -> "C_7" [minlen=2]
+    "C_7" -> "C_8" [minlen=1]
+    "C_8" -> "C_9" [minlen=2]
+    "C_9" -> "C_10" [minlen=1]
+    "C_10" -> "C_11" [minlen=1]
+    "C_11" -> "C_12" [minlen=1]
+    "C_12" -> "C_13" [minlen=1]
+    "C_13" -> "C_14" [minlen=2]
+    "C_14" -> "C_15" [minlen=1]
+    "C_15" -> "C_16" [minlen=1]
+    "C_16" -> "C_17" [minlen=2]
+    "C_17" -> "C_18" [minlen=1]
+    "C_18" -> "C_19" [minlen=2]
+    "C_19" -> "C_20" [minlen=2]
+    "C_20" -> "C_21" [minlen=1]
+    "C_21" -> "C_22" [minlen=1]
+    "C_22" -> "C_23" [minlen=1]
+    "C_23" -> "C_24" [minlen=1]
+    "C_24" -> "C_25" [minlen=5]
+    "C_25" -> "C_26" [minlen=1]
+    "C_26" -> "C_27" [minlen=1]
+    "C_27" -> "C_28" [minlen=1]
+    "C_28" -> "C_29" [minlen=1]
   }
-  "682aa6684e.." -> "fbb0f444d5.." [constraint=false]
-  "e33eca991f.." -> "924040aabd.." [constraint=false]
-  "a6176ea05b.." -> "859050b96e.." [constraint=false]
-  "dc8ebfb4f4.." -> "b94ecc2479.." [constraint=false]
-  "d4d060bb5d.." -> "7f70e2b4f4.." [constraint=false]
-  "d4f8223c5b.." -> "8815629109.." [constraint=false]
-  "d8c5b2adbc.." -> "8b3755c1e6.." [constraint=false]
-  "949ff3d1a3.." -> "70c113e2bb.." [constraint=false]
-  "949ff3d1a3.." -> "5300d0c8e4.." [constraint=false]
-  "0d423028ab.." -> "f6e3f2f6c6.." [constraint=false]
-  "949ff3d1a3.." -> "4e69ff32cb.." [constraint=false]
-  "cbe1ec9f7b.." -> "529c796df6.." [constraint=false]
-  "8026159887.." -> "b1c417a10c.." [constraint=false]
-  "4350c40345.." -> "14bf55be11.." [constraint=false]
-  "4350c40345.." -> "4f29a44a16.." [constraint=false]
-  "f4e4557b53.." -> "2c347ed12e.." [constraint=false]
-  "73b028a986.." -> "02f4913617.." [constraint=false]
-  "8fbf783bd5.." -> "49c90b58c3.." [constraint=false]
-  "e56fb66486.." -> "8eb84dedcd.." [constraint=false]
-  "e56fb66486.." -> "8091ad8e1f.." [constraint=false]
-  "e5b64a004c.." -> "f63ea6350b.." [constraint=false]
-  "bdbde3a09b.." -> "ae3436bd8e.." [constraint=false]
-  "e5b64a004c.." -> "3597afa09c.." [constraint=false]
-  "0ed8cef7eb.." -> "3c56ac9602.." [constraint=false]
-  "e59c28e14c.." -> "b28c8d03a3.." [constraint=false]
-  "62e5f20af8.." -> "12aa85cabd.." [constraint=false]
-  "928500a90f.." -> "f42acf430c.." [constraint=false]
-  "d497febcff.." -> "4e6c8de441.." [constraint=false]
-  "6f9d07daaf.." -> "a38d528788.." [constraint=false]
-  "cb462236a8.." -> "eb0d2d8f56.." [constraint=false]
-  "b4d19fc314.." -> "d5d85ac7cd.." [constraint=false]
+  "B_1" -> "C_2" [constraint=false]
+  "D_3" -> "C_4" [constraint=false]
+  "B_2" -> "C_5" [constraint=false]
+  "A_4" -> "C_6" [constraint=false]
+  "B_6" -> "C_7" [constraint=false]
+  "A_5" -> "C_8" [constraint=false]
+  "D_9" -> "C_9" [constraint=false]
+  "B_8" -> "C_10" [constraint=false]
+  "B_10" -> "C_11" [constraint=false]
+  "B_10" -> "C_12" [constraint=false]
+  "A_9" -> "C_13" [constraint=false]
+  "D_13" -> "C_14" [constraint=false]
+  "B_14" -> "C_15" [constraint=false]
+  "A_11" -> "C_16" [constraint=false]
+  "D_14" -> "C_17" [constraint=false]
+  "D_14" -> "C_18" [constraint=false]
+  "D_15" -> "C_19" [constraint=false]
+  "D_16" -> "C_20" [constraint=false]
+  "B_17" -> "C_21" [constraint=false]
+  "A_15" -> "C_22" [constraint=false]
+  "D_18" -> "C_23" [constraint=false]
+  "B_20" -> "C_24" [constraint=false]
+  "B_25" -> "C_25" [constraint=false]
+  "D_22" -> "C_26" [constraint=false]
+  "D_26" -> "C_27" [constraint=false]
+  "B_26" -> "C_28" [constraint=false]
+  "B_27" -> "C_29" [constraint=false]
 
-/// meta-vote section
- "0176a5a474.." [fillcolor=white, label="D_12"]
- "02f4913617.." [ shape=rectangle, fillcolor=white, label="C_19
-A: [ { 0/0, est:{t, f} bin:{f} aux:{f} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
- "0a729a5497.." [ shape=rectangle, fillcolor=white, label="A_15
-A: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
- "0d423028ab.." [fillcolor=white, label="A_6
-Add(Eric)"]
- "0d423028ab.." [shape=rectangle, style=filled, fillcolor=cyan]
- "0dc7daa42e.." [ shape=rectangle, fillcolor=white, label="D_17
-A: [ { 0/0, est:{f} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
- "0ed8cef7eb.." [ shape=rectangle, fillcolor=white, label="A_17
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
- "11914b3082.." [ shape=rectangle, fillcolor=white, label="A_20
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "12aa85cabd.." [ shape=rectangle, fillcolor=white, label="C_28
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "14bf55be11.." [ shape=rectangle, fillcolor=white, label="C_16
-A: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
- "1714506ede.." [ shape=rectangle, fillcolor=white, label="B_22
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "17612cf3d4.." [ shape=rectangle, fillcolor=white, label="B_21
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
- "1cfa3b4c52.." [ shape=rectangle, fillcolor=white, label="B_19
-A: [ { 0/0, est:{f} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
- "1e094dc939.." [ shape=rectangle, fillcolor=white, label="A_24
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "1ef88792f3.." [fillcolor=white, label="D_7"]
- "1f625db0e3.." [ shape=rectangle, fillcolor=white, label="A_18
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "21cff5876d.." [ shape=rectangle, fillcolor=white, label="D_23
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "2564335538.." [ shape=rectangle, fillcolor=white, label="A_14
-A: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
- "2c347ed12e.." [ shape=rectangle, fillcolor=white, label="C_18
-A: [ { 0/0, est:{t, f} bin:{f} aux:{f} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
- "2ecf1f8f60.." [ shape=rectangle, fillcolor=white, label="B_23
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "30d7e4394d.." [fillcolor=white, label="A_0"]
- "30e481b181.." [fillcolor=white, label="B_3"]
- "3597afa09c.." [ shape=rectangle, fillcolor=white, label="C_25
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "36099e4269.." [fillcolor=white, label="C_1
-Genesis({Alice, Bob, Carol, Dave})"]
- "36099e4269.." [shape=rectangle, style=filled, fillcolor=cyan]
- "36a3244919.." [fillcolor=white, label="D_5
-Add(Eric)"]
- "36a3244919.." [shape=rectangle, style=filled, fillcolor=cyan]
- "36b525c92a.." [ shape=rectangle, fillcolor=white, label="D_20
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
- "3c56ac9602.." [ shape=rectangle, fillcolor=white, label="C_26
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "3cee9c901f.." [fillcolor=white, label="D_14"]
- "41f4e4eb64.." [fillcolor=white, label="B_12"]
- "4350c40345.." [ shape=rectangle, fillcolor=white, label="B_14
-A: [ { 0/0, est:{f} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
- "4541f98755.." [fillcolor=white, label="D_0"]
- "4763351202.." [fillcolor=white, label="A_11"]
- "47dfaf2527.." [ shape=rectangle, fillcolor=white, label="B_32
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }
-{ 1/0, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "49c90b58c3.." [ shape=rectangle, fillcolor=white, label="C_20
-A: [ { 0/0, est:{t, f} bin:{f} aux:{f} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
- "4c65660aa2.." [ shape=rectangle, fillcolor=white, label="D_24
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "4c73424ae1.." [ shape=rectangle, fillcolor=white, label="A_29
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }
-{ 1/0, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "4d98e2d754.." [fillcolor=white, label="A_13"]
- "4e69ff32cb.." [fillcolor=white, label="C_13"]
- "4e6c8de441.." [ shape=rectangle, fillcolor=white, label="C_30
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }
-{ 1/0, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "4f29a44a16.." [ shape=rectangle, fillcolor=white, label="C_17
-A: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
- "5019de1415.." [ shape=rectangle, fillcolor=white, label="D_16
-A: [ { 0/0, est:{f} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
- "529c796df6.." [fillcolor=white, label="C_14"]
- "5300d0c8e4.." [fillcolor=white, label="C_11"]
- "545cced709.." [ shape=rectangle, fillcolor=white, label="D_28
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }
-{ 1/0, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "59d8f25af0.." [ shape=rectangle, fillcolor=white, label="B_27
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "5fe9218ddb.." [ shape=rectangle, fillcolor=white, label="A_19
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "62e5f20af8.." [ shape=rectangle, fillcolor=white, label="B_25
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "639f740820.." [ shape=rectangle, fillcolor=white, label="B_28
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }
-{ 1/0, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "682aa6684e.." [fillcolor=white, label="B_1
-Genesis({Alice, Bob, Carol, Dave})"]
- "682aa6684e.." [shape=rectangle, style=filled, fillcolor=cyan]
- "6985b21a89.." [fillcolor=white, label="D_6"]
- "699f204743.." [fillcolor=white, label="D_10"]
- "6f9d07daaf.." [ shape=rectangle, fillcolor=white, label="B_29
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }
-{ 1/0, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "70c113e2bb.." [fillcolor=white, label="C_10
-[Add(Eric)]"]
- "70c113e2bb.." [shape=rectangle, style=filled, fillcolor=crimson]
- "73b028a986.." [ shape=rectangle, fillcolor=white, label="B_16
-A: [ { 0/0, est:{f} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
- "747db8119c.." [fillcolor=white, label="C_8
-Add(Eric)"]
- "747db8119c.." [shape=rectangle, style=filled, fillcolor=cyan]
- "7c750f3b6d.." [fillcolor=white, label="A_5"]
- "7ee3a81be3.." [fillcolor=white, label="A_12"]
- "7f70e2b4f4.." [fillcolor=white, label="C_6"]
- "8026159887.." [fillcolor=white, label="D_13"]
- "8091ad8e1f.." [ shape=rectangle, fillcolor=white, label="C_22
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
- "859050b96e.." [fillcolor=white, label="C_4"]
- "85b7778035.." [ shape=rectangle, fillcolor=white, label="D_21
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "8815629109.." [fillcolor=white, label="C_7"]
- "8b3755c1e6.." [fillcolor=white, label="C_9"]
- "8eb84dedcd.." [ shape=rectangle, fillcolor=white, label="C_21
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
- "8f51a4ae3c.." [fillcolor=white, label="B_9"]
- "8fbf783bd5.." [ shape=rectangle, fillcolor=white, label="B_17
-A: [ { 0/0, est:{f} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
- "90af14937a.." [ shape=rectangle, fillcolor=white, label="D_26
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "924040aabd.." [fillcolor=white, label="C_3"]
- "928500a90f.." [ shape=rectangle, fillcolor=white, label="D_25
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "941fbedb2e.." [fillcolor=white, label="B_10"]
- "949ff3d1a3.." [fillcolor=white, label="D_9
-[Add(Eric)]"]
- "949ff3d1a3.." [shape=rectangle, style=filled, fillcolor=crimson]
- "9689249000.." [ shape=rectangle, fillcolor=white, label="D_27
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "9dc1bfa13e.." [fillcolor=white, label="A_7"]
- "a38d528788.." [ shape=rectangle, fillcolor=white, label="C_31
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }
-{ 1/0, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "a4754c6037.." [fillcolor=white, label="B_4
-Add(Eric)"]
- "a4754c6037.." [shape=rectangle, style=filled, fillcolor=cyan]
- "a6176ea05b.." [fillcolor=white, label="D_3"]
- "a68a0f797a.." [fillcolor=white, label="A_2"]
- "a7a42216e3.." [ shape=rectangle, fillcolor=white, label="B_15
-A: [ { 0/0, est:{f} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
- "ab0b610751.." [ shape=rectangle, fillcolor=white, label="A_22
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "ae3436bd8e.." [ shape=rectangle, fillcolor=white, label="C_24
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "af91fcff5e.." [fillcolor=white, label="D_1
-Genesis({Alice, Bob, Carol, Dave})"]
- "af91fcff5e.." [shape=rectangle, style=filled, fillcolor=cyan]
- "aff38c406d.." [ shape=rectangle, fillcolor=white, label="B_26
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "b0ec9f0760.." [ shape=rectangle, fillcolor=white, label="A_25
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "b1c417a10c.." [fillcolor=white, label="C_15"]
- "b25313b3e4.." [fillcolor=white, label="A_9"]
- "b28c8d03a3.." [ shape=rectangle, fillcolor=white, label="C_27
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "b302a036de.." [fillcolor=white, label="A_10"]
- "b36b5993c3.." [ shape=rectangle, fillcolor=white, label="B_31
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }
-{ 1/0, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "b4d19fc314.." [ shape=rectangle, fillcolor=white, label="A_28
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }
-{ 1/0, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "b94ecc2479.." [fillcolor=white, label="C_5"]
- "bd5204c8ef.." [fillcolor=white, label="B_11"]
- "bdbde3a09b.." [ shape=rectangle, fillcolor=white, label="B_20
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
- "bdf3bfab10.." [fillcolor=white, label="A_4"]
- "bfd1904215.." [ shape=rectangle, fillcolor=white, label="B_33
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }
-{ 1/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "c3c6c72d3e.." [fillcolor=white, label="D_11"]
- "cb462236a8.." [ shape=rectangle, fillcolor=white, label="B_30
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }
-{ 1/0, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "cbe1ec9f7b.." [fillcolor=white, label="B_7"]
- "d26fcb95dd.." [ shape=rectangle, fillcolor=white, label="A_26
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "d497febcff.." [ shape=rectangle, fillcolor=white, label="A_27
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "d4d060bb5d.." [fillcolor=white, label="D_4"]
- "d4f8223c5b.." [fillcolor=white, label="A_3"]
- "d5ae7660ff.." [ shape=rectangle, fillcolor=white, label="B_24
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "d5d85ac7cd.." [ shape=rectangle, fillcolor=white, label="C_33
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }
-{ 1/0, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "d8c5b2adbc.." [fillcolor=white, label="B_5"]
- "d93c90e427.." [ shape=rectangle, fillcolor=white, label="D_18
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
- "dc8296fe22.." [fillcolor=white, label="B_0"]
- "dc8ebfb4f4.." [fillcolor=white, label="B_2"]
- "e2873d8612.." [fillcolor=white, label="A_1
-Genesis({Alice, Bob, Carol, Dave})"]
- "e2873d8612.." [shape=rectangle, style=filled, fillcolor=cyan]
- "e33eca991f.." [fillcolor=white, label="D_2"]
- "e56fb66486.." [ shape=rectangle, fillcolor=white, label="D_19
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
- "e59c28e14c.." [ shape=rectangle, fillcolor=white, label="D_22
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{t} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "e5b64a004c.." [ shape=rectangle, fillcolor=white, label="A_16
-A: [ { 0/0, est:{t, f} bin:{f} aux:{f} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{} }]"]
- "e5f3bf7689.." [ shape=rectangle, fillcolor=white, label="B_18
-A: [ { 0/0, est:{f} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
- "e8eed42d3b.." [ shape=rectangle, fillcolor=white, label="A_23
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "e95cd318ba.." [fillcolor=white, label="B_6"]
- "eb0d2d8f56.." [ shape=rectangle, fillcolor=white, label="C_32
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }
-{ 1/0, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "ec355338ae.." [ shape=rectangle, fillcolor=white, label="A_21
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "eea8674bb6.." [fillcolor=white, label="B_13"]
- "f34c0cb2b2.." [fillcolor=white, label="D_8"]
- "f42acf430c.." [ shape=rectangle, fillcolor=white, label="C_29
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "f4476e008b.." [ shape=rectangle, fillcolor=white, label="A_30
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{t} aux:{t} dec:{} }
-{ 0/2, est:{t} bin:{t} aux:{t} dec:{} }
-{ 1/0, est:{t} bin:{t} aux:{t} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "f4e4557b53.." [ shape=rectangle, fillcolor=white, label="D_15
-A: [ { 0/0, est:{f} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-C: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]
-D: [ { 0/0, est:{t} bin:{} aux:{} dec:{} }]"]
- "f63ea6350b.." [ shape=rectangle, fillcolor=white, label="C_23
-A: [ { 0/0, est:{t, f} bin:{t, f} aux:{f} dec:{} }
-{ 0/1, est:{t} bin:{} aux:{} dec:{} }]
-B: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-C: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]
-D: [ { 0/0, est:{t} bin:{t} aux:{t} dec:{t} }]"]
- "f6e3f2f6c6.." [fillcolor=white, label="C_12"]
- "fa13ad61fd.." [fillcolor=white, label="C_0"]
- "fa709b1f1d.." [fillcolor=white, label="B_8
-[Add(Eric)]"]
- "fa709b1f1d.." [shape=rectangle, style=filled, fillcolor=crimson]
- "fbb0f444d5.." [fillcolor=white, label="C_2"]
- "fdfcc5a1c2.." [fillcolor=white, label="A_8
-[Add(Eric)]"]
- "fdfcc5a1c2.." [shape=rectangle, style=filled, fillcolor=crimson]
+  style=invis
+  subgraph cluster_Dave {
+    label=Dave
+    Dave [style=invis]
+    "Dave" -> "D_0" [style=invis]
+    "D_0" -> "D_1" [minlen=1]
+    "D_1" -> "D_2" [minlen=1]
+    "D_2" -> "D_3" [minlen=1]
+    "D_3" -> "D_4" [minlen=3]
+    "D_4" -> "D_5" [minlen=1]
+    "D_5" -> "D_6" [minlen=1]
+    "D_6" -> "D_7" [minlen=1]
+    "D_7" -> "D_8" [minlen=1]
+    "D_8" -> "D_9" [minlen=1]
+    "D_9" -> "D_10" [minlen=2]
+    "D_10" -> "D_11" [minlen=1]
+    "D_11" -> "D_12" [minlen=2]
+    "D_12" -> "D_13" [minlen=1]
+    "D_13" -> "D_14" [minlen=4]
+    "D_14" -> "D_15" [minlen=3]
+    "D_15" -> "D_16" [minlen=2]
+    "D_16" -> "D_17" [minlen=2]
+    "D_17" -> "D_18" [minlen=1]
+    "D_18" -> "D_19" [minlen=1]
+    "D_19" -> "D_20" [minlen=1]
+    "D_20" -> "D_21" [minlen=1]
+    "D_21" -> "D_22" [minlen=1]
+    "D_22" -> "D_23" [minlen=1]
+    "D_23" -> "D_24" [minlen=1]
+    "D_24" -> "D_25" [minlen=1]
+    "D_25" -> "D_26" [minlen=1]
+    "D_26" -> "D_27" [minlen=1]
+    "D_27" -> "D_28" [minlen=1]
+    "D_28" -> "D_29" [minlen=1]
+    "D_29" -> "D_30" [minlen=1]
+    "D_30" -> "D_31" [minlen=1]
+    "D_31" -> "D_32" [minlen=1]
+    "D_32" -> "D_33" [minlen=2]
+  }
+  "B_1" -> "D_2" [constraint=false]
+  "A_1" -> "D_3" [constraint=false]
+  "A_3" -> "D_4" [constraint=false]
+  "B_4" -> "D_5" [constraint=false]
+  "C_4" -> "D_7" [constraint=false]
+  "B_6" -> "D_8" [constraint=false]
+  "C_6" -> "D_9" [constraint=false]
+  "A_6" -> "D_10" [constraint=false]
+  "B_10" -> "D_11" [constraint=false]
+  "A_9" -> "D_12" [constraint=false]
+  "C_12" -> "D_13" [constraint=false]
+  "C_16" -> "D_14" [constraint=false]
+  "C_18" -> "D_15" [constraint=false]
+  "C_19" -> "D_16" [constraint=false]
+  "C_20" -> "D_17" [constraint=false]
+  "B_16" -> "D_18" [constraint=false]
+  "B_20" -> "D_19" [constraint=false]
+  "A_16" -> "D_20" [constraint=false]
+  "C_23" -> "D_21" [constraint=false]
+  "C_24" -> "D_22" [constraint=false]
+  "B_22" -> "D_23" [constraint=false]
+  "B_22" -> "D_24" [constraint=false]
+  "B_24" -> "D_25" [constraint=false]
+  "A_18" -> "D_26" [constraint=false]
+  "C_25" -> "D_27" [constraint=false]
+  "A_19" -> "D_28" [constraint=false]
+  "C_27" -> "D_29" [constraint=false]
+  "C_29" -> "D_30" [constraint=false]
+  "B_29" -> "D_31" [constraint=false]
+  "B_30" -> "D_32" [constraint=false]
+  "B_31" -> "D_33" [constraint=false]
 
   {
     rank=same
     Alice [style=filled, color=white]
-    Dave [style=filled, color=white]
     Bob [style=filled, color=white]
     Carol [style=filled, color=white]
+    Dave [style=filled, color=white]
   }
   Alice -> Bob -> Carol -> Dave [style=invis]
+
+/// ===== details of events =====
+  "A_0" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_0</td></tr>
+</table>>]
+/// cause: Initial
+/// last_ancestors: {Alice: 0}
+
+  "A_1" [style=filled, fillcolor=cyan, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_1</td></tr>
+<tr><td colspan="6">Genesis({Alice, Bob, Carol, Dave})</td></tr>
+</table>>]
+/// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
+/// last_ancestors: {Alice: 1}
+
+  "A_2" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_2</td></tr>
+</table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 2, Bob: 1, Dave: 3}
+
+  "A_3" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_3</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 3, Bob: 1, Dave: 3}
+
+  "A_4" [style=filled, fillcolor=cyan, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_4</td></tr>
+<tr><td colspan="6">Add(Eric)</td></tr>
+</table>>]
+/// cause: Observation(Add(Eric))
+/// last_ancestors: {Alice: 4, Bob: 1, Dave: 3}
+
+  "A_5" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_5</td></tr>
+</table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 5, Bob: 2, Carol: 6, Dave: 3}
+
+  "A_6" [style=filled, fillcolor=crimson, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_6</td></tr>
+<tr><td colspan="6">[Add(Eric)]</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 6, Bob: 6, Carol: 6, Dave: 9}
+
+  "A_7" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_7</td></tr>
+</table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 7, Bob: 7, Carol: 6, Dave: 9}
+
+  "A_8" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_8</td></tr>
+</table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 8, Bob: 7, Carol: 8, Dave: 9}
+
+  "A_9" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_9</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>f</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 9, Bob: 10, Carol: 9, Dave: 11}
+
+  "A_10" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_10</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>f</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 10, Bob: 13, Carol: 10, Dave: 11}
+
+  "A_11" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_11</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>f</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 11, Bob: 13, Carol: 12, Dave: 11}
+
+  "A_12" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_12</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 12, Bob: 13, Carol: 13, Dave: 11}
+
+  "A_13" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_13</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 13, Bob: 18, Carol: 18, Dave: 14}
+
+  "A_14" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_14</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 14, Bob: 19, Carol: 18, Dave: 14}
+
+  "A_15" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_15</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 15, Bob: 20, Carol: 18, Dave: 14}
+
+  "A_16" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_16</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 16, Bob: 20, Carol: 20, Dave: 18}
+
+  "A_17" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_17</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 17, Bob: 20, Carol: 22, Dave: 18}
+
+  "A_18" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_18</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 18, Bob: 20, Carol: 22, Dave: 20}
+
+  "A_19" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_19</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 19, Bob: 23, Carol: 24, Dave: 20}
+
+  "A_20" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_20</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>1/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 20, Bob: 30, Carol: 29, Dave: 27}
+
+  "A_21" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">A_21</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>1/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 21, Bob: 30, Carol: 29, Dave: 28}
+
+  "B_0" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_0</td></tr>
+</table>>]
+/// cause: Initial
+/// last_ancestors: {Bob: 0}
+
+  "B_1" [style=filled, fillcolor=cyan, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_1</td></tr>
+<tr><td colspan="6">Genesis({Alice, Bob, Carol, Dave})</td></tr>
+</table>>]
+/// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
+/// last_ancestors: {Bob: 1}
+
+  "B_2" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_2</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Bob: 2, Carol: 1}
+
+  "B_3" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_3</td></tr>
+</table>>]
+/// cause: Response
+/// last_ancestors: {Bob: 3, Carol: 1, Dave: 2}
+
+  "B_4" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_4</td></tr>
+</table>>]
+/// cause: Response
+/// last_ancestors: {Bob: 4, Carol: 2, Dave: 2}
+
+  "B_5" [style=filled, fillcolor=cyan, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_5</td></tr>
+<tr><td colspan="6">Add(Eric)</td></tr>
+</table>>]
+/// cause: Observation(Add(Eric))
+/// last_ancestors: {Bob: 5, Carol: 2, Dave: 2}
+
+  "B_6" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_6</td></tr>
+</table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 3, Bob: 6, Carol: 2, Dave: 5}
+
+  "B_7" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_7</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 4, Bob: 7, Carol: 2, Dave: 5}
+
+  "B_8" [style=filled, fillcolor=crimson, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_8</td></tr>
+<tr><td colspan="6">[Add(Eric)]</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 4, Bob: 8, Carol: 4, Dave: 8}
+
+  "B_9" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_9</td></tr>
+</table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 4, Bob: 9, Carol: 7, Dave: 8}
+
+  "B_10" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_10</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 5, Bob: 10, Carol: 9, Dave: 9}
+
+  "B_11" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_11</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>f</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 6, Bob: 11, Carol: 9, Dave: 11}
+
+  "B_12" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_12</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>f</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 6, Bob: 12, Carol: 10, Dave: 11}
+
+  "B_13" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_13</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>f</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 9, Bob: 13, Carol: 10, Dave: 11}
+
+  "B_14" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_14</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>f</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 9, Bob: 14, Carol: 12, Dave: 11}
+
+  "B_15" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_15</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>f</td><td>f</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>b</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 9, Bob: 15, Carol: 15, Dave: 13}
+
+  "B_16" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_16</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 11, Bob: 16, Carol: 16, Dave: 14}
+
+  "B_17" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_17</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 11, Bob: 17, Carol: 18, Dave: 14}
+
+  "B_18" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_18</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 12, Bob: 18, Carol: 18, Dave: 14}
+
+  "B_19" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_19</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 12, Bob: 19, Carol: 18, Dave: 14}
+
+  "B_20" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_20</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 12, Bob: 20, Carol: 18, Dave: 14}
+
+  "B_21" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_21</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 12, Bob: 21, Carol: 20, Dave: 19}
+
+  "B_22" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_22</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 12, Bob: 22, Carol: 20, Dave: 19}
+
+  "B_23" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_23</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 15, Bob: 23, Carol: 24, Dave: 19}
+
+  "B_24" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_24</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 16, Bob: 24, Carol: 24, Dave: 20}
+
+  "B_25" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_25</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 19, Bob: 25, Carol: 24, Dave: 20}
+
+  "B_26" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_26</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 19, Bob: 26, Carol: 24, Dave: 20}
+
+  "B_27" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_27</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 19, Bob: 27, Carol: 24, Dave: 24}
+
+  "B_28" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_28</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 19, Bob: 28, Carol: 25, Dave: 24}
+
+  "B_29" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_29</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 19, Bob: 29, Carol: 25, Dave: 27}
+
+  "B_30" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_30</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>1/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 19, Bob: 30, Carol: 29, Dave: 27}
+
+  "B_31" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_31</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>1/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 19, Bob: 31, Carol: 29, Dave: 32}
+
+  "B_32" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_32</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>1/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 19, Bob: 32, Carol: 29, Dave: 33}
+
+  "B_33" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">B_33</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>1/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 21, Bob: 33, Carol: 29, Dave: 33}
+
+  "C_0" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_0</td></tr>
+</table>>]
+/// cause: Initial
+/// last_ancestors: {Carol: 0}
+
+  "C_1" [style=filled, fillcolor=cyan, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_1</td></tr>
+<tr><td colspan="6">Genesis({Alice, Bob, Carol, Dave})</td></tr>
+</table>>]
+/// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
+/// last_ancestors: {Carol: 1}
+
+  "C_2" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_2</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Bob: 1, Carol: 2}
+
+  "C_3" [style=filled, fillcolor=cyan, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_3</td></tr>
+<tr><td colspan="6">Add(Eric)</td></tr>
+</table>>]
+/// cause: Observation(Add(Eric))
+/// last_ancestors: {Bob: 1, Carol: 3}
+
+  "C_4" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_4</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 1, Bob: 1, Carol: 4, Dave: 3}
+
+  "C_5" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_5</td></tr>
+</table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 1, Bob: 2, Carol: 5, Dave: 3}
+
+  "C_6" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_6</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 4, Bob: 2, Carol: 6, Dave: 3}
+
+  "C_7" [style=filled, fillcolor=crimson, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_7</td></tr>
+<tr><td colspan="6">[Add(Eric)]</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 4, Bob: 6, Carol: 7, Dave: 5}
+
+  "C_8" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_8</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 5, Bob: 6, Carol: 8, Dave: 5}
+
+  "C_9" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_9</td></tr>
+</table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 5, Bob: 6, Carol: 9, Dave: 9}
+
+  "C_10" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_10</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 5, Bob: 8, Carol: 10, Dave: 9}
+
+  "C_11" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_11</td></tr>
+</table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 5, Bob: 10, Carol: 11, Dave: 9}
+
+  "C_12" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_12</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 5, Bob: 10, Carol: 12, Dave: 9}
+
+  "C_13" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_13</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 9, Bob: 10, Carol: 13, Dave: 11}
+
+  "C_14" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_14</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>f</td><td>f</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 9, Bob: 10, Carol: 14, Dave: 13}
+
+  "C_15" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_15</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>f</td><td>f</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 9, Bob: 14, Carol: 15, Dave: 13}
+
+  "C_16" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_16</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>f</td><td>f</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 11, Bob: 14, Carol: 16, Dave: 13}
+
+  "C_17" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_17</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 11, Bob: 14, Carol: 17, Dave: 14}
+
+  "C_18" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_18</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 11, Bob: 14, Carol: 18, Dave: 14}
+
+  "C_19" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_19</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 11, Bob: 14, Carol: 19, Dave: 15}
+
+  "C_20" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_20</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 11, Bob: 14, Carol: 20, Dave: 16}
+
+  "C_21" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_21</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 11, Bob: 17, Carol: 21, Dave: 16}
+
+  "C_22" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_22</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 15, Bob: 20, Carol: 22, Dave: 16}
+
+  "C_23" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_23</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 15, Bob: 20, Carol: 23, Dave: 18}
+
+  "C_24" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_24</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 15, Bob: 20, Carol: 24, Dave: 18}
+
+  "C_25" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_25</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 19, Bob: 25, Carol: 25, Dave: 20}
+
+  "C_26" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_26</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 19, Bob: 25, Carol: 26, Dave: 22}
+
+  "C_27" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_27</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 19, Bob: 25, Carol: 27, Dave: 26}
+
+  "C_28" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_28</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 19, Bob: 26, Carol: 28, Dave: 26}
+
+  "C_29" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">C_29</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>f</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>1/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 19, Bob: 27, Carol: 29, Dave: 26}
+
+  "D_0" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_0</td></tr>
+</table>>]
+/// cause: Initial
+/// last_ancestors: {Dave: 0}
+
+  "D_1" [style=filled, fillcolor=cyan, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_1</td></tr>
+<tr><td colspan="6">Genesis({Alice, Bob, Carol, Dave})</td></tr>
+</table>>]
+/// cause: Observation(Genesis({Alice, Bob, Carol, Dave}))
+/// last_ancestors: {Dave: 1}
+
+  "D_2" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_2</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Bob: 1, Dave: 2}
+
+  "D_3" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_3</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 1, Bob: 1, Dave: 3}
+
+  "D_4" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_4</td></tr>
+</table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 3, Bob: 1, Dave: 4}
+
+  "D_5" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_5</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 3, Bob: 4, Carol: 2, Dave: 5}
+
+  "D_6" [style=filled, fillcolor=cyan, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_6</td></tr>
+<tr><td colspan="6">Add(Eric)</td></tr>
+</table>>]
+/// cause: Observation(Add(Eric))
+/// last_ancestors: {Alice: 3, Bob: 4, Carol: 2, Dave: 6}
+
+  "D_7" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_7</td></tr>
+</table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 3, Bob: 4, Carol: 4, Dave: 7}
+
+  "D_8" [style=filled, fillcolor=crimson, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_8</td></tr>
+<tr><td colspan="6">[Add(Eric)]</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 3, Bob: 6, Carol: 4, Dave: 8}
+
+  "D_9" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_9</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 4, Bob: 6, Carol: 6, Dave: 9}
+
+  "D_10" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_10</td></tr>
+</table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 6, Bob: 6, Carol: 6, Dave: 10}
+
+  "D_11" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_11</td></tr>
+</table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 6, Bob: 10, Carol: 9, Dave: 11}
+
+  "D_12" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_12</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>f</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 9, Bob: 10, Carol: 9, Dave: 12}
+
+  "D_13" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_13</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>f</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 9, Bob: 10, Carol: 12, Dave: 13}
+
+  "D_14" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_14</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 11, Bob: 14, Carol: 16, Dave: 14}
+
+  "D_15" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_15</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 11, Bob: 14, Carol: 18, Dave: 15}
+
+  "D_16" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_16</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 11, Bob: 14, Carol: 19, Dave: 16}
+
+  "D_17" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_17</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 11, Bob: 14, Carol: 20, Dave: 17}
+
+  "D_18" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_18</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 11, Bob: 16, Carol: 20, Dave: 18}
+
+  "D_19" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_19</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 12, Bob: 20, Carol: 20, Dave: 19}
+
+  "D_20" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_20</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 16, Bob: 20, Carol: 20, Dave: 20}
+
+  "D_21" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_21</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 16, Bob: 20, Carol: 23, Dave: 21}
+
+  "D_22" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_22</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 16, Bob: 20, Carol: 24, Dave: 22}
+
+  "D_23" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_23</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 16, Bob: 22, Carol: 24, Dave: 23}
+
+  "D_24" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_24</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 16, Bob: 22, Carol: 24, Dave: 24}
+
+  "D_25" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_25</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 16, Bob: 24, Carol: 24, Dave: 25}
+
+  "D_26" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_26</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 18, Bob: 24, Carol: 24, Dave: 26}
+
+  "D_27" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_27</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 19, Bob: 25, Carol: 25, Dave: 27}
+
+  "D_28" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_28</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 19, Bob: 25, Carol: 25, Dave: 28}
+
+  "D_29" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_29</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 19, Bob: 25, Carol: 27, Dave: 29}
+
+  "D_30" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_30</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>1/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 19, Bob: 27, Carol: 29, Dave: 30}
+
+  "D_31" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_31</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>1/0</td><td>t</td><td>-</td><td>-</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Response
+/// last_ancestors: {Alice: 19, Bob: 29, Carol: 29, Dave: 31}
+
+  "D_32" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_32</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>1/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 19, Bob: 30, Carol: 29, Dave: 32}
+
+  "D_33" [fillcolor=white, shape=rectangle, label=<<table border="0" cellborder="0" cellpadding="0" cellspacing="0">
+<tr><td colspan="6">D_33</td></tr>
+<tr><td></td><td width="50">stage</td><td width="30">est</td><td width="30">bin</td><td width="30">aux</td><td width="30">dec</td></tr>
+<tr><td>A: </td><td>0/0</td><td>b</td><td>b</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/1</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>0/2</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>   </td><td>1/0</td><td>t</td><td>t</td><td>t</td><td>-</td></tr>
+<tr><td>B: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>C: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr>
+<tr><td>D: </td><td>0/0</td><td>t</td><td>t</td><td>t</td><td>t</td></tr></table>>]
+/// cause: Request
+/// last_ancestors: {Alice: 19, Bob: 31, Carol: 29, Dave: 33}
+
 }
+
+/// ===== meta-elections =====
+/// consensus_history:
+/// a137c1b54c5895b13a1e204869f650636920286bd5b903e0576a9a15a2f58c2c
+
+/// MetaElectionHandle(CURRENT)
+/// consensus_len: 1
+/// round_hashes: {
+///   Alice -> [
+///     RoundHash { round: 0, latest_block_hash: a137c1b54c5895b13a1e204869f650636920286bd5b903e0576a9a15a2f58c2c }
+///     RoundHash { round: 1, latest_block_hash: a137c1b54c5895b13a1e204869f650636920286bd5b903e0576a9a15a2f58c2c }
+///   ]
+///   Bob -> [
+///     RoundHash { round: 0, latest_block_hash: a137c1b54c5895b13a1e204869f650636920286bd5b903e0576a9a15a2f58c2c }
+///   ]
+///   Carol -> [
+///     RoundHash { round: 0, latest_block_hash: a137c1b54c5895b13a1e204869f650636920286bd5b903e0576a9a15a2f58c2c }
+///   ]
+///   Dave -> [
+///     RoundHash { round: 0, latest_block_hash: a137c1b54c5895b13a1e204869f650636920286bd5b903e0576a9a15a2f58c2c }
+///   ]
+/// }
+/// interesting_events: {
+///   Alice -> ["A_6"]
+///   Bob -> ["B_8"]
+///   Carol -> ["C_7"]
+///   Dave -> ["D_8"]
+/// }
+/// all_voters: {Alice, Bob, Carol, Dave}
+/// undecided_voters: {Alice, Bob, Carol, Dave}
+/// meta_events: {
+///   A_0 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   A_1 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   A_2 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   A_3 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   A_4 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   A_5 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   A_6 -> {
+///     observees: {}
+///     interesting_content: [Add(Eric)]
+///   }
+///   A_7 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   A_8 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   A_9 -> {
+///     observees: {Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   f   -   -   - 
+///       B: 0/0   t   -   -   - 
+///       C: 0/0   t   -   -   - 
+///       D: 0/0   t   -   -   - 
+///     }
+///   }
+///   A_10 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   f   -   -   - 
+///       B: 0/0   t   -   -   - 
+///       C: 0/0   t   -   -   - 
+///       D: 0/0   t   -   -   - 
+///     }
+///   }
+///   A_11 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   f   -   -   - 
+///       B: 0/0   t   -   -   - 
+///       C: 0/0   t   -   -   - 
+///       D: 0/0   t   -   -   - 
+///     }
+///   }
+///   A_12 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   t   t   - 
+///       B: 0/0   t   -   -   - 
+///       C: 0/0   t   t   t   - 
+///       D: 0/0   t   t   t   - 
+///     }
+///   }
+///   A_13 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   A_14 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   A_15 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   A_16 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   A_17 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   A_18 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   A_19 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   A_20 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///          1/0   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   A_21 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///          1/0   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_0 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   B_1 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   B_2 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   B_3 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   B_4 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   B_5 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   B_6 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   B_7 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   B_8 -> {
+///     observees: {}
+///     interesting_content: [Add(Eric)]
+///   }
+///   B_9 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   B_10 -> {
+///     observees: {Dave}
+///     interesting_content: []
+///   }
+///   B_11 -> {
+///     observees: {Alice, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   t   -   -   - 
+///       B: 0/0   f   -   -   - 
+///       C: 0/0   t   -   -   - 
+///       D: 0/0   t   -   -   - 
+///     }
+///   }
+///   B_12 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   t   -   -   - 
+///       B: 0/0   f   -   -   - 
+///       C: 0/0   t   -   -   - 
+///       D: 0/0   t   -   -   - 
+///     }
+///   }
+///   B_13 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   t   -   -   - 
+///       B: 0/0   f   -   -   - 
+///       C: 0/0   t   -   -   - 
+///       D: 0/0   t   -   -   - 
+///     }
+///   }
+///   B_14 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   t   -   -   - 
+///       B: 0/0   f   -   -   - 
+///       C: 0/0   t   -   -   - 
+///       D: 0/0   t   -   -   - 
+///     }
+///   }
+///   B_15 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   f   f   - 
+///       B: 0/0   b   t   t   - 
+///       C: 0/0   t   t   t   - 
+///       D: 0/0   t   t   t   - 
+///     }
+///   }
+///   B_16 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_17 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_18 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_19 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_20 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_21 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_22 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_23 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_24 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///          0/2   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_25 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///          0/2   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_26 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///          0/2   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_27 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_28 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_29 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_30 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///          1/0   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_31 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///          1/0   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_32 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///          1/0   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   B_33 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///          1/0   t   t   t   t 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   C_0 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   C_1 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   C_2 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   C_3 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   C_4 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   C_5 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   C_6 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   C_7 -> {
+///     observees: {}
+///     interesting_content: [Add(Eric)]
+///   }
+///   C_8 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   C_9 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   C_10 -> {
+///     observees: {Dave}
+///     interesting_content: []
+///   }
+///   C_11 -> {
+///     observees: {Dave}
+///     interesting_content: []
+///   }
+///   C_12 -> {
+///     observees: {Dave}
+///     interesting_content: []
+///   }
+///   C_13 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   t   -   -   - 
+///       B: 0/0   t   -   -   - 
+///       C: 0/0   t   -   -   - 
+///       D: 0/0   t   -   -   - 
+///     }
+///   }
+///   C_14 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   f   f   - 
+///       B: 0/0   t   t   t   - 
+///       C: 0/0   t   t   t   - 
+///       D: 0/0   t   t   t   - 
+///     }
+///   }
+///   C_15 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   f   f   - 
+///       B: 0/0   t   t   t   - 
+///       C: 0/0   t   t   t   - 
+///       D: 0/0   t   t   t   - 
+///     }
+///   }
+///   C_16 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   f   f   - 
+///       B: 0/0   t   t   t   - 
+///       C: 0/0   t   t   t   - 
+///       D: 0/0   t   t   t   - 
+///     }
+///   }
+///   C_17 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///       B: 0/0   t   t   t   - 
+///       C: 0/0   t   t   t   - 
+///       D: 0/0   t   t   t   - 
+///     }
+///   }
+///   C_18 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///       B: 0/0   t   t   t   - 
+///       C: 0/0   t   t   t   - 
+///       D: 0/0   t   t   t   - 
+///     }
+///   }
+///   C_19 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///       B: 0/0   t   t   t   - 
+///       C: 0/0   t   t   t   - 
+///       D: 0/0   t   t   t   - 
+///     }
+///   }
+///   C_20 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///       B: 0/0   t   t   t   - 
+///       C: 0/0   t   t   t   - 
+///       D: 0/0   t   t   t   - 
+///     }
+///   }
+///   C_21 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   C_22 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   C_23 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   C_24 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   C_25 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///          0/2   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   C_26 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   C_27 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   C_28 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   C_29 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   f   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///          1/0   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_0 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   D_1 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   D_2 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   D_3 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   D_4 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   D_5 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   D_6 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   D_7 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   D_8 -> {
+///     observees: {}
+///     interesting_content: [Add(Eric)]
+///   }
+///   D_9 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   D_10 -> {
+///     observees: {}
+///     interesting_content: []
+///   }
+///   D_11 -> {
+///     observees: {Carol, Dave}
+///     interesting_content: []
+///   }
+///   D_12 -> {
+///     observees: {Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   f   -   -   - 
+///       B: 0/0   t   -   -   - 
+///       C: 0/0   t   -   -   - 
+///       D: 0/0   t   -   -   - 
+///     }
+///   }
+///   D_13 -> {
+///     observees: {Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   f   -   -   - 
+///       B: 0/0   t   -   -   - 
+///       C: 0/0   t   -   -   - 
+///       D: 0/0   t   -   -   - 
+///     }
+///   }
+///   D_14 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///       B: 0/0   t   t   t   - 
+///       C: 0/0   t   t   t   - 
+///       D: 0/0   t   t   t   - 
+///     }
+///   }
+///   D_15 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///       B: 0/0   t   t   t   - 
+///       C: 0/0   t   t   t   - 
+///       D: 0/0   t   t   t   - 
+///     }
+///   }
+///   D_16 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///       B: 0/0   t   t   t   - 
+///       C: 0/0   t   t   t   - 
+///       D: 0/0   t   t   t   - 
+///     }
+///   }
+///   D_17 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///       B: 0/0   t   t   t   - 
+///       C: 0/0   t   t   t   - 
+///       D: 0/0   t   t   t   - 
+///     }
+///   }
+///   D_18 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_19 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_20 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_21 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_22 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_23 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_24 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_25 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_26 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_27 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_28 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_29 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_30 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///          1/0   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_31 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///          1/0   t   -   -   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_32 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///          1/0   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+///   D_33 -> {
+///     observees: {Alice, Bob, Carol, Dave}
+///     interesting_content: []
+///     meta_votes: {
+///         stage est bin aux dec
+///       A: 0/0   b   b   t   - 
+///          0/1   t   t   t   - 
+///          0/2   t   t   t   - 
+///          1/0   t   t   t   - 
+///       B: 0/0   t   t   t   t 
+///       C: 0/0   t   t   t   t 
+///       D: 0/0   t   t   t   t 
+///     }
+///   }
+/// }

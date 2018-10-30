@@ -221,6 +221,14 @@ mod detail {
         format!("{:?}", id).chars().next()
     }
 
+    fn as_short_string(value: Option<bool>) -> &'static str {
+        match value {
+            None => "-",
+            Some(true) => "t",
+            Some(false) => "f",
+        }
+    }
+
     fn dump_meta_votes<P: PublicId>(meta_votes: &MetaVotes<P>, comment: bool) -> Vec<String> {
         let mut lines = vec![];
         if comment {
@@ -240,16 +248,8 @@ mod detail {
             for mv in meta_votes {
                 let est = mv.estimates.as_short_string();
                 let bin = mv.bin_values.as_short_string();
-                let aux = match mv.aux_value {
-                    None => "-",
-                    Some(true) => "t",
-                    Some(false) => "f",
-                };
-                let dec = match mv.decision {
-                    None => "-",
-                    Some(true) => "t",
-                    Some(false) => "f",
-                };
+                let aux = as_short_string(mv.aux_value);
+                let dec = as_short_string(mv.decision);
                 let line = if comment {
                     format!(
                         "{}{}/{:?}   {}   {}   {}   {} ",
@@ -377,14 +377,14 @@ mod detail {
                 for (hash, event) in self.gossip_graph.iter() {
                     if !positions.contains_key(hash) {
                         let self_parent_pos = if let Some(position) =
-                            parent_pos(event.index(), event.self_parent(), &positions)
+                            parent_pos(event.index_by_creator(), event.self_parent(), &positions)
                         {
                             position
                         } else {
                             continue;
                         };
                         let other_parent_pos = if let Some(position) =
-                            parent_pos(event.index(), event.other_parent(), &positions)
+                            parent_pos(event.index_by_creator(), event.other_parent(), &positions)
                         {
                             position
                         } else {
@@ -643,7 +643,7 @@ mod detail {
                     .iter()
                     .map(|(hash, mev)| {
                         let event = unwrap!(self.gossip_graph.get(hash));
-                        let creator_and_index = (event.creator(), event.index());
+                        let creator_and_index = (event.creator(), event.index_by_creator());
                         let short_name_and_mev = (event.short_name(), mev);
                         (creator_and_index, short_name_and_mev)
                     }).collect::<BTreeMap<_, _>>();

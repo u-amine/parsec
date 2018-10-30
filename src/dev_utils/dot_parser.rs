@@ -671,14 +671,14 @@ fn convert_to_meta_elections(
         .map(|(handle, election)| {
             (
                 handle,
-                convert_to_meta_election(&handle, election, event_hashes),
+                convert_to_meta_election(handle, election, event_hashes),
             )
         }).collect();
     MetaElections::from_map_and_history(meta_elections_map, meta_elections.consensus_history)
 }
 
 fn convert_to_meta_election(
-    handle: &MetaElectionHandle,
+    handle: MetaElectionHandle,
     meta_election: ParsedMetaElection,
     event_hashes: &mut BTreeMap<String, Hash>,
 ) -> MetaElection<Transaction, PeerId> {
