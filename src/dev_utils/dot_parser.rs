@@ -646,7 +646,8 @@ fn convert_into_parsed_contents(result: ParsedFile) -> ParsedContents {
     } = result;
 
     let mut parsed_contents = ParsedContents::new(our_id.clone());
-    let event_hashes = create_events(&mut graph.graph, &graph.event_details, &mut parsed_contents);
+    let mut event_hashes =
+        create_events(&mut graph.graph, &graph.event_details, &mut parsed_contents);
 
     let peer_states = peer_list
         .0
@@ -656,32 +657,43 @@ fn convert_into_parsed_contents(result: ParsedFile) -> ParsedContents {
     let peer_list = PeerList::new_from_dot_input(our_id, &parsed_contents.events, &peer_states);
 
     parsed_contents.peer_list = peer_list;
-    parsed_contents.meta_elections = convert_to_meta_elections(meta_elections, &event_hashes);
+    parsed_contents.meta_elections = convert_to_meta_elections(meta_elections, &mut event_hashes);
     parsed_contents
 }
 
 fn convert_to_meta_elections(
     meta_elections: ParsedMetaElections,
-    event_hashes: &BTreeMap<String, Hash>,
+    event_hashes: &mut BTreeMap<String, Hash>,
 ) -> MetaElections<Transaction, PeerId> {
     let meta_elections_map = meta_elections
         .meta_elections
         .into_iter()
-        .map(|(handle, election)| (handle, convert_to_meta_election(election, event_hashes)))
-        .collect();
+        .map(|(handle, election)| {
+            (
+                handle,
+                convert_to_meta_election(&handle, election, event_hashes),
+            )
+        }).collect();
     MetaElections::from_map_and_history(meta_elections_map, meta_elections.consensus_history)
 }
 
 fn convert_to_meta_election(
+    handle: &MetaElectionHandle,
     meta_election: ParsedMetaElection,
-    event_hashes: &BTreeMap<String, Hash>,
+    event_hashes: &mut BTreeMap<String, Hash>,
 ) -> MetaElection<Transaction, PeerId> {
     MetaElection {
         meta_events: meta_election
             .meta_events
             .into_iter()
-            .map(|(ev_id, mev)| (*unwrap!(event_hashes.get(&ev_id)), mev))
-            .collect(),
+            .map(|(ev_id, mev)| {
+                (
+                    *event_hashes
+                        .entry(ev_id.clone())
+                        .or_insert_with(|| Hash::from(ev_id.as_bytes())),
+                    mev,
+                )
+            }).collect(),
         round_hashes: meta_election.round_hashes,
         all_voters: meta_election.all_voters,
         undecided_voters: meta_election.undecided_voters,
@@ -693,8 +705,15 @@ fn convert_to_meta_election(
                     peer_id,
                     events
                         .into_iter()
-                        .map(|ev_id| *unwrap!(event_hashes.get(&ev_id)))
-                        .collect(),
+                        .map(|ev_id| {
+                            *unwrap!(
+                                event_hashes.get(&ev_id),
+                                "Missing {:?} from meta_events section of meta election {:?}.  \
+                                This meta-event must be defined here as it's an Interesting Event.",
+                                ev_id,
+                                handle
+                            )
+                        }).collect(),
                 )
             }).collect(),
         consensus_len: meta_election.consensus_len,
