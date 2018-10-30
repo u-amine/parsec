@@ -635,12 +635,23 @@ mod detail {
                     self.indentation()
                 ));
                 self.indent();
-                for (hash, mev) in &election.meta_events {
+                // sort by creator, then index
+                let meta_events = election
+                    .meta_events
+                    .iter()
+                    .map(|(hash, mev)| {
+                        let event = unwrap!(self.gossip_graph.get(hash));
+                        let creator_and_index = (event.creator(), event.index());
+                        let short_name_and_mev = (event.short_name(), mev);
+                        (creator_and_index, short_name_and_mev)
+                    }).collect::<BTreeMap<_, _>>();
+
+                for (short_name, mev) in meta_events.values() {
                     lines.push(format!(
                         "{}{}{} -> {{",
                         Self::COMMENT,
                         self.indentation(),
-                        unwrap!(self.hash_to_short_name(hash))
+                        short_name
                     ));
                     self.indent();
                     lines.push(format!(
