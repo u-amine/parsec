@@ -77,6 +77,7 @@ const MAX_ROUNDS_ARG_NAME: &str = "max-rounds";
 const SEED_ARG_NAME: &str = "seed";
 
 type Seed = [u32; 4];
+/// An enum of the various network events for which a peer can vote.
 type Observation = parsec::Observation<Transaction, PeerId>;
 
 struct Peer {
@@ -278,9 +279,12 @@ fn main() {
         .seed
         .map_or_else(SeededRng::new, SeededRng::from_seed);
     println!("Using {:?}", rng);
+    // create Transaction
     let mut observations = (0..params.event_count)
         .map(|_| parsec::Observation::OpaquePayload(rng.gen()))
         .collect::<Vec<Observation>>();
+
+    //gossip vote creating gossip graph
 
     for round in 0..params.max_rounds {
         println!("\nGossip Round {:03}\n================", round);
@@ -291,8 +295,11 @@ fn main() {
         // already done so.
         for sender_index in 0..peers.len() {
             let receiver_index = (sender_index + 1) % peers.len();
+            //println!("receiver_index: {:#?}", receiver_index);
             let receiver_id = peers[receiver_index].id.clone();
+            //println!("receiver_id: {:#?}", receiver_id);
             let sender_id = peers[sender_index].id.clone();
+            //println!("sender_id: {:#?}", sender_id);
             let request = unwrap!(peers[sender_index].parsec.create_gossip(Some(&receiver_id)));
             let response = unwrap!(
                 peers[receiver_index]
@@ -364,3 +371,4 @@ fn main() {
         }
     }
 }
+
