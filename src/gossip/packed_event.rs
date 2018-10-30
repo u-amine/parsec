@@ -7,6 +7,8 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use gossip::content::Content;
+#[cfg(test)]
+use hash::Hash;
 use id::PublicId;
 use network_event::NetworkEvent;
 use std::fmt::{self, Debug, Formatter};
@@ -28,5 +30,12 @@ impl<T: NetworkEvent, P: PublicId> Debug for PackedEvent<T, P> {
             self.content.self_parent(),
             self.content.other_parent()
         )
+    }
+}
+
+#[cfg(test)]
+impl<T: NetworkEvent, P: PublicId> PackedEvent<T, P> {
+    pub(crate) fn self_parent(&self) -> Option<&Hash> {
+        self.content.self_parent()
     }
 }

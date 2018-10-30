@@ -61,5 +61,9 @@ pub enum Malice {
     /// We receive a gossip containing an event whose creator should not be known to the sender.
     /// Contains hash of the sync event whose ancestor has the invalid creator.
     InvalidGossipCreator(Hash),
+    /// The peer shall raise an accusation against another peer creating a malice.
+    /// Contains hash of the sync event whose creator shall detect such malice however failed to
+    /// raise an accusation.
+    Accomplice(Hash),
     // TODO: add other malice variants
 }

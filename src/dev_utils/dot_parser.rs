@@ -408,13 +408,20 @@ pub(crate) fn parse_dot_file(full_path: &Path) -> io::Result<ParsedContents> {
     Ok(convert_into_parsed_contents(result))
 }
 
-/// For use by functional/unit tests which provide a dot file for the test setup.  This reads and
-/// parses the dot file as per `parse_dot_file()` above, but also ensures there is a corresponding
-/// SVG file which has been generated from the dot file.  If `dot` is available, it checks the
-/// contents of the SVG file match the dot file.
+/// For use by functional/unit tests which provide a dot file for the test setup.  This put the test
+/// name as part of the path automatically.
 pub(crate) fn parse_test_dot_file(filename: &str) -> ParsedContents {
+    parse_dot_file_with_test_name(
+        filename,
+        &unwrap!(thread::current().name()).replace("::", "_"),
+    )
+}
+
+/// For use by functional/unit tests which provide a dot file for the test setup.  This reads and
+/// parses the dot file as per `parse_dot_file()` above, with test name being part of the path.
+pub(crate) fn parse_dot_file_with_test_name(filename: &str, test_name: &str) -> ParsedContents {
     let mut dot_path = PathBuf::from("input_graphs");
-    dot_path.push(unwrap!(thread::current().name()).replace("::", "_"));
+    dot_path.push(test_name);
     dot_path.push(filename);
     assert!(
         dot_path.exists(),
