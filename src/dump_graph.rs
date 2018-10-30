@@ -446,7 +446,9 @@ mod detail {
                     suffix
                 ));
             }
-            self.writeln(format_args!("{}", lines.join("\n")))?;
+            if !lines.is_empty() {
+                self.writeln(format_args!("{}", lines.join("\n")))?;
+            }
             Ok(())
         }
 
