@@ -2949,5 +2949,56 @@ mod functional_tests {
             }));
         }
 
+        #[test]
+        fn handle_fork() {
+            // In this scenario, Alice creates two descendants of A_3 and sends one of them to Bob, and
+            // the other one to Dave. When Bob gossips to Dave afterwards, Dave is made aware of both
+            // sides of the fork and should raise an accusation.
+            let bob_contents = parse_test_dot_file("bob.dot");
+            let dave_contents = parse_test_dot_file("dave.dot");
+            let a_3_hash = *unwrap!(find_event_by_short_name(
+                bob_contents.events.values(),
+                "A_3"
+            )).hash();
+            // Bob and Dave have different notions of which event is the fourth one by Alice - here we
+            // save the hashes of these two events that could be considered A_4
+            let a_4_bob_hash = *unwrap!(find_event_by_short_name(
+                bob_contents.events.values(),
+                "A_4"
+            )).hash();
+            let a_4_dave_hash = *unwrap!(find_event_by_short_name(
+                dave_contents.events.values(),
+                "A_4"
+            )).hash();
+
+            let bob = Parsec::from_parsed_contents(bob_contents);
+            let mut dave = Parsec::from_parsed_contents(dave_contents);
+            assert!(bob.events.contains_key(&a_3_hash));
+            assert!(dave.events.contains_key(&a_3_hash));
+            // Bob doesn't know Dave's A_4, and Dave doesn't know Bob's
+            assert!(!bob.events.contains_key(&a_4_dave_hash));
+            assert!(!dave.events.contains_key(&a_4_bob_hash));
+
+            // Send gossip from Bob to Dave
+            let message = unwrap!(bob.create_gossip(Some(dave.our_pub_id())));
+            unwrap!(dave.handle_request(bob.our_pub_id(), message));
+            // Dave should now become aware of the other branch of the fork
+            assert!(dave.events.contains_key(&a_4_bob_hash));
+
+            // Verify that Dave detected malice and accused Alice of it.
+            let (offender, hash) = unwrap!(
+                our_votes(&dave)
+                    .filter_map(|payload| match payload {
+                        Observation::Accusation {
+                            ref offender,
+                            malice: Malice::Fork(hash),
+                        } => Some((offender, hash)),
+                        _ => None,
+                    }).next()
+            );
+            assert_eq!(offender, &PeerId::new("Alice"));
+            assert_eq!(*hash, a_3_hash);
+        }
+
     }
 }
