@@ -13,9 +13,10 @@ use id::PublicId;
 use network_event::NetworkEvent;
 use std::fmt::{self, Debug, Formatter};
 
+/// Packed event contains only content and signature.
 #[serde(bound = "")]
-#[derive(Serialize, Deserialize, Clone)]
-pub(crate) struct PackedEvent<T: NetworkEvent, P: PublicId> {
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct PackedEvent<T: NetworkEvent, P: PublicId> {
     pub(super) content: Content<T, P>,
     pub(super) signature: P::Signature,
 }
