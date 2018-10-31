@@ -499,7 +499,6 @@ pub struct Peer<P: PublicId> {
     id_hash: Hash,
     state: PeerState,
     events: BTreeSet<(u64, Hash)>,
-    peers: BTreeSet<P>,
     membership_list: BTreeSet<P>,
     membership_list_changes: Vec<(u64, MembershipListChange<P>)>,
 }
@@ -510,7 +509,6 @@ impl<P: PublicId> Peer<P> {
             id_hash: Hash::from(serialise(id).as_slice()),
             state,
             events: BTreeSet::new(),
-            peers: BTreeSet::new(),
             membership_list: BTreeSet::new(),
             membership_list_changes: Vec::new(),
         }
