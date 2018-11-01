@@ -251,7 +251,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
 
 impl<T: NetworkEvent, P: PublicId> PartialEq for Event<T, P> {
     fn eq(&self, other: &Self) -> bool {
-        self.content == other.content
+        self.content == other.content && self.signature == other.signature
     }
 }
 
