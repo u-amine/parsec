@@ -20,12 +20,12 @@ pub(crate) fn ancestors<'a, T: NetworkEvent, P: PublicId>(
     event: &'a Event<T, P>,
 ) -> Ancestors<'a, T, P> {
     let mut queue = BTreeMap::new();
-    let _ = queue.insert(event.order(), event);
+    let _ = queue.insert(event.topological_index(), event);
 
     Ancestors {
         graph,
         queue,
-        visited: vec![false; event.order() + 1],
+        visited: vec![false; event.topological_index() + 1],
     }
 }
 
@@ -41,25 +41,25 @@ impl<'a, T: NetworkEvent, P: PublicId> Iterator for Ancestors<'a, T, P> {
     fn next(&mut self) -> Option<Self::Item> {
         // This is a modified breadth-first search: Instead of using a simple queue to track the
         // events to visit next, we use a priority queue (implemented as a BTreeMap keyed by
-        // Event::order) so the events are visited in reverse topological order (children before
-        // parents). We also keep track of the events we already visited, to avoid returning single
-        // event more than once.
+        // `topological_index`) so the events are visited in reverse topological order (children
+        // before parents). We also keep track of the events we already visited, to avoid returning
+        // single event more than once.
 
         loop {
-            let order = *self.queue.keys().rev().next()?;
-            let event = self.queue.remove(&order)?;
+            let index = *self.queue.keys().rev().next()?;
+            let event = self.queue.remove(&index)?;
 
-            if self.visited[order] {
+            if self.visited[index] {
                 continue;
             }
-            self.visited[order] = true;
+            self.visited[index] = true;
 
             if let Some(parent) = event.self_parent().and_then(|hash| self.graph.get(hash)) {
-                let _ = self.queue.insert(parent.order(), parent);
+                let _ = self.queue.insert(parent.topological_index(), parent);
             }
 
             if let Some(parent) = event.other_parent().and_then(|hash| self.graph.get(hash)) {
-                let _ = self.queue.insert(parent.order(), parent);
+                let _ = self.queue.insert(parent.topological_index(), parent);
             }
 
             return Some(event);
@@ -86,19 +86,19 @@ mod tests {
         ];
 
         let mut actual_names = Vec::new();
-        let mut actual_orders = Vec::new();
+        let mut actual_indices = Vec::new();
 
         for event in ancestors(&graph, event) {
             actual_names.push(event.short_name());
-            actual_orders.push(event.order());
+            actual_indices.push(event.topological_index());
         }
 
         assert_eq!(actual_names, expected);
 
         // Assert the events are yielded in reverse topological order.
-        let mut sorted_orders = actual_orders.clone();
-        sorted_orders.sort_by(|a, b| b.cmp(a));
+        let mut sorted_indices = actual_indices.clone();
+        sorted_indices.sort_by(|a, b| b.cmp(a));
 
-        assert_eq!(actual_orders, sorted_orders);
+        assert_eq!(actual_indices, sorted_indices);
     }
 }

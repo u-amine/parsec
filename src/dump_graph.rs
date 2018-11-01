@@ -147,7 +147,7 @@ mod detail {
             let initial_events: Vec<Hash> = gossip_graph
                 .iter()
                 .filter_map(|(hash, event)| {
-                    if event.index() == 0 {
+                    if event.index_by_creator() == 0 {
                         Some(*hash)
                     } else {
                         None
@@ -376,14 +376,14 @@ mod detail {
             for (hash, event) in gossip_graph.iter() {
                 if !positions.contains_key(hash) {
                     let self_parent_pos = if let Some(position) =
-                        parent_pos(event.index(), event.self_parent(), &positions)
+                        parent_pos(event.index_by_creator(), event.self_parent(), &positions)
                     {
                         position
                     } else {
                         continue;
                     };
                     let other_parent_pos = if let Some(position) =
-                        parent_pos(event.index(), event.other_parent(), &positions)
+                        parent_pos(event.index_by_creator(), event.other_parent(), &positions)
                     {
                         position
                     } else {
@@ -438,7 +438,7 @@ mod detail {
                         None
                     }
                 }).collect();
-            events.sort_by_key(|event| event.index());
+            events.sort_by_key(|event| event.index_by_creator());
             write_subgraph(writer, node, gossip_graph, &events, &positions)?;
             write_other_parents(writer, &events)?;
         }

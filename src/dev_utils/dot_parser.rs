@@ -383,7 +383,7 @@ impl ParsedContents {
         let hash = *self
             .events
             .values()
-            .max_by_key(|event| event.order())
+            .max_by_key(|event| event.topological_index())
             .map(|event| event.hash())?;
         let event = self.events.remove(&hash)?;
 
@@ -487,11 +487,11 @@ fn create_events(
             next_parsed_event
                 .other_parent
                 .and_then(|ref id| event_hashes.get(id).cloned()),
+            parsed_contents.events.len(),
             *counts_per_creator
                 .get(&next_parsed_event.creator)
                 .unwrap_or(&0),
             next_event_details.last_ancestors.clone(),
-            parsed_contents.events.len(),
         );
 
         if !next_event_details.interesting_content.is_empty() || !mvs.is_empty() {

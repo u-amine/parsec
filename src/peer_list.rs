@@ -306,7 +306,7 @@ impl<S: SecretId> PeerList<S> {
                     actual: peer.state,
                 });
             }
-            peer.add_event(event.index(), *event.hash());
+            peer.add_event(event.index_by_creator(), *event.hash());
             Ok(())
         } else {
             Err(Error::UnknownPeer)
@@ -317,7 +317,7 @@ impl<S: SecretId> PeerList<S> {
     #[cfg(test)]
     pub fn remove_event<T: NetworkEvent>(&mut self, event: &Event<T, S::PublicId>) {
         if let Some(peer) = self.peers.get_mut(event.creator()) {
-            peer.remove_event(event.index(), *event.hash());
+            peer.remove_event(event.index_by_creator(), *event.hash());
         }
     }
 
@@ -386,7 +386,7 @@ impl PeerList<PeerId> {
             let mut events = BTreeSet::new();
             for event in events_graph.values() {
                 if event.creator() == peer_id {
-                    let _ = events.insert((event.index(), *event.hash()));
+                    let _ = events.insert((event.index_by_creator(), *event.hash()));
                 } else if !peer_states.contains_key(event.creator()) {
                     debug!(
                         "peer_states list doesn't contain the creator of event {:?}",

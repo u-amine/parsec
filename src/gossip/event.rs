@@ -112,12 +112,13 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         peer_list: &PeerList<S>,
         forking_peers: &BTreeSet<P>,
     ) -> Result<Option<Self>, Error> {
-        let cache =
-            if let Some(cache) = Cache::unpack(&packed_event, events, peer_list, forking_peers)? {
-                cache
-            } else {
-                return Ok(None);
-            };
+        let cache = if let Some(cache) =
+            Cache::from_packed_event(&packed_event, events, peer_list, forking_peers)?
+        {
+            cache
+        } else {
+            return Ok(None);
+        };
 
         Ok(Some(Self {
             content: packed_event.content,
@@ -140,7 +141,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         self.cache
             .last_ancestors
             .get(other.creator())
-            .map_or(false, |last_index| *last_index >= other.index())
+            .map_or(false, |last_index| *last_index >= other.index_by_creator())
     }
 
     // Returns whether this event can see `other`, i.e. whether there's a directed path from `other`
@@ -175,16 +176,18 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         &self.cache.hash
     }
 
-    pub fn index(&self) -> u64 {
-        self.cache.index
+    // Index of this event relative to all events in the graph, when sorted topologically.
+    pub fn topological_index(&self) -> usize {
+        self.cache.topological_index
+    }
+
+    // Index of this event relative to other events by the same creator.
+    pub fn index_by_creator(&self) -> u64 {
+        self.cache.index_by_creator
     }
 
     pub fn last_ancestors(&self) -> &BTreeMap<P, u64> {
         &self.cache.last_ancestors
-    }
-
-    pub fn order(&self) -> usize {
-        self.cache.order
     }
 
     pub fn is_request(&self) -> bool {
@@ -216,7 +219,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         format!(
             "{:.1}_{}",
             format!("{:?}", self.content.creator),
-            self.cache.index
+            self.cache.index_by_creator
         )
     }
 
@@ -231,7 +234,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             cause,
         };
 
-        let (cache, signature) = Cache::new(&content, events, peer_list, forking_peers);
+        let (cache, signature) = Cache::from_content(&content, events, peer_list, forking_peers);
 
         Self {
             content,
@@ -290,9 +293,9 @@ impl Event<Transaction, PeerId> {
         cause: &str,
         self_parent: Option<Hash>,
         other_parent: Option<Hash>,
-        index: u64,
+        topological_index: usize,
+        index_by_creator: u64,
         last_ancestors: BTreeMap<PeerId, u64>,
-        order: usize,
     ) -> Self {
         let cause = match cause {
             "Initial" => Cause::Initial,
@@ -341,9 +344,9 @@ impl Event<Transaction, PeerId> {
 
         let cache = Cache {
             hash: Hash::from(serialised_content.as_slice()),
-            index,
+            topological_index,
+            index_by_creator,
             last_ancestors,
-            order,
             forking_peers: BTreeSet::new(),
         };
 
@@ -361,18 +364,18 @@ impl Event<Transaction, PeerId> {
 struct Cache<P: PublicId> {
     // Hash of `Event`s `Content`.
     hash: Hash,
-    // Sequential index of this event: this event is the `index`-th one made by its creator.
-    index: u64,
+    // Index of this event relative to all events in the graph, when sorted topologically.
+    topological_index: usize,
+    // Index of this event relative to other events by the same creator.
+    index_by_creator: u64,
     // Index of each peer's latest event that is an ancestor of this event.
     last_ancestors: BTreeMap<P, u64>,
-    // Topological order of this event relative to all other events in the gossip graph.
-    order: usize,
     // Peers with a fork having both sides seen by this event.
     forking_peers: BTreeSet<P>,
 }
 
 impl<P: PublicId> Cache<P> {
-    fn new<T: NetworkEvent, S: SecretId<PublicId = P>>(
+    fn from_content<T: NetworkEvent, S: SecretId<PublicId = P>>(
         content: &Content<T, P>,
         events: &BTreeMap<Hash, Event<T, P>>,
         peer_list: &PeerList<S>,
@@ -380,24 +383,25 @@ impl<P: PublicId> Cache<P> {
     ) -> (Self, P::Signature) {
         let serialised_content = serialise(&content);
 
-        let (index, last_ancestors) = match index_and_last_ancestors(&content, events, peer_list) {
-            Ok(result) => result,
-            Err(error) => {
-                log_or_panic!(
-                    "{:?} constructed an invalid event: {:?}.",
-                    peer_list.our_id().public_id(),
-                    error
-                );
-                (0, BTreeMap::new())
-            }
-        };
+        let (index_by_creator, last_ancestors) =
+            match index_by_creator_and_last_ancestors(&content, events, peer_list) {
+                Ok(result) => result,
+                Err(error) => {
+                    log_or_panic!(
+                        "{:?} constructed an invalid event: {:?}.",
+                        peer_list.our_id().public_id(),
+                        error
+                    );
+                    (0, BTreeMap::new())
+                }
+            };
 
         let forking_peers = join_forking_peers(&content, events, forking_peers);
         let signature = peer_list.our_id().sign_detached(&serialised_content);
         let cache = Self {
             hash: Hash::from(serialised_content.as_slice()),
-            index,
-            order: events.len(),
+            topological_index: events.len(),
+            index_by_creator,
             last_ancestors,
             forking_peers,
         };
@@ -405,7 +409,7 @@ impl<P: PublicId> Cache<P> {
         (cache, signature)
     }
 
-    fn unpack<T: NetworkEvent, S: SecretId<PublicId = P>>(
+    fn from_packed_event<T: NetworkEvent, S: SecretId<PublicId = P>>(
         packed_event: &PackedEvent<T, P>,
         events: &BTreeMap<Hash, Event<T, P>>,
         peer_list: &PeerList<S>,
@@ -427,20 +431,20 @@ impl<P: PublicId> Cache<P> {
         }
 
         let forking_peers = join_forking_peers(&packed_event.content, events, forking_peers);
-        let (index, last_ancestors) =
-            index_and_last_ancestors(&packed_event.content, events, peer_list)?;
+        let (index_by_creator, last_ancestors) =
+            index_by_creator_and_last_ancestors(&packed_event.content, events, peer_list)?;
 
         Ok(Some(Self {
             hash,
-            index,
-            order: events.len(),
+            topological_index: events.len(),
+            index_by_creator,
             last_ancestors,
             forking_peers,
         }))
     }
 }
 
-fn index_and_last_ancestors<T: NetworkEvent, S: SecretId>(
+fn index_by_creator_and_last_ancestors<T: NetworkEvent, S: SecretId>(
     content: &Content<T, S::PublicId>,
     events: &BTreeMap<Hash, Event<T, S::PublicId>>,
     peer_list: &PeerList<S>,
@@ -463,7 +467,7 @@ fn index_and_last_ancestors<T: NetworkEvent, S: SecretId>(
         return Ok((0, last_ancestors));
     };
 
-    let index = self_parent.index() + 1;
+    let index_by_creator = self_parent.index_by_creator() + 1;
     let mut last_ancestors = self_parent.last_ancestors().clone();
 
     if let Some(other_parent_hash) = content.other_parent() {
@@ -485,8 +489,8 @@ fn index_and_last_ancestors<T: NetworkEvent, S: SecretId>(
             return Err(Error::UnknownParent);
         }
     }
-    let _ = last_ancestors.insert(content.creator.clone(), index);
-    Ok((index, last_ancestors))
+    let _ = last_ancestors.insert(content.creator.clone(), index_by_creator);
+    Ok((index_by_creator, last_ancestors))
 }
 
 // An event's forking_peers list is a union inherited from its self_parent and other_parent.
@@ -612,7 +616,7 @@ mod tests {
         assert!(!initial.is_response());
         assert!(initial.self_parent().is_none());
         assert!(initial.other_parent().is_none());
-        assert_eq!(initial.index(), 0);
+        assert_eq!(initial.index_by_creator(), 0);
     }
 
     #[test]
@@ -645,7 +649,7 @@ mod tests {
                 event_from_observation.content.cause
             ),
         }
-        assert_eq!(event_from_observation.index(), 1);
+        assert_eq!(event_from_observation.index_by_creator(), 1);
         assert!(!event_from_observation.is_initial());
         assert!(!event_from_observation.is_response());
         assert_eq!(
@@ -690,7 +694,7 @@ mod tests {
             event_from_request.content.creator,
             *alice.peer_list.our_id().public_id()
         );
-        assert_eq!(event_from_request.index(), 1);
+        assert_eq!(event_from_request.index_by_creator(), 1);
         assert!(!event_from_request.is_initial());
         assert!(!event_from_request.is_response());
         assert_eq!(event_from_request.self_parent(), Some(&alice_initial_hash));
@@ -749,7 +753,7 @@ mod tests {
             event_from_response.content.creator,
             *alice.peer_list.our_id().public_id()
         );
-        assert_eq!(event_from_response.index(), 1);
+        assert_eq!(event_from_response.index_by_creator(), 1);
         assert!(!event_from_response.is_initial());
         assert!(event_from_response.is_response());
         assert_eq!(event_from_response.self_parent(), Some(&alice_initial_hash));

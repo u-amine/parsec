@@ -265,7 +265,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         );
 
         let mut events: Vec<_> = self.events.values().collect();
-        events.sort_by_key(|event| event.order());
+        events.sort_by_key(|event| event.topological_index());
         Ok(Request::new(events))
     }
 
@@ -509,7 +509,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             )? {
                 if self
                     .peer_list
-                    .events_by_index(event.creator(), event.index())
+                    .events_by_index(event.creator(), event.index_by_creator())
                     .next()
                     .is_some()
                 {
@@ -1302,7 +1302,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let mut ordered_hashes: Vec<_> = self
             .events
             .values()
-            .map(|event| (*event.hash(), event.order()))
+            .map(|event| (*event.hash(), event.topological_index()))
             .collect();
         ordered_hashes.sort_by_key(|&(_, order)| order);
 
@@ -1402,18 +1402,18 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // Events to include in the result. Initially start with including everything...
         let mut inclusion_list = vec![true; self.events.len()];
 
-        // ...then exclude events that are ancestors of `last_event`, because that are the events
-        // that the peer already has,
+        // ...then exclude events that are ancestors of `last_event`, because the peer already has
+        // them.
         for event in graph::ancestors(&self.events, last_event) {
-            inclusion_list[event.order()] = false;
+            inclusion_list[event.topological_index()] = false;
         }
 
         let mut events: Vec<_> = self
             .events
             .values()
-            .filter(|event| inclusion_list[event.order()])
+            .filter(|event| inclusion_list[event.topological_index()])
             .collect();
-        events.sort_by_key(|event| event.order());
+        events.sort_by_key(|event| event.topological_index());
         Ok(events)
     }
 
@@ -1509,7 +1509,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     // Detect when the first event by a peer belonging to genesis doesn't carry genesis
     fn detect_missing_genesis(&mut self, event: &Event<T, S::PublicId>) {
-        if event.index() != 1 {
+        if event.index_by_creator() != 1 {
             return;
         }
 
@@ -1573,7 +1573,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn detect_stale_other_parent(&mut self, event: &Event<T, S::PublicId>) {
         let (other_parent_index, other_parent_creator) =
             if let Some(other_parent) = self.other_parent(event) {
-                (other_parent.index(), other_parent.creator().clone())
+                (
+                    other_parent.index_by_creator(),
+                    other_parent.creator().clone(),
+                )
             } else {
                 return;
             };
@@ -1669,8 +1672,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
             let membership_list = if let Some(list) = self
                 .peer_list
-                .peer_membership_list_snapshot_excluding_last_remove(event.creator(), event.index())
-            {
+                .peer_membership_list_snapshot_excluding_last_remove(
+                    event.creator(),
+                    event.index_by_creator(),
+                ) {
                 list
             } else {
                 // The membership list is not yet initialised - skip the detection.
@@ -1916,7 +1921,7 @@ mod functional_tests {
         events: &BTreeMap<Hash, Event<T, P>>,
         n: usize,
     ) -> &Event<T, P> {
-        unwrap!(events.values().find(|event| event.order() == n))
+        unwrap!(events.values().find(|event| event.topological_index() == n))
     }
 
     #[test]
