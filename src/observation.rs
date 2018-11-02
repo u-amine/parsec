@@ -70,5 +70,8 @@ pub enum Malice<T: NetworkEvent, P: PublicId> {
     /// Event's creator is the same to its other_parent's creator. The accusation contains the
     /// original event so other peers can verify the accusation directly.
     OtherParentBySameCreator(Box<PackedEvent<T, P>>),
+    /// Event's creator is different to its self_parent's creator. The accusation contains the
+    /// original event so other peers can verify the accusation directly.
+    SelfParentByDifferentCreator(Box<PackedEvent<T, P>>),
     // TODO: add other malice variants
 }
