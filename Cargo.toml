@@ -14,23 +14,24 @@ version = "0.5.0"
 lazy_static = "~1.0.1"
 log = "~0.3.8"
 maidsafe_utilities = "~0.17.0"
-proptest = "~0.8.6"
+proptest = { version = "~0.8.6", optional = true }
 quick-error = "~1.2.2"
 rand = "~0.4.2"
 serde = "~1.0.66"
 serde_derive = "~1.0.66"
 tiny-keccak = "~1.4.2"
 unwrap = "~1.2.0"
-safe_crypto = "0.4.0"
+safe_crypto = "~0.4.0"
 
 [dev-dependencies]
 clap = "~2.31.2"
 criterion = "~0.2.5"
-pom = "1.1"
+pom = "~1.1.0"
+proptest = "~0.8.6"
 
 [features]
 dump-graphs = []
-testing = ["maidsafe_utilities/testing"]
+testing = ["maidsafe_utilities/testing", "proptest"]
 default = ["safe_crypto/mock"]
 
 [[bench]]
