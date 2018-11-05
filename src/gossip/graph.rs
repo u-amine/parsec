@@ -75,14 +75,14 @@ mod tests {
 
     #[test]
     fn ancestors_iterator() {
+        // Generated with RNG seed: [174994228, 1445633118, 3041276290, 90293447].
         let contents = parse_test_dot_file("carol.dot");
         let graph = contents.events;
 
         let event = unwrap!(find_event_by_short_name(graph.values(), "B_4"));
 
         let expected = vec![
-            "B_4", "B_3", "B_2", "D_3", "D_2", "A_3", "A_2", "A_1", "B_1", "B_0", "D_1", "D_0",
-            "A_0",
+            "B_4", "B_3", "D_2", "D_1", "D_0", "B_2", "B_1", "B_0", "A_1", "A_0",
         ];
 
         let mut actual_names = Vec::new();

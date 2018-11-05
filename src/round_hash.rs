@@ -21,12 +21,22 @@ pub(crate) struct RoundHash {
 impl RoundHash {
     // Constructs a new `RoundHash` with the given `public_id` and `latest_block_hash` for round 0.
     pub fn new<P: PublicId>(public_id: &P, latest_block_hash: Hash) -> Self {
+        Self::new_with_round(public_id, latest_block_hash, 0)
+    }
+
+    // Constructs a new `RoundHash` with the given `public_id` and `latest_block_hash` for a given
+    // round
+    pub fn new_with_round<P: PublicId>(
+        public_id: &P,
+        latest_block_hash: Hash,
+        round: usize,
+    ) -> Self {
         let public_id_hash = Hash::from(serialise(&public_id).as_slice());
-        let final_hash = Self::final_hash(&public_id_hash, &latest_block_hash, 0);
+        let final_hash = Self::final_hash(&public_id_hash, &latest_block_hash, round);
         Self {
             public_id_hash,
             latest_block_hash,
-            round: 0,
+            round,
             final_hash,
         }
     }
@@ -43,6 +53,16 @@ impl RoundHash {
                 self.round + 1,
             ),
         }
+    }
+
+    #[cfg(feature = "dump-graphs")]
+    pub fn round(&self) -> usize {
+        self.round
+    }
+
+    #[cfg(feature = "dump-graphs")]
+    pub fn latest_block_hash(&self) -> &Hash {
+        &self.latest_block_hash
     }
 
     // Returns the final value of the `RoundHash`.

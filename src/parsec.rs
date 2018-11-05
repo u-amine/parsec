@@ -609,7 +609,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         dump_graph::to_file(
             self.our_pub_id(),
             &self.events,
-            self.meta_elections.current_meta_events(),
+            &self.meta_elections,
             &self.peer_list,
         );
 
@@ -1759,7 +1759,7 @@ impl<T: NetworkEvent, S: SecretId> Drop for Parsec<T, S> {
             dump_graph::to_file(
                 self.our_pub_id(),
                 &self.events,
-                self.meta_elections.current_meta_events(),
+                &self.meta_elections,
                 &self.peer_list,
             );
         }
@@ -1772,7 +1772,11 @@ impl Parsec<Transaction, PeerId> {
         let mut parsec = Parsec::empty(parsed_contents.our_id, &BTreeSet::new(), is_supermajority);
 
         // Populate `observations` cache using `interesting_content`, to support partial graphs...
-        for meta_event in parsed_contents.meta_events.values() {
+        for meta_event in parsed_contents
+            .meta_elections
+            .current_meta_events()
+            .values()
+        {
             for payload in &meta_event.interesting_content {
                 let hash = payload.create_hash();
                 let _ = parsec.observations.insert(hash, ObservationInfo::default());
@@ -1794,24 +1798,21 @@ impl Parsec<Transaction, PeerId> {
             }
         }
 
-        let creators: BTreeMap<_, _> = parsed_contents
-            .events
-            .values()
-            .map(|event| (*event.hash(), event.creator().clone()))
-            .collect();
+        for consensused in parsed_contents.meta_elections.consensus_history() {
+            let _ = parsec
+                .observations
+                .get_mut(consensused)
+                .map(|info| info.consensused = true);
+        }
 
         parsec.events = parsed_contents.events;
-        parsec.meta_elections = MetaElections::new_from_parsed(
-            parsed_contents.peer_list.voter_ids(),
-            parsed_contents.meta_events,
-            creators,
-        );
+        parsec.meta_elections = parsed_contents.meta_elections;
         parsec.peer_list = parsed_contents.peer_list;
         parsec
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct ObservationInfo {
     consensused: bool,
     created_by_us: bool,
@@ -1838,7 +1839,7 @@ mod functional_tests {
         peer_list: BTreeMap<PeerId, (PeerState, BTreeMap<u64, Hash>)>,
         events: BTreeSet<Hash>,
         consensused_blocks: VecDeque<Block<Transaction, PeerId>>,
-        meta_events: BTreeMap<Hash, MetaEvent<Transaction, PeerId>>,
+        meta_elections: MetaElections<Transaction, PeerId>,
     }
 
     impl Snapshot {
@@ -1863,7 +1864,7 @@ mod functional_tests {
                 peer_list,
                 events,
                 consensused_blocks: parsec.consensused_blocks.clone(),
-                meta_events: parsec.meta_elections.current_meta_events().clone(),
+                meta_elections: parsec.meta_elections.clone(),
             }
         }
     }
@@ -2070,33 +2071,22 @@ mod functional_tests {
         let parsec = Parsec::from_parsed_contents(parsed_contents);
         assert_eq!(parsed_contents_comparison.events, parsec.events);
         assert_eq!(
-            &parsed_contents_comparison.meta_events,
-            parsec.meta_elections.current_meta_events()
+            parsed_contents_comparison.meta_elections,
+            parsec.meta_elections
         );
 
         let parsed_contents_other = parse_test_dot_file("1.dot");
         assert_ne!(parsed_contents_other.events, parsec.events);
-        assert_ne!(
-            &parsed_contents_other.meta_events,
-            parsec.meta_elections.current_meta_events()
-        );
+        assert_ne!(parsed_contents_other.meta_elections, parsec.meta_elections);
     }
 
     #[test]
     fn add_peer() {
-        let mut parsed_contents = parse_test_dot_file("add_fred.dot");
-        // Split out the events Eric would send to Alice.  These are the last seven events listed in
-        // `parsed_contents.events_order`, i.e. B_14, C_14, D_14, D_15, B_15, C_15, E_14, and E_15.
-        let mut final_events: Vec<_> = (0..8)
-            .map(|_| unwrap!(parsed_contents.remove_latest_event()))
-            .collect();
-        final_events.reverse();
+        // Generated with RNG seed: [411278735, 3293288956, 208850454, 2872654992].
+        let mut parsed_contents = parse_test_dot_file("alice.dot");
 
-        let e_15 = unwrap!(final_events.pop());
-        let e_14 = unwrap!(final_events.pop());
-
-        // The final decision to add Fred is reached in C_15.
-        let c_15 = unwrap!(final_events.pop());
+        // The final decision to add Frank is reached in D_18, so pop this event for now.
+        let d_18 = unwrap!(parsed_contents.remove_latest_event());
 
         let mut alice = Parsec::from_parsed_contents(parsed_contents);
         initialise_membership_lists(&mut alice.peer_list);
@@ -2111,70 +2101,40 @@ mod functional_tests {
         assert_err!(Error::InvalidPeerState { .. }, alice.create_gossip(Some(&fred_id)));
         assert_eq!(alice_snapshot, Snapshot::new(&alice));
 
-        // Keep a copy of a request which will be used later in the test.  This request will not
-        // include enough events to allow a joining peer to see "Fred" as a valid member.
-        let deficient_message = unwrap!(alice.create_gossip(None));
-
-        // Add events now as though Alice had received the request from Eric.  This should result in
-        // Alice adding Fred.
-        for event in final_events {
-            unwrap!(alice.add_event(event));
-            assert!(!alice.peer_list.all_ids().any(|peer_id| *peer_id == fred_id));
-        }
-
-        unwrap!(alice.add_event(c_15));
-        unwrap!(alice.add_event(e_14));
-        unwrap!(alice.add_event(e_15));
+        // Now add D_18, which should result in Alice adding Fred.
+        unwrap!(alice.add_event(d_18));
         unwrap!(alice.create_sync_event(&PeerId::new("Eric"), true, &BTreeSet::new()));
         assert!(alice.peer_list.all_ids().any(|peer_id| *peer_id == fred_id));
 
         // Construct Fred's Parsec instance.
         let mut fred =
             Parsec::from_existing(fred_id, &genesis_group, &genesis_group, is_supermajority);
-        let fred_snapshot = Snapshot::new(&fred);
 
         // Create a "naughty Carol" instance where the graph only shows four peers existing before
         // adding Fred.
-        parsed_contents = parse_test_dot_file("naughty_carol.dot");
+        parsed_contents = parse_test_dot_file("carol.dot");
         let naughty_carol = Parsec::from_parsed_contents(parsed_contents);
         let alice_id = PeerId::new("Alice");
         let malicious_message = unwrap!(naughty_carol.create_gossip(None));
-        // TODO - re-enable once `handle_request` is fixed to match the expected behaviour by
-        //        MAID-3066/3067.
-        if false {
-            assert_err!(
-                Error::InvalidInitialRequest,
-                fred.handle_request(&alice_id, malicious_message)
-            );
-        }
-        assert_eq!(fred_snapshot, Snapshot::new(&fred));
+        assert_err!(
+            Error::InvalidEvent,
+            fred.handle_request(&alice_id, malicious_message)
+        );
 
-        // TODO - re-enable once `handle_request` is fixed to match the expected behaviour by
-        //        MAID-3066/3067.
-        if false {
-            // Pass the deficient message gathered earlier which will not be sufficient to allow
-            // Fred to see himself getting added to the section.
-            assert_err!(
-                Error::InvalidInitialRequest,
-                fred.handle_request(&alice_id, deficient_message)
-            );
-        }
-        // TODO - depending on the outcome of the discussion on how to handle such an invalid
-        //        request, the following check may be invalid.  This would be the case if we decide
-        //        to accept the events, expecting a good peer will soon augment our knowledge up to
-        //        at least the point where we see ourself being added.
-        assert_eq!(fred_snapshot, Snapshot::new(&fred));
-
-        // Now pass a valid initial request from Alice to Fred.  The generated response should only
-        // contain Fred's initial event, and the one recording receipt of Alice's request.
+        // Now pass a valid initial request from Alice to Fred.  The generated response would
+        // normally only contain Fred's initial event, and the one recording receipt of Alice's
+        // request.  However this graph doesn't represent the state it would be in if Alice were
+        // actually sending such a request - it should have an event by Alice as the latest.  We
+        // really only need to check here though that Fred doesn't respond with the full graph.
         let message = unwrap!(alice.create_gossip(None));
         let response = unwrap!(fred.handle_request(&alice_id, message));
-        assert_eq!(response.packed_events.len(), 2);
+        assert!(response.packed_events.len() < fred.events.len());
     }
 
     #[test]
     fn remove_peer() {
-        let mut parsed_contents = parse_test_dot_file("remove_eric.dot");
+        // Generated with RNG seed: [3580486268, 2993583568, 344059332, 3173905166].
+        let mut parsed_contents = parse_test_dot_file("alice.dot");
         // The final decision to remove Eric is reached in the last event of Alice.
         let a_last = unwrap!(parsed_contents.remove_latest_event());
 
@@ -2216,6 +2176,7 @@ mod functional_tests {
 
     #[test]
     fn handle_malice_genesis_event_not_after_initial() {
+        // Generated with RNG seed: [926181213, 2524489310, 392196615, 406869071].
         let alice_contents = parse_test_dot_file("alice.dot");
         let alice_id = alice_contents.peer_list.our_id().clone();
         let genesis: BTreeSet<_> = alice_contents.peer_list.all_ids().cloned().collect();
@@ -2276,6 +2237,7 @@ mod functional_tests {
 
     #[test]
     fn handle_malice_genesis_event_creator_not_genesis_member() {
+        // Generated with RNG seed: [848911612, 2362592349, 3178199135, 2458552022].
         let alice_contents = parse_test_dot_file("alice.dot");
         let alice_id = alice_contents.peer_list.our_id().clone();
         let genesis: BTreeSet<_> = alice_contents.peer_list.all_ids().cloned().collect();
@@ -2458,6 +2420,8 @@ mod functional_tests {
 
     #[test]
     fn handle_malice_duplicate_votes() {
+        // Generated with RNG seed: [1353978636, 426502568, 2862743769, 1583787884].
+        //
         // Carol has already voted for "ABCD".  Create two new duplicate votes by Carol for this
         // opaque payload.
         let mut carol = Parsec::from_parsed_contents(parse_test_dot_file("carol.dot"));
@@ -2487,7 +2451,7 @@ mod functional_tests {
         // still added to the graph.
         let mut alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
         let carols_valid_vote_hash =
-            *unwrap!(find_event_by_short_name(alice.events.values(), "C_7")).hash();
+            *unwrap!(find_event_by_short_name(alice.events.values(), "C_4")).hash();
         unwrap!(alice.add_event(first_duplicate_clone));
         let expected_accusations = vec![(
             carol.our_pub_id().clone(),
@@ -2506,6 +2470,8 @@ mod functional_tests {
 
     #[test]
     fn handle_malice_stale_other_parent() {
+        // Generated with RNG seed: [856368386, 135728199, 764559083, 3829746197].
+        //
         // Carol will create event C_4 with other-parent as B_1, despite having C_3 with other-
         // parent as B_2.
         let carol = Parsec::from_parsed_contents(parse_test_dot_file("carol.dot"));
@@ -2537,11 +2503,12 @@ mod functional_tests {
 
     #[test]
     fn handle_malice_invalid_accusation() {
+        // Generated with RNG seed: [935566334, 935694090, 88607029, 861330491].
         let mut alice_contents = parse_test_dot_file("alice.dot");
 
-        let a_5_hash = *unwrap!(find_event_by_short_name(
+        let a_4_hash = *unwrap!(find_event_by_short_name(
             alice_contents.events.values(),
-            "A_5"
+            "A_4"
         )).hash();
         let d_1_hash = *unwrap!(find_event_by_short_name(
             alice_contents.events.values(),
@@ -2549,8 +2516,8 @@ mod functional_tests {
         )).hash();
 
         // Create an invalid accusation from Alice
-        let a_6 = Event::<Transaction, _>::new_from_observation(
-            a_5_hash,
+        let a_5 = Event::<Transaction, _>::new_from_observation(
+            a_4_hash,
             Observation::Accusation {
                 offender: PeerId::new("Dave"),
                 malice: Malice::Fork(d_1_hash),
@@ -2558,19 +2525,19 @@ mod functional_tests {
             &alice_contents.events,
             &alice_contents.peer_list,
         );
-        let a_6_hash = *a_6.hash();
-        alice_contents.add_event(a_6);
+        let a_5_hash = *a_5.hash();
+        alice_contents.add_event(a_5);
         let alice = Parsec::from_parsed_contents(alice_contents);
-        assert!(alice.events.contains_key(&a_6_hash));
+        assert!(alice.events.contains_key(&a_5_hash));
 
         let mut carol = Parsec::from_parsed_contents(parse_test_dot_file("carol.dot"));
-        assert!(!carol.events.contains_key(&a_6_hash));
+        assert!(!carol.events.contains_key(&a_5_hash));
 
         // Send gossip from Alice to Carol
         let message = unwrap!(alice.create_gossip(Some(carol.our_pub_id())));
 
         unwrap!(carol.handle_request(alice.our_pub_id(), message));
-        assert!(carol.events.contains_key(&a_6_hash));
+        assert!(carol.events.contains_key(&a_5_hash));
 
         // Verify that Carol detected malice and accused Alice of it.
         let (offender, hash) = unwrap!(
@@ -2584,12 +2551,14 @@ mod functional_tests {
                 }).next()
         );
         assert_eq!(offender, alice.our_pub_id());
-        assert_eq!(*hash, a_6_hash);
+        assert_eq!(*hash, a_5_hash);
     }
 
     #[test]
     fn handle_malice_invalid_gossip_creator() {
-        // Alice reports gossip to Bob from Carol that isn’t in their section.
+        // Generated with RNG seed: [753134140, 4096687351, 2912528994, 2847063513].
+        //
+        // Alice reports gossip to Bob from Carol that isn't in their section.
         let mut alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
         initialise_membership_lists(&mut alice.peer_list);
         let mut bob = Parsec::from_parsed_contents(parse_test_dot_file("bob.dot"));
@@ -2659,36 +2628,32 @@ mod functional_tests {
 
     #[test]
     fn unpolled_and_unconsensused_observations() {
+        // Generated with RNG seed: [3016139397, 1416620722, 2110786801, 3768414447], but using
+        // Alice-002.dot to get the dot file where we get consensus on `Add(Eric)`.
         let mut alice_contents = parse_test_dot_file("alice.dot");
-        let b_17 = unwrap!(alice_contents.remove_latest_event());
+        let a_17 = unwrap!(alice_contents.remove_latest_event());
 
         let mut alice = Parsec::from_parsed_contents(alice_contents);
-        alice.restart_consensus(); // This is needed so the Genesis observation is consensused.
 
-        // `Add(Eric)` should still be unconsensused since B_17 would be the first gossip event to
+        // `Add(Eric)` should still be unconsensused since A_17 would be the first gossip event to
         // reach consensus on `Add(Eric)`, but it was removed from the graph.
         assert!(alice.has_unconsensused_observations());
 
-        // Since we haven't called `poll()` yet, our votes for `Genesis` and `Add(Eric)` should be
-        // returned by `our_unpolled_observations()`.
+        // Since we haven't called `poll()` yet, our vote for `Add(Eric)` should be returned by
+        // `our_unpolled_observations()`.
         let add_eric = Observation::Add(PeerId::new("Eric"));
-        let genesis = Observation::Genesis(mock::create_ids(4).into_iter().collect());
-        {
-            let mut unpolled_observations = alice.our_unpolled_observations();
-            assert_eq!(*unwrap!(unpolled_observations.next()), genesis);
-            assert_eq!(*unwrap!(unpolled_observations.next()), add_eric);
-            assert!(unpolled_observations.next().is_none());
-        }
+        assert_eq!(alice.our_unpolled_observations().count(), 1);
+        assert_eq!(*unwrap!(alice.our_unpolled_observations().next()), add_eric);
 
-        // Call `poll()` and retry - should only return our vote for `Add(Eric)`.
-        unwrap!(alice.poll());
+        // Call `poll()` and retry - should have no effect to unconsensused and unpolled
+        // observations.
         assert!(alice.poll().is_none());
         assert!(alice.has_unconsensused_observations());
         assert_eq!(alice.our_unpolled_observations().count(), 1);
         assert_eq!(*unwrap!(alice.our_unpolled_observations().next()), add_eric);
 
-        // Have Alice process B_17 to get consensus on `Add(Eric)`.
-        unwrap!(alice.add_event(b_17));
+        // Have Alice process A_17 to get consensus on `Add(Eric)`.
+        unwrap!(alice.add_event(a_17));
 
         // Since we haven't call `poll()` again yet, should still return our vote for `Add(Eric)`.
         // However, `has_unconsensused_observations()` should now return false.
@@ -2715,9 +2680,7 @@ mod functional_tests {
         // but has not been returned by `poll()`.
         alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
         unwrap!(alice.vote_for(vote.clone()));
-        alice.restart_consensus(); // `Add(Eric)` is now consensused.
         let mut unpolled_observations = alice.our_unpolled_observations();
-        assert_eq!(*unwrap!(unpolled_observations.next()), genesis);
         assert_eq!(*unwrap!(unpolled_observations.next()), add_eric);
         assert_eq!(*unwrap!(unpolled_observations.next()), vote);
         assert!(unpolled_observations.next().is_none());

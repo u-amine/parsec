@@ -85,7 +85,8 @@
     box_pointers,
     missing_copy_implementations,
     missing_debug_implementations,
-    variant_size_differences
+    variant_size_differences,
+    unused
 )]
 
 #[macro_use]
@@ -95,8 +96,8 @@ extern crate parsec;
 use clap::{App, Arg};
 use parsec::dev_utils::ObservationEvent::*;
 use parsec::dev_utils::{Environment, ObservationSchedule, RngChoice, Schedule, ScheduleOptions};
-use parsec::mock::PeerId;
-use parsec::DIR;
+use parsec::mock::{PeerId, Transaction};
+use parsec::{Observation, DIR};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File};
 use std::io::{self, Read};
@@ -125,7 +126,10 @@ fn main() {
         |env| {
             let obs = ObservationSchedule {
                 genesis: peer_ids!("Alice", "Bob", "Carol", "Dave"),
-                schedule: vec![(0, Fail(PeerId::new("Dave")))],
+                schedule: vec![
+                    (0, Fail(PeerId::new("Dave"))),
+                    (50, Opaque(Transaction::new("ABCD"))),
+                ],
             };
 
             Schedule::from_observation_schedule(env, &ScheduleOptions::default(), obs)
@@ -190,6 +194,7 @@ impl Scenario {
 
         let mut env = Environment::new(self.seed);
         let schedule = (self.schedule_fn)(&mut env);
+        println!("Using {:?}", env.rng);
         let result = env.network.execute_schedule(schedule);
         assert!(result.is_ok(), "{:?}", result);
 

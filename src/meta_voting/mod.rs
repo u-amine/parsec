@@ -14,6 +14,10 @@ mod meta_vote_counts;
 
 #[cfg(test)]
 pub(crate) use self::bool_set::BoolSet;
+#[cfg(test)]
+pub(crate) use self::meta_elections::MetaElection;
 pub(crate) use self::meta_elections::{MetaElectionHandle, MetaElections};
 pub(crate) use self::meta_event::{MetaEvent, MetaEventBuilder};
+#[cfg(feature = "dump-graphs")]
+pub(crate) use self::meta_vote::MetaVotes;
 pub(crate) use self::meta_vote::{MetaVote, Step};

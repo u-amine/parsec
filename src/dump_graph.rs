@@ -9,7 +9,7 @@
 use gossip::Event;
 use hash::Hash;
 use id::SecretId;
-use meta_voting::MetaEvent;
+use meta_voting::MetaElections;
 use network_event::NetworkEvent;
 use peer_list::PeerList;
 use std::collections::BTreeMap;
@@ -33,16 +33,16 @@ pub(crate) fn init() {
 pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
     owner_id: &S::PublicId,
     gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
-    meta_events: &BTreeMap<Hash, MetaEvent<T, S::PublicId>>,
+    meta_elections: &MetaElections<T, S::PublicId>,
     peer_list: &PeerList<S>,
 ) {
-    detail::to_file(owner_id, gossip_graph, meta_events, peer_list)
+    detail::to_file(owner_id, gossip_graph, meta_elections, peer_list)
 }
 #[cfg(not(feature = "dump-graphs"))]
 pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
     _: &S::PublicId,
     _: &BTreeMap<Hash, Event<T, S::PublicId>>,
-    _: &BTreeMap<Hash, MetaEvent<T, S::PublicId>>,
+    _: &MetaElections<T, S::PublicId>,
     _: &PeerList<S>,
 ) {
 }
@@ -55,7 +55,7 @@ mod detail {
     use gossip::Event;
     use hash::Hash;
     use id::{PublicId, SecretId};
-    use meta_voting::MetaEvent;
+    use meta_voting::{MetaElections, MetaEvent, MetaVotes};
     use network_event::NetworkEvent;
     use peer_list::PeerList;
     use rand::{self, Rng};
@@ -64,12 +64,13 @@ mod detail {
     use std::cmp;
     use std::collections::BTreeMap;
     use std::env;
-    use std::fmt::Debug;
+    use std::fmt::{self, Debug};
     use std::fs::{self, File};
-    use std::io::{self, Write};
+    use std::io::{self, BufWriter, Write};
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use std::thread;
+    use vote::Vote;
 
     lazy_static! {
         static ref ROOT_DIR_PREFIX: PathBuf = { env::temp_dir().join("parsec_graphs") };
@@ -108,15 +109,10 @@ mod detail {
     fn catch_dump<T: NetworkEvent, P: PublicId>(
         mut file_path: PathBuf,
         gossip_graph: &BTreeMap<Hash, Event<T, P>>,
-        meta_events: &BTreeMap<Hash, MetaEvent<T, P>>,
+        meta_elections: &MetaElections<T, P>,
     ) {
         if let Some("dev_utils::dot_parser::tests::dot_parser") = thread::current().name() {
-            let meta_votes: BTreeMap<_, _> = meta_events
-                .into_iter()
-                .map(|(hash, me)| (*hash, me.meta_votes.clone()))
-                .collect();
-            let dumped_info = serialise(&(gossip_graph, meta_votes));
-
+            let dumped_info = serialise(&(gossip_graph, meta_elections));
             assert!(file_path.set_extension("core"));
             let mut file = unwrap!(File::create(&file_path));
             unwrap!(file.write_all(&dumped_info));
@@ -130,7 +126,7 @@ mod detail {
     pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
         owner_id: &S::PublicId,
         gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
-        meta_events: &BTreeMap<Hash, MetaEvent<T, S::PublicId>>,
+        meta_elections: &MetaElections<T, S::PublicId>,
         peer_list: &PeerList<S>,
     ) {
         let id = format!("{:?}", owner_id);
@@ -141,30 +137,17 @@ mod detail {
             *count
         });
         let file_path = DIR.with(|dir| dir.join(format!("{}-{:03}.dot", id, call_count)));
-        catch_dump(file_path.clone(), gossip_graph, meta_events);
+        catch_dump(file_path.clone(), gossip_graph, meta_elections);
 
-        if let Ok(mut file) = File::create(&file_path) {
-            let initial_events: Vec<Hash> = gossip_graph
-                .iter()
-                .filter_map(|(hash, event)| {
-                    if event.index_by_creator() == 0 {
-                        Some(*hash)
-                    } else {
-                        None
-                    }
-                }).collect();
-            if let Err(error) = write_gossip_graph_dot(
-                &mut file,
-                gossip_graph,
-                meta_events,
-                peer_list,
-                &initial_events,
-            ) {
-                println!("Error writing to {:?}: {:?}", file_path, error);
+        match DotWriter::new(&file_path, gossip_graph, meta_elections, peer_list) {
+            Ok(mut dot_writer) => {
+                if let Err(error) = dot_writer.write() {
+                    println!("Error writing to {:?}: {:?}", file_path, error);
+                }
             }
-        } else {
-            println!("Failed to create {:?}", file_path);
+            Err(error) => println!("Failed to create {:?}: {:?}", file_path, error),
         }
+
         // Try to generate an SVG file from the dot file, but we don't care about failure here.
         if let Ok(mut child) = Command::new("dot")
             .args(&["-Tsvg", file_path.to_string_lossy().as_ref(), "-O"])
@@ -175,179 +158,6 @@ mod detail {
 
         // Create symlink so it's easier to find the latest graphs.
         let _ = force_symlink_dir(&*ROOT_DIR, ROOT_DIR_PREFIX.join("latest"));
-    }
-
-    fn first_char<D: Debug>(id: &D) -> Option<char> {
-        format!("{:?}", id).chars().next()
-    }
-
-    fn write_self_parents<T: NetworkEvent, P: PublicId>(
-        writer: &mut Write,
-        node: &P,
-        gossip_graph: &BTreeMap<Hash, Event<T, P>>,
-        events: &[&Event<T, P>],
-        positions: &BTreeMap<Hash, u64>,
-    ) -> io::Result<()> {
-        writeln!(writer, "    {:?} [style=invis]", node)?;
-        for event in events {
-            if let Some(self_parent) = event.self_parent() {
-                let parent = if let Some(parent) = gossip_graph.get(self_parent) {
-                    parent
-                } else {
-                    continue;
-                };
-                let event_pos = *positions.get(event.hash()).unwrap_or(&0);
-                let self_parent_pos = *positions.get(parent.hash()).unwrap_or(&0);
-                let minlen = if event_pos > self_parent_pos {
-                    event_pos - self_parent_pos
-                } else {
-                    1
-                };
-                writeln!(
-                    writer,
-                    "    \"{:?}\" -> \"{:?}\" [minlen={}]",
-                    self_parent,
-                    event.hash(),
-                    minlen
-                )?
-            } else {
-                writeln!(
-                    writer,
-                    "    {:?} -> \"{:?}\" [style=invis]",
-                    node,
-                    event.hash()
-                )?
-            }
-        }
-        writeln!(writer)
-    }
-
-    fn write_subgraph<T: NetworkEvent, P: PublicId>(
-        writer: &mut Write,
-        node: &P,
-        gossip_graph: &BTreeMap<Hash, Event<T, P>>,
-        events: &[&Event<T, P>],
-        positions: &BTreeMap<Hash, u64>,
-    ) -> io::Result<()> {
-        writeln!(writer, "    style=invis")?;
-        writeln!(writer, "  subgraph cluster_{:?} {{", node)?;
-        writeln!(writer, "    label={:?}", node)?;
-        write_self_parents(writer, node, gossip_graph, events, positions)?;
-        writeln!(writer)?;
-        writeln!(writer, "  }}")
-    }
-
-    fn write_other_parents<T: NetworkEvent, P: PublicId>(
-        w: &mut Write,
-        events: &[&Event<T, P>],
-    ) -> io::Result<()> {
-        // Write the communications between events
-        for event in events {
-            if let Some(other_event) = event.other_parent() {
-                writeln!(
-                    w,
-                    "  \"{:?}\" -> \"{:?}\" [constraint=false]",
-                    other_event,
-                    event.hash()
-                )?;
-            }
-        }
-        writeln!(w)
-    }
-
-    fn write_nodes<P: PublicId>(writer: &mut Write, nodes: &[P]) -> io::Result<()> {
-        writeln!(writer, "  {{")?;
-        writeln!(writer, "    rank=same")?;
-        for node in nodes {
-            writeln!(writer, "    {:?} [style=filled, color=white]", node)?;
-        }
-        writeln!(writer, "  }}")?;
-
-        // Order the nodes alphabetically
-        let mut peers: Vec<&P> = nodes.iter().collect();
-        peers.sort_by(|lhs, rhs| first_char(lhs).cmp(&first_char(rhs)));
-
-        write!(writer, "  ")?;
-        let mut index = 0;
-        for peer in &peers {
-            write!(writer, "{:?}", peer)?;
-            if index < peers.len() - 1 {
-                write!(writer, " -> ")?;
-                index += 1;
-            }
-        }
-        writeln!(writer, " [style=invis]")
-    }
-
-    fn write_evaluates<T: NetworkEvent, P: PublicId>(
-        writer: &mut Write,
-        gossip_graph: &BTreeMap<Hash, Event<T, P>>,
-        meta_events: &BTreeMap<Hash, MetaEvent<T, P>>,
-        initial_events: &[Hash],
-    ) -> io::Result<()> {
-        writeln!(writer, "/// meta-vote section")?;
-        for (event_hash, event) in gossip_graph.iter() {
-            write!(writer, " \"{:?}\" [", event.hash())?;
-            if meta_events.contains_key(event_hash) {
-                write!(writer, " shape=rectangle, ")?;
-            }
-            write!(writer, "fillcolor=white, label=\"{}", event.short_name())?;
-
-            if let Some(event_payload) = event.vote().map(|vote| vote.payload()) {
-                write!(writer, "\n{:?}", event_payload)?;
-            }
-
-            if let Some(meta_event) = meta_events.get(event_hash) {
-                // Write the `interesting_content` if have
-                if !meta_event.interesting_content.is_empty() {
-                    write!(writer, "\n{:?}", meta_event.interesting_content)?;
-                }
-
-                // Write the `meta_votes` if have
-                if meta_event.meta_votes.len() >= initial_events.len() {
-                    let mut peer_ids: Vec<&P> = meta_event.meta_votes.keys().collect();
-                    peer_ids.sort_by(|lhs, rhs| first_char(lhs).cmp(&first_char(rhs)));
-
-                    for peer in &peer_ids {
-                        if let Some(votes) = meta_event.meta_votes.get(peer) {
-                            if votes.is_empty() {
-                                write!(writer, "\n{}: []", first_char(peer).unwrap_or('?'))?;
-                            } else {
-                                write!(writer, "\n{}: [ ", first_char(peer).unwrap_or('?'))?;
-                                for i in 0..votes.len() {
-                                    if i == votes.len() - 1 {
-                                        write!(writer, "{:?}]", votes[i])?;
-                                    } else {
-                                        writeln!(writer, "{:?}", votes[i])?;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            writeln!(writer, "\"]")?;
-            // Add any styling
-            if meta_events
-                .get(event_hash)
-                .map(|meta_event| !meta_event.interesting_content.is_empty())
-                .unwrap_or(false)
-            {
-                writeln!(
-                    writer,
-                    " \"{:?}\" [shape=rectangle, style=filled, fillcolor=crimson]",
-                    event.hash()
-                )?;
-            } else if event.vote().is_some() {
-                writeln!(
-                    writer,
-                    " \"{:?}\" [shape=rectangle, style=filled, fillcolor=cyan]",
-                    event.hash()
-                )?;
-            }
-        }
-
-        writeln!(writer)
     }
 
     fn parent_pos(
@@ -368,124 +178,8 @@ mod detail {
         }
     }
 
-    fn update_pos<T: NetworkEvent, P: PublicId>(
-        positions: &mut BTreeMap<Hash, u64>,
-        gossip_graph: &BTreeMap<Hash, Event<T, P>>,
-    ) {
-        while positions.len() < gossip_graph.len() {
-            for (hash, event) in gossip_graph.iter() {
-                if !positions.contains_key(hash) {
-                    let self_parent_pos = if let Some(position) =
-                        parent_pos(event.index_by_creator(), event.self_parent(), &positions)
-                    {
-                        position
-                    } else {
-                        continue;
-                    };
-                    let other_parent_pos = if let Some(position) =
-                        parent_pos(event.index_by_creator(), event.other_parent(), &positions)
-                    {
-                        position
-                    } else {
-                        continue;
-                    };
-                    let _ =
-                        positions.insert(*hash, cmp::max(self_parent_pos, other_parent_pos) + 1);
-                    break;
-                }
-            }
-        }
-    }
-
-    fn write_gossip_graph_dot<T: NetworkEvent, S: SecretId>(
-        writer: &mut Write,
-        gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
-        meta_events: &BTreeMap<Hash, MetaEvent<T, S::PublicId>>,
-        peer_list: &PeerList<S>,
-        initial_events: &[Hash],
-    ) -> io::Result<()> {
-        let mut nodes = Vec::new();
-        for initial in initial_events {
-            let initial_event = if let Some(initial_event) = gossip_graph.get(initial) {
-                initial_event
-            } else {
-                continue;
-            };
-            nodes.push(initial_event.creator().clone());
-        }
-
-        let mut positions: BTreeMap<Hash, u64> = BTreeMap::new();
-        update_pos(&mut positions, gossip_graph);
-
-        writeln!(writer, "digraph GossipGraph {{")?;
-        writeln!(writer, "  splines=false")?;
-        writeln!(writer, "  rankdir=BT")?;
-
-        write_peerlist_to_dot(writer, peer_list)?;
-
-        for (hash, event) in gossip_graph {
-            let meta_event = meta_events.get(hash);
-            write_event_to_dot(writer, event, meta_event)?;
-        }
-
-        for node in &nodes {
-            let mut events: Vec<&Event<T, S::PublicId>> = gossip_graph
-                .values()
-                .filter_map(|event| {
-                    if event.creator() == node {
-                        Some(event)
-                    } else {
-                        None
-                    }
-                }).collect();
-            events.sort_by_key(|event| event.index_by_creator());
-            write_subgraph(writer, node, gossip_graph, &events, &positions)?;
-            write_other_parents(writer, &events)?;
-        }
-
-        write_evaluates(writer, gossip_graph, meta_events, initial_events)?;
-
-        write_nodes(writer, &nodes)?;
-        writeln!(writer, "}}")
-    }
-
-    fn write_peerlist_to_dot<S: SecretId>(
-        writer: &mut Write,
-        peer_list: &PeerList<S>,
-    ) -> io::Result<()> {
-        writeln!(writer, "/// our_id: {:?}", peer_list.our_id().public_id())?;
-        let peer_states = peer_list
-            .iter()
-            .map(|(peer_id, peer)| (peer_id, format!("{:?}", peer.state())))
-            .collect::<BTreeMap<_, _>>();
-        writeln!(writer, "/// peer_states: {:?}", peer_states)
-    }
-
-    fn write_event_to_dot<T: NetworkEvent, P: PublicId>(
-        writer: &mut Write,
-        event: &Event<T, P>,
-        meta_event: Option<&MetaEvent<T, P>>,
-    ) -> io::Result<()> {
-        writeln!(writer, "/// {{ {:?}", event.hash())?;
-        event.write_cause_to_dot_format(writer)?;
-
-        if let Some(meta_event) = meta_event {
-            writeln!(
-                writer,
-                "/// interesting_content: {:?}",
-                meta_event.interesting_content
-            )?;
-        } else {
-            writeln!(writer, "/// interesting_content: []",)?;
-        }
-
-        writeln!(writer, "/// last_ancestors: {:?}", event.last_ancestors())?;
-        writeln!(writer, "/// }}")
-    }
-
     fn force_symlink_dir<P: AsRef<Path>, Q: AsRef<Path>>(src: P, dst: Q) -> io::Result<()> {
         use std::io::ErrorKind;
-
         // Try to overwrite the destination if it exists, but only if it is a symlink, to prevent
         // accidental data loss.
         match fs::symlink_metadata(&dst) {
@@ -521,5 +215,551 @@ mod detail {
     #[cfg(windows)]
     fn remove_symlink_dir<P: AsRef<Path>>(path: P) -> io::Result<()> {
         fs::remove_dir(path)
+    }
+
+    fn first_char<D: Debug>(id: &D) -> Option<char> {
+        format!("{:?}", id).chars().next()
+    }
+
+    fn as_short_string(value: Option<bool>) -> &'static str {
+        match value {
+            None => "-",
+            Some(true) => "t",
+            Some(false) => "f",
+        }
+    }
+
+    fn dump_meta_votes<P: PublicId>(meta_votes: &MetaVotes<P>, comment: bool) -> Vec<String> {
+        let mut lines = vec![];
+        if comment {
+            lines.push("  stage est bin aux dec".to_string());
+        } else {
+            lines.push(
+                "<tr><td></td><td width=\"50\">stage</td>\
+                 <td width=\"30\">est</td>\
+                 <td width=\"30\">bin</td>\
+                 <td width=\"30\">aux</td>\
+                 <td width=\"30\">dec</td></tr>"
+                    .to_string(),
+            );
+        }
+        for (peer, meta_votes) in meta_votes {
+            let mut prefix = format!("{}: ", first_char(peer).unwrap_or('?'));
+            for mv in meta_votes {
+                let est = mv.estimates.as_short_string();
+                let bin = mv.bin_values.as_short_string();
+                let aux = as_short_string(mv.aux_value);
+                let dec = as_short_string(mv.decision);
+                let line = if comment {
+                    format!(
+                        "{}{}/{:?}   {}   {}   {}   {} ",
+                        prefix, mv.round, mv.step, est, bin, aux, dec
+                    )
+                } else {
+                    format!(
+                        "<tr><td>{}</td><td>{}/{:?}</td><td>{}</td>\
+                         <td>{}</td><td>{}</td><td>{}</td></tr>",
+                        prefix, mv.round, mv.step, est, bin, aux, dec
+                    )
+                };
+                // we want only the first line to have the prefix
+                // wrapping in an `if` avoids multiple allocations
+                if prefix != "   " {
+                    prefix = "   ".to_string();
+                }
+                lines.push(line);
+            }
+        }
+        lines
+    }
+
+    struct DotWriter<'a, T: NetworkEvent + 'a, S: SecretId + 'a> {
+        file: BufWriter<File>,
+        gossip_graph: &'a BTreeMap<Hash, Event<T, S::PublicId>>,
+        meta_elections: &'a MetaElections<T, S::PublicId>,
+        peer_list: &'a PeerList<S>,
+        indent: usize,
+    }
+
+    impl<'a, T: NetworkEvent + 'a, S: SecretId + 'a> DotWriter<'a, T, S> {
+        const COMMENT: &'static str = "/// ";
+
+        fn new(
+            file_path: &Path,
+            gossip_graph: &'a BTreeMap<Hash, Event<T, S::PublicId>>,
+            meta_elections: &'a MetaElections<T, S::PublicId>,
+            peer_list: &'a PeerList<S>,
+        ) -> io::Result<Self> {
+            File::create(&file_path).map(|file| DotWriter {
+                file: BufWriter::new(file),
+                gossip_graph,
+                meta_elections,
+                peer_list,
+                indent: 0,
+            })
+        }
+
+        fn indentation(&self) -> String {
+            " ".repeat(self.indent)
+        }
+
+        fn indent(&mut self) {
+            self.indent += 2;
+        }
+
+        fn dedent(&mut self) {
+            self.indent -= 2;
+        }
+
+        fn hash_to_short_name(&self, hash: &Hash) -> Option<String> {
+            self.gossip_graph.get(hash).map(|event| event.short_name())
+        }
+
+        fn writeln(&mut self, args: fmt::Arguments) -> io::Result<()> {
+            writeln!(self.file, "{}", args)
+        }
+
+        fn write(&mut self) -> io::Result<()> {
+            self.write_peer_list()?;
+
+            self.writeln(format_args!("digraph GossipGraph {{"))?;
+            self.writeln(format_args!("  splines=false"))?;
+            self.writeln(format_args!("  rankdir=BT\n"))?;
+
+            let positions = self.calculate_positions();
+            for peer_id in self.peer_list.all_ids() {
+                self.write_subgraph(peer_id, &positions)?;
+                self.write_other_parents(peer_id)?;
+            }
+
+            self.write_peers()?;
+
+            self.writeln(format_args!("/// ===== details of events ====="))?;
+            for peer_id in self.peer_list.all_ids() {
+                self.write_event_details(peer_id)?;
+            }
+            self.writeln(format_args!("}}\n"))?;
+
+            self.write_meta_elections()?;
+
+            Ok(())
+        }
+
+        fn write_peer_list(&mut self) -> io::Result<()> {
+            let indent = self.indentation();
+            self.writeln(format_args!(
+                "{}{}our_id: {:?}",
+                Self::COMMENT,
+                indent,
+                self.peer_list.our_id().public_id()
+            ))?;
+            self.writeln(format_args!("{}{}peer_list: {{", Self::COMMENT, indent,))?;
+            self.indent();
+            let indent = self.indentation();
+            for (peer_id, peer) in self.peer_list.iter() {
+                self.writeln(format_args!(
+                    "{}{}{:?}; {:?}; peers: {:?}",
+                    Self::COMMENT,
+                    indent,
+                    peer_id,
+                    peer.state(),
+                    peer.membership_list(),
+                ))?;
+            }
+            self.dedent();
+            let indent = self.indentation();
+            self.writeln(format_args!("{}{}}}", Self::COMMENT, indent))
+        }
+
+        fn calculate_positions(&self) -> BTreeMap<Hash, u64> {
+            let mut positions = BTreeMap::new();
+            while positions.len() < self.gossip_graph.len() {
+                for (hash, event) in self.gossip_graph.iter() {
+                    if !positions.contains_key(hash) {
+                        let self_parent_pos = if let Some(position) =
+                            parent_pos(event.index_by_creator(), event.self_parent(), &positions)
+                        {
+                            position
+                        } else {
+                            continue;
+                        };
+                        let other_parent_pos = if let Some(position) =
+                            parent_pos(event.index_by_creator(), event.other_parent(), &positions)
+                        {
+                            position
+                        } else {
+                            continue;
+                        };
+                        let _ = positions
+                            .insert(*hash, cmp::max(self_parent_pos, other_parent_pos) + 1);
+                        break;
+                    }
+                }
+            }
+            positions
+        }
+
+        fn write_subgraph(
+            &mut self,
+            peer_id: &S::PublicId,
+            positions: &BTreeMap<Hash, u64>,
+        ) -> io::Result<()> {
+            self.writeln(format_args!("  style=invis"))?;
+            self.writeln(format_args!("  subgraph cluster_{:?} {{", peer_id))?;
+            self.writeln(format_args!("    label={:?}", peer_id))?;
+            self.writeln(format_args!("    {:?} [style=invis]", peer_id))?;
+            self.write_self_parents(peer_id, positions)?;
+            self.writeln(format_args!("  }}"))
+        }
+
+        fn write_self_parents(
+            &mut self,
+            peer_id: &S::PublicId,
+            positions: &BTreeMap<Hash, u64>,
+        ) -> io::Result<()> {
+            let mut lines = vec![];
+            for event in self
+                .peer_list
+                .peer_events(peer_id)
+                .filter_map(|hash| self.gossip_graph.get(hash))
+            {
+                let (before_arrow, suffix) = match event.self_parent() {
+                    None => (format!("\"{:?}\"", peer_id), "[style=invis]".to_string()),
+                    Some(parent_hash) => {
+                        let event_pos = *positions.get(event.hash()).unwrap_or(&0);
+                        let parent_pos = *positions.get(parent_hash).unwrap_or(&0);
+                        let minlen = if event_pos > parent_pos {
+                            event_pos - parent_pos
+                        } else {
+                            1
+                        };
+                        (
+                            format!("\"{}\"", unwrap!(self.hash_to_short_name(parent_hash))),
+                            format!("[minlen={}]", minlen),
+                        )
+                    }
+                };
+                lines.push(format!(
+                    "    {} -> \"{}\" {}",
+                    before_arrow,
+                    event.short_name(),
+                    suffix
+                ));
+            }
+            if !lines.is_empty() {
+                self.writeln(format_args!("{}", lines.join("\n")))?;
+            }
+            Ok(())
+        }
+
+        fn write_other_parents(&mut self, peer_id: &S::PublicId) -> io::Result<()> {
+            let mut lines = vec![];
+            for event in self
+                .peer_list
+                .peer_events(peer_id)
+                .filter_map(|hash| self.gossip_graph.get(hash))
+            {
+                if let Some(other_parent) = event
+                    .other_parent()
+                    .and_then(|other_hash| self.gossip_graph.get(other_hash))
+                {
+                    lines.push(format!(
+                        "  \"{}\" -> \"{}\" [constraint=false]",
+                        other_parent.short_name(),
+                        event.short_name()
+                    ));
+                }
+            }
+            self.writeln(format_args!("{}", lines.join("\n")))?;
+            self.writeln(format_args!(""))
+        }
+
+        fn write_peers(&mut self) -> io::Result<()> {
+            self.writeln(format_args!("  {{"))?;
+            self.writeln(format_args!("    rank=same"))?;
+            let mut peer_ids = self.peer_list.all_ids().collect::<Vec<_>>();
+            for peer_id in &peer_ids {
+                self.writeln(format_args!(
+                    "    {:?} [style=filled, color=white]",
+                    peer_id
+                ))?;
+            }
+            self.writeln(format_args!("  }}"))?;
+
+            let mut peer_order = String::new();
+            let last_peer_id = peer_ids.pop();
+            for peer_id in peer_ids {
+                peer_order.push_str(&format!("{:?} -> ", peer_id));
+            }
+            if let Some(peer_id) = last_peer_id {
+                peer_order.push_str(&format!("{:?} [style=invis]", peer_id));
+            }
+            self.writeln(format_args!("  {}\n", peer_order))
+        }
+
+        fn write_event_details(&mut self, peer_id: &S::PublicId) -> io::Result<()> {
+            let current_meta_events = self.meta_elections.current_meta_events();
+            for event_hash in self.peer_list.peer_events(peer_id) {
+                if let Some(event) = self.gossip_graph.get(event_hash) {
+                    let attr = EventAttributes::new(event, current_meta_events.get(event_hash));
+                    self.writeln(format_args!(
+                        "  \"{}\" {}",
+                        event.short_name(),
+                        attr.to_string()
+                    ))?;
+                    event.write_to_dot_format(&mut self.file)?;
+                    self.writeln(format_args!(""))?;
+                }
+            }
+            Ok(())
+        }
+
+        fn write_meta_elections(&mut self) -> io::Result<()> {
+            let indent = self.indentation();
+            self.writeln(format_args!(
+                "{}{}===== meta-elections =====",
+                Self::COMMENT,
+                indent
+            ))?;
+            let mut lines = vec![];
+            lines.push(format!(
+                "{}{}consensus_history:",
+                Self::COMMENT,
+                self.indentation()
+            ));
+            for hash in self.meta_elections.consensus_history() {
+                lines.push(format!(
+                    "{}{}{}",
+                    Self::COMMENT,
+                    self.indentation(),
+                    hash.as_full_string()
+                ));
+            }
+            for handle in self.meta_elections.all() {
+                let election = unwrap!(self.meta_elections.get(handle));
+                lines.push("".to_string());
+                lines.push(format!(
+                    "{}{}{:?}",
+                    Self::COMMENT,
+                    self.indentation(),
+                    handle
+                ));
+                lines.push(format!(
+                    "{}{}consensus_len: {}",
+                    Self::COMMENT,
+                    self.indentation(),
+                    election.consensus_len
+                ));
+
+                // write round hashes
+                lines.push(format!(
+                    "{}{}round_hashes: {{",
+                    Self::COMMENT,
+                    self.indentation()
+                ));
+                self.indent();
+                for (peer, hashes) in &election.round_hashes {
+                    lines.push(format!(
+                        "{}{}{:?} -> [",
+                        Self::COMMENT,
+                        self.indentation(),
+                        peer
+                    ));
+                    self.indent();
+                    for hash in hashes {
+                        lines.push(format!(
+                            "{}{}RoundHash {{ round: {}, latest_block_hash: {} }}",
+                            Self::COMMENT,
+                            self.indentation(),
+                            hash.round(),
+                            hash.latest_block_hash().as_full_string(),
+                        ));
+                    }
+                    self.dedent();
+                    lines.push(format!("{}{}]", Self::COMMENT, self.indentation()));
+                }
+                self.dedent();
+                lines.push(format!("{}{}}}", Self::COMMENT, self.indentation()));
+
+                // write interesting events
+                lines.push(format!(
+                    "{}{}interesting_events: {{",
+                    Self::COMMENT,
+                    self.indentation()
+                ));
+                self.indent();
+                for (peer, events) in &election.interesting_events {
+                    let event_names: Vec<String> = events
+                        .iter()
+                        .filter_map(|hash| self.hash_to_short_name(hash))
+                        .collect();
+                    lines.push(format!(
+                        "{}{}{:?} -> {:?}",
+                        Self::COMMENT,
+                        self.indentation(),
+                        peer,
+                        event_names
+                    ));
+                }
+                self.dedent();
+                lines.push(format!("{}{}}}", Self::COMMENT, self.indentation()));
+
+                // write all voters
+                lines.push(format!(
+                    "{}{}all_voters: {:?}",
+                    Self::COMMENT,
+                    self.indentation(),
+                    &election.all_voters
+                ));
+
+                // write undecided voters
+                lines.push(format!(
+                    "{}{}undecided_voters: {:?}",
+                    Self::COMMENT,
+                    self.indentation(),
+                    &election.undecided_voters
+                ));
+
+                // write payload
+                if let Some(ref payload) = election.payload {
+                    lines.push(format!(
+                        "{}{}payload: {:?}",
+                        Self::COMMENT,
+                        self.indentation(),
+                        payload
+                    ));
+                }
+
+                // write meta-events
+                lines.push(format!(
+                    "{}{}meta_events: {{",
+                    Self::COMMENT,
+                    self.indentation()
+                ));
+                self.indent();
+                // sort by creator, then index
+                let meta_events = election
+                    .meta_events
+                    .iter()
+                    .map(|(hash, mev)| {
+                        let event = unwrap!(self.gossip_graph.get(hash));
+                        let creator_and_index = (event.creator(), event.index_by_creator());
+                        let short_name_and_mev = (event.short_name(), mev);
+                        (creator_and_index, short_name_and_mev)
+                    }).collect::<BTreeMap<_, _>>();
+
+                for (short_name, mev) in meta_events.values() {
+                    lines.push(format!(
+                        "{}{}{} -> {{",
+                        Self::COMMENT,
+                        self.indentation(),
+                        short_name
+                    ));
+                    self.indent();
+                    lines.push(format!(
+                        "{}{}observees: {:?}",
+                        Self::COMMENT,
+                        self.indentation(),
+                        mev.observees
+                    ));
+                    lines.push(format!(
+                        "{}{}interesting_content: {:?}",
+                        Self::COMMENT,
+                        self.indentation(),
+                        mev.interesting_content
+                    ));
+
+                    if !mev.meta_votes.is_empty() {
+                        lines.push(format!(
+                            "{}{}meta_votes: {{",
+                            Self::COMMENT,
+                            self.indentation()
+                        ));
+                        self.indent();
+                        lines.extend(
+                            dump_meta_votes(&mev.meta_votes, true)
+                                .into_iter()
+                                .map(|s| format!("{}{}{}", Self::COMMENT, self.indentation(), s)),
+                        );
+                        self.dedent();
+                        lines.push(format!("{}{}}}", Self::COMMENT, self.indentation()));
+                    }
+                    self.dedent();
+
+                    lines.push(format!("{}{}}}", Self::COMMENT, self.indentation()));
+                }
+                self.dedent();
+                lines.push(format!("{}{}}}", Self::COMMENT, self.indentation()));
+            }
+            self.writeln(format_args!("{}", lines.join("\n")))?;
+            Ok(())
+        }
+    }
+
+    struct EventAttributes {
+        label: String,
+        fillcolor: &'static str,
+        is_rectangle: bool,
+    }
+
+    impl EventAttributes {
+        fn new<T: NetworkEvent, P: PublicId>(
+            event: &Event<T, P>,
+            opt_meta_event: Option<&MetaEvent<T, P>>,
+        ) -> Self {
+            let mut attr = EventAttributes {
+                fillcolor: "fillcolor=white",
+                is_rectangle: false,
+                label: event.short_name(),
+            };
+
+            attr.label = format!(
+                "<table border=\"0\" cellborder=\"0\" \
+                 cellpadding=\"0\" cellspacing=\"0\">\n\
+                 <tr><td colspan=\"6\">{}</td></tr>\n",
+                attr.label
+            );
+
+            if let Some(event_payload) = event.vote().map(Vote::payload) {
+                attr.label = format!(
+                    "{}<tr><td colspan=\"6\">{:?}</td></tr>\n",
+                    attr.label, event_payload
+                );
+                attr.fillcolor = "style=filled, fillcolor=cyan";
+                attr.is_rectangle = true;
+            }
+
+            if let Some(meta_event) = opt_meta_event {
+                if !meta_event.interesting_content.is_empty() {
+                    attr.label = format!(
+                        "{}<tr><td colspan=\"6\">{:?}</td></tr>",
+                        attr.label, meta_event.interesting_content
+                    );
+                    attr.fillcolor = "style=filled, fillcolor=crimson";
+                    attr.is_rectangle = true;
+                }
+                if !meta_event.meta_votes.is_empty() {
+                    let meta_votes = dump_meta_votes(&meta_event.meta_votes, false).join("\n");
+                    attr.label = format!("{}{}", attr.label, meta_votes);
+                }
+                attr.is_rectangle = true;
+            }
+
+            attr.label = format!("{}</table>", attr.label);
+            attr
+        }
+
+        fn to_string(&self) -> String {
+            format!(
+                "[{}, {}label=<{}>]",
+                self.fillcolor,
+                if self.is_rectangle {
+                    "shape=rectangle, "
+                } else {
+                    ""
+                },
+                self.label
+            )
+        }
     }
 }
