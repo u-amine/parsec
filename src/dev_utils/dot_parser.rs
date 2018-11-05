@@ -579,6 +579,7 @@ impl ParsedContents {
         Some(event)
     }
 
+    #[cfg(feature = "malice-detection")]
     /// Insert event into the `ParsedContents`. Note this does not perform any validations whatsoever,
     /// so this is useful for simulating all kinds of invalid or malicious situations.
     pub fn add_event(&mut self, event: Event<Transaction, PeerId>) {

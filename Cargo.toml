@@ -33,6 +33,7 @@ proptest = "~0.8.6"
 dump-graphs = []
 testing = ["maidsafe_utilities/testing", "proptest"]
 default = ["safe_crypto/mock"]
+malice-detection = []
 
 [[bench]]
 name = "bench"
