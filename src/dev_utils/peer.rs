@@ -10,7 +10,7 @@ use super::Observation;
 use block::Block;
 use mock::{PeerId, Transaction};
 use observation::{Malice, Observation as ParsecObservation};
-use parsec::{self, Parsec};
+use parsec::{IsInterestingEventFn, Parsec};
 use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
@@ -33,29 +33,29 @@ pub struct Peer {
 }
 
 impl Peer {
-    pub fn new(id: PeerId, genesis_group: &BTreeSet<PeerId>) -> Self {
+    pub fn from_genesis(
+        id: PeerId,
+        genesis_group: &BTreeSet<PeerId>,
+        is_interesting_event: IsInterestingEventFn<PeerId>,
+    ) -> Self {
         Self {
             id: id.clone(),
-            parsec: Parsec::from_genesis(id, genesis_group, parsec::is_supermajority),
+            parsec: Parsec::from_genesis(id, genesis_group, is_interesting_event),
             blocks: vec![],
             status: PeerStatus::Active,
             votes_to_make: vec![],
         }
     }
 
-    pub fn new_joining(
+    pub fn from_existing(
         id: PeerId,
-        current_group: &BTreeSet<PeerId>,
         genesis_group: &BTreeSet<PeerId>,
+        current_group: &BTreeSet<PeerId>,
+        is_interesting_event: IsInterestingEventFn<PeerId>,
     ) -> Self {
         Self {
             id: id.clone(),
-            parsec: Parsec::from_existing(
-                id,
-                genesis_group,
-                current_group,
-                parsec::is_supermajority,
-            ),
+            parsec: Parsec::from_existing(id, genesis_group, current_group, is_interesting_event),
             blocks: vec![],
             status: PeerStatus::Pending,
             votes_to_make: vec![],
