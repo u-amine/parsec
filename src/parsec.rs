@@ -1427,6 +1427,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.detect_incorrect_genesis(event)?;
 
         self.detect_other_parent_by_same_creator(event)?;
+        self.detect_self_parent_by_different_creator(event)?;
 
         self.detect_unexpected_genesis(event);
         self.detect_missing_genesis(event);
@@ -1476,6 +1477,28 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.create_accusation_event(
             event.creator().clone(),
             Malice::OtherParentBySameCreator(Box::new(event.pack())),
+        )?;
+        Err(Error::InvalidEvent)
+    }
+
+    // Detect if the event's self_parent has the different creator as this event.
+    fn detect_self_parent_by_different_creator(
+        &mut self,
+        event: &Event<T, S::PublicId>,
+    ) -> Result<()> {
+        if let Some(self_parent) = self.self_parent(event) {
+            if self_parent.creator() == event.creator() {
+                return Ok(());
+            }
+        } else {
+            return Ok(());
+        }
+
+        // Raise the accusation immediately and return an error, to prevent accepting
+        // potentially large number of invalid / spam events into our graph.
+        self.create_accusation_event(
+            event.creator().clone(),
+            Malice::SelfParentByDifferentCreator(Box::new(event.pack())),
         )?;
         Err(Error::InvalidEvent)
     }
