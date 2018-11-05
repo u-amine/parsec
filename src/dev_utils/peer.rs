@@ -74,8 +74,8 @@ impl Peer {
 
     fn make_active_if_added(&mut self, block: &Block<Transaction, PeerId>) {
         if self.status == PeerStatus::Pending {
-            if let ParsecObservation::Add(ref peer) = *block.payload() {
-                if self.id == *peer {
+            if let ParsecObservation::Add { ref peer_id, .. } = *block.payload() {
+                if self.id == *peer_id {
                     self.status = PeerStatus::Active;
                 }
             }

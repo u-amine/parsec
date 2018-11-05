@@ -638,8 +638,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         observation: &Observation<T, S::PublicId>,
     ) -> PostConsensusAction {
         match *observation {
-            Observation::Add(ref peer_id) => self.handle_add_peer(peer_id),
-            Observation::Remove(ref peer_id) => self.handle_remove_peer(peer_id),
+            Observation::Add { ref peer_id, .. } => self.handle_add_peer(peer_id),
+            Observation::Remove { ref peer_id, .. } => self.handle_remove_peer(peer_id),
             Observation::Accusation {
                 ref offender,
                 ref malice,
@@ -723,10 +723,16 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         );
 
         match *payload {
-            Observation::Add(ref other_peer_id) => self
+            Observation::Add {
+                peer_id: ref other_peer_id,
+                ..
+            } => self
                 .peer_list
                 .add_to_peer_membership_list(peer_id, other_peer_id.clone()),
-            Observation::Remove(ref other_peer_id) => self
+            Observation::Remove {
+                peer_id: ref other_peer_id,
+                ..
+            } => self
                 .peer_list
                 .remove_from_peer_membership_list(peer_id, other_peer_id.clone()),
             Observation::Accusation { ref offender, .. } => self
@@ -2170,7 +2176,10 @@ mod functional_tests {
 
         // Since we haven't called `poll()` yet, our vote for `Add(Eric)` should be returned by
         // `our_unpolled_observations()`.
-        let add_eric = Observation::Add(PeerId::new("Eric"));
+        let add_eric = Observation::Add {
+            peer_id: PeerId::new("Eric"),
+            related_info: vec![],
+        };
         assert_eq!(alice.our_unpolled_observations().count(), 1);
         assert_eq!(*unwrap!(alice.our_unpolled_observations().next()), add_eric);
 
