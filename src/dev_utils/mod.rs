@@ -12,6 +12,7 @@ mod dot_parser;
 mod environment;
 mod network;
 mod peer;
+#[cfg(feature = "testing")]
 pub mod proptest;
 mod schedule;
 

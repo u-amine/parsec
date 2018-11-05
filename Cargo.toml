@@ -21,19 +21,24 @@ serde = "~1.0.66"
 serde_derive = "~1.0.66"
 tiny-keccak = "~1.4.2"
 unwrap = "~1.2.0"
-safe_crypto = "~0.4.0"
+safe_crypto = { version = "~0.4.0", optional = true }
 
 [dev-dependencies]
 clap = "~2.31.2"
 criterion = "~0.2.5"
 pom = "~1.1.0"
-proptest = "~0.8.6"
+safe_crypto = "~0.4.0"
 
 [features]
 dump-graphs = []
-testing = ["maidsafe_utilities/testing", "proptest"]
-default = ["safe_crypto/mock"]
+mock = ["safe_crypto/mock"]
+testing = ["maidsafe_utilities/testing", "proptest", "mock"]
 malice-detection = []
+
+[[example]]
+name = "basic"
+path = "examples/basic.rs"
+required-features = ["mock"]
 
 [[bench]]
 name = "bench"

@@ -60,6 +60,7 @@
     variant_size_differences
 )]
 
+#[cfg(any(test, feature = "dump-graphs", feature = "mock"))]
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
@@ -68,11 +69,12 @@ extern crate log;
 extern crate maidsafe_utilities;
 #[cfg(test)]
 extern crate pom;
-#[cfg(any(test, feature = "testing"))]
+#[cfg(feature = "testing")]
 #[macro_use]
 extern crate proptest as proptest_crate;
 #[macro_use]
 extern crate quick_error;
+#[cfg(any(test, feature = "dump-graphs", feature = "mock"))]
 extern crate rand;
 extern crate serde;
 #[macro_use]
@@ -81,6 +83,7 @@ extern crate tiny_keccak;
 #[cfg(any(test, feature = "testing", feature = "dump-graphs"))]
 #[macro_use]
 extern crate unwrap;
+#[cfg(any(test, feature = "mock"))]
 extern crate safe_crypto;
 
 mod block;
@@ -107,6 +110,7 @@ pub mod dev_utils;
 /// This can be used to swap proper cryptographic functionality for inexpensive (in some cases
 /// no-op) replacements.  This is useful to allow tests to run quickly, but should not be used
 /// outside of testing code.
+#[cfg(any(test, feature = "mock"))]
 pub mod mock;
 
 pub use block::Block;
