@@ -233,12 +233,15 @@ fn random_schedule_no_delays() {
 }
 
 #[test]
-fn add_peers() {
+fn add_many_peers() {
     let mut env = Environment::new(SEED);
+
     let schedule = Schedule::new(
         &mut env,
         &ScheduleOptions {
-            peers_to_add: 2,
+            genesis_size: 2,
+            peers_to_add: 8,
+            opaque_to_add: 0,
             ..Default::default()
         },
     );
@@ -247,7 +250,7 @@ fn add_peers() {
 }
 
 #[test]
-fn add_peers_and_vote() {
+fn add_few_peers_and_vote() {
     use parsec::dev_utils::ObservationEvent::*;
 
     let mut names = NAMES.iter();
@@ -267,6 +270,23 @@ fn add_peers_and_vote() {
 
     let schedule =
         Schedule::from_observation_schedule(&mut env, &ScheduleOptions::default(), obs_schedule);
+
+    unwrap!(env.network.execute_schedule(schedule));
+}
+
+#[test]
+fn add_many_peers_and_vote() {
+    let mut env = Environment::new(SEED);
+
+    let schedule = Schedule::new(
+        &mut env,
+        &ScheduleOptions {
+            genesis_size: 2,
+            peers_to_add: 8,
+            opaque_to_add: 10,
+            ..Default::default()
+        },
+    );
 
     unwrap!(env.network.execute_schedule(schedule));
 }

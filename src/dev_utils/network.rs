@@ -13,7 +13,7 @@ use block::Block;
 use error::Error;
 use gossip::{Request, Response};
 use mock::{PeerId, Transaction};
-use observation::Observation as ParsecObservation;
+use observation::{Malice, Observation as ParsecObservation};
 use parsec::is_supermajority;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -62,6 +62,11 @@ pub enum ConsensusError {
     TooFewSignatures {
         observation: Observation,
         signatures: BTreeSet<PeerId>,
+    },
+    InvalidAccusation {
+        accuser: PeerId,
+        accused: PeerId,
+        malice: Malice<Transaction, PeerId>,
     },
 }
 
@@ -118,7 +123,7 @@ impl Network {
         }
     }
 
-    fn peer(&mut self, id: &PeerId) -> &Peer {
+    fn peer(&self, id: &PeerId) -> &Peer {
         unwrap!(self.peers.get(id))
     }
 
@@ -290,6 +295,22 @@ impl Network {
         Ok(())
     }
 
+    /// Check that no node has been accused of malice.
+    fn check_invalid_accusations(&self, peer_id: &PeerId) -> Result<(), ConsensusError> {
+        let peer = self.peer(peer_id);
+
+        let invalid_accusation = peer.unpolled_accusations().next();
+        if let Some((offender, malice)) = invalid_accusation {
+            return Err(ConsensusError::InvalidAccusation {
+                accuser: peer.id.clone(),
+                accused: offender.clone(),
+                malice: malice.clone(),
+            });
+        } else {
+            Ok(())
+        }
+    }
+
     /// Simulates the network according to the given schedule
     pub fn execute_schedule(&mut self, schedule: Schedule) -> Result<(), ConsensusError> {
         let Schedule {
@@ -335,6 +356,8 @@ impl Network {
                     self.peer_mut(&peer).make_votes();
                     self.handle_messages(&peer, global_step);
                     self.peer_mut(&peer).poll();
+                    self.check_invalid_accusations(&peer)?;
+
                     if let RequestTiming::DuringThisStep(req) = request_timing {
                         match self.peer(&peer).parsec.create_gossip(Some(&req.recipient)) {
                             Ok(request) => {

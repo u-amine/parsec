@@ -21,7 +21,7 @@ use network_event::NetworkEvent;
 use observation::{Malice, Observation};
 use peer_list::{PeerList, PeerState};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::{iter, mem, u64};
+use std::{mem, u64};
 use vote::Vote;
 
 pub type IsInterestingEventFn<P> =
@@ -155,7 +155,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         for peer_id in genesis_group {
             parsec
                 .peer_list
-                .add_peer(peer_id.clone(), PeerState::VOTE | PeerState::SEND)
+                .add_peer(peer_id.clone(), PeerState::VOTE | PeerState::SEND);
+            parsec
+                .peer_list
+                .initialise_peer_membership_list(peer_id, genesis_group.iter().cloned());
         }
 
         // Add the current section members.
@@ -165,16 +168,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             }
 
             parsec.peer_list.add_peer(peer_id.clone(), PeerState::SEND)
-        }
-
-        // Initialise everyone's membership list.
-        for peer_id in iter::once(&our_public_id)
-            .chain(genesis_group)
-            .chain(section)
-        {
-            parsec
-                .peer_list
-                .initialise_peer_membership_list(peer_id, genesis_group.iter().cloned())
         }
 
         parsec
@@ -1460,6 +1453,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             &self.events,
             &self.peer_list,
         );
+
         self.add_event(event)
     }
 
@@ -1716,10 +1710,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 return;
             };
 
-            let parent = if let Some(parent) = self.self_parent(event) {
+            let other_parent = if let Some(parent) = self.other_parent(event) {
                 parent
             } else {
-                // Must be the initial event, so there is nothing to detect.
                 return;
             };
 
@@ -1735,28 +1728,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 return;
             };
 
-            // Find an event X created by someone that the creator of `event` should not know about,
-            // where X is seen by `event` but not seen by `event`'s parent. If there is such an
-            // event, we raise the accusation.
-            //
-            // The reason why we filter out events seen by the parent is to prevent spamming
-            // accusations of the same malice.
-            let detected = self
-                .peer_list
-                .all_ids()
-                .filter(|peer_id| !membership_list.contains(peer_id))
-                .filter_map(|peer_id| {
-                    event
-                        .last_ancestors()
-                        .get(peer_id)
-                        .map(|index| (peer_id, *index))
-                }).flat_map(|(peer_id, index)| self.peer_list.events_by_index(peer_id, index))
-                .filter_map(|hash| self.get_known_event(hash).ok())
-                .any(|invalid_event| !parent.is_descendant_of(invalid_event));
-            if detected {
-                Some(event.creator().clone())
-            } else {
+            if membership_list.contains(other_parent.creator()) {
                 None
+            } else {
+                Some(event.creator().clone())
             }
         };
 
