@@ -1798,6 +1798,13 @@ impl Parsec<Transaction, PeerId> {
             }
         }
 
+        for consensused in parsed_contents.meta_elections.consensus_history() {
+            let _ = parsec
+                .observations
+                .get_mut(consensused)
+                .map(|info| info.consensused = true);
+        }
+
         parsec.events = parsed_contents.events;
         parsec.meta_elections = parsed_contents.meta_elections;
         parsec.peer_list = parsed_contents.peer_list;
