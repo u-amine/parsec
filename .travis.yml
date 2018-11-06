@@ -31,6 +31,9 @@ script:
     cargo clippy --verbose --all-targets --features=testing,malice-detection &&
     cargo clippy --verbose --all-targets --features=dump-graphs,testing &&
     cargo clippy --verbose --all-targets --features=dump-graphs,testing,malice-detection &&
+    cargo clippy --verbose --all-targets --features=mock &&
+    cargo clippy --verbose --all-targets --features=mock,dump-graphs &&
+    cargo clippy --verbose --all-targets --features=mock,dump-graphs,malice-detection &&
     cargo clippy --verbose --manifest-path=dot_gen/Cargo.toml
 before_cache:
  - cargo prune
