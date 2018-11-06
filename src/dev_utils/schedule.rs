@@ -562,14 +562,17 @@ impl Schedule {
             for observation in obs_for_step {
                 match observation {
                     ObservationEvent::AddPeer(new_peer) => {
+                        let observation = ParsecObservation::Add(new_peer.clone());
+
                         peers.add_peer(new_peer.clone());
                         pending.peers_make_observation(
                             &mut env.rng,
                             peers.active_peers(),
                             step,
-                            &ParsecObservation::Add(new_peer.clone()),
+                            &observation,
                         );
                         schedule.push(ScheduleEvent::AddPeer(new_peer.clone()));
+
                         // vote for all observations that were made before this peer joined
                         // this prevents situations in which peers joining reach consensus before
                         // some other observations they haven't seen, which cause those
@@ -584,16 +587,22 @@ impl Schedule {
                                 obs,
                             );
                         }
+
+                        observations_made.push(observation);
                     }
                     ObservationEvent::RemovePeer(peer) => {
+                        let observation = ParsecObservation::Remove(peer.clone());
+
                         peers.remove_peer(&peer);
                         pending.peers_make_observation(
                             &mut env.rng,
                             peers.active_peers(),
                             step,
-                            &ParsecObservation::Remove(peer.clone()),
+                            &observation,
                         );
                         schedule.push(ScheduleEvent::RemovePeer(peer));
+
+                        observations_made.push(observation);
                     }
                     ObservationEvent::Opaque(payload) => {
                         let observation = ParsecObservation::OpaquePayload(payload);

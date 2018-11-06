@@ -9,7 +9,7 @@
 use super::Observation;
 use block::Block;
 use mock::{PeerId, Transaction};
-use observation::Observation as ParsecObservation;
+use observation::{Malice, Observation as ParsecObservation};
 use parsec::{self, Parsec};
 use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
@@ -97,6 +97,22 @@ impl Peer {
     /// Returns the payloads of `self.blocks` in the order in which they were returned by `poll()`.
     pub fn blocks_payloads(&self) -> Vec<&Observation> {
         self.blocks.iter().map(Block::payload).collect()
+    }
+
+    /// Returns iterator over all accusations raised by this peer that haven't been retrieved by
+    /// `poll` yet.
+    pub fn unpolled_accusations(
+        &self,
+    ) -> impl Iterator<Item = (&PeerId, &Malice<Transaction, PeerId>)> {
+        self.parsec
+            .our_unpolled_observations()
+            .filter_map(|observation| match *observation {
+                ParsecObservation::Accusation {
+                    ref offender,
+                    ref malice,
+                } => Some((offender, malice)),
+                _ => None,
+            })
     }
 }
 
