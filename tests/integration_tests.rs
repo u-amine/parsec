@@ -66,13 +66,14 @@ extern crate unwrap;
 use maidsafe_utilities::log;
 use parsec::dev_utils::proptest::{arbitrary_delay, ScheduleOptionsStrategy, ScheduleStrategy};
 use parsec::dev_utils::{
-    DelayDistribution, Environment, ObservationSchedule, RngChoice, Schedule, ScheduleOptions,
+    DelayDistribution, Environment, ObservationSchedule, RngChoice, Sampling, Schedule,
+    ScheduleOptions,
 };
 use parsec::mock::{PeerId, Transaction, NAMES};
 use proptest::prelude::ProptestConfig;
 use proptest::test_runner::FileFailurePersistence;
 use rand::Rng;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 // Alter the seed here to reproduce failures
 static SEED: RngChoice = RngChoice::SeededRandom;
@@ -356,6 +357,29 @@ fn fail_add_remove() {
 
     let result = env.network.execute_schedule(schedule);
     assert!(result.is_ok(), "{:?}", result);
+}
+
+#[test]
+#[ignore]
+fn custom_is_interesting_event_that_requires_only_one_vote() {
+    fn at_least_one(did_vote: &BTreeSet<PeerId>, can_vote: &BTreeSet<PeerId>) -> bool {
+        did_vote.intersection(can_vote).next().is_some()
+    }
+
+    let mut env = Environment::with_is_interesting_event(SEED, at_least_one);
+    let schedule = Schedule::new(
+        &mut env,
+        &ScheduleOptions {
+            genesis_size: 4,
+            peers_to_add: 4,
+            peers_to_remove: 4,
+            opaque_to_add: 10,
+            opaque_voters: Sampling::Constant(1),
+            ..Default::default()
+        },
+    );
+
+    unwrap!(env.network.execute_schedule(schedule));
 }
 
 proptest! {

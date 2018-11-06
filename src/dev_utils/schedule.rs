@@ -13,6 +13,7 @@ use super::{PeerStatus, PeerStatuses};
 use dump_graph::DIR;
 use mock::{PeerId, Transaction, NAMES};
 use observation::Observation as ParsecObservation;
+use rand::seq;
 use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -71,21 +72,6 @@ pub enum ScheduleEvent {
     /// It is similar to Fail in that the peer will stop responding; however, this will also
     /// cause the other peers to vote for removal
     RemovePeer(PeerId),
-}
-
-// A function generating a Poisson-distributed random number.
-fn poisson<R: Rng>(rng: &mut R, lambda: f64) -> usize {
-    let mut result = 0;
-    let mut p = 1.0;
-    let l = (-lambda).exp();
-    loop {
-        p *= rng.gen::<f64>();
-        if p <= l {
-            break;
-        }
-        result += 1;
-    }
-    result
 }
 
 impl ScheduleEvent {
@@ -147,16 +133,6 @@ impl ScheduleEvent {
     }
 }
 
-fn binomial<R: Rng>(rng: &mut R, n: usize, p: f64) -> usize {
-    let mut successes = 0;
-    for _ in 0..n {
-        if rng.gen::<f64>() < p {
-            successes += 1;
-        }
-    }
-    successes
-}
-
 /// Stores pending observations per node, so that nodes only vote for each observation once.
 pub struct PendingObservations {
     min_delay: usize,
@@ -176,13 +152,16 @@ impl PendingObservations {
     }
 
     /// Add the observation to peers' queues at a random step after the event happened
-    pub fn peers_make_observation<'a, R: Rng, I: Iterator<Item = &'a PeerId>>(
+    pub fn peers_make_observation<'a, R: Rng, I: IntoIterator<Item = &'a PeerId>>(
         &mut self,
         rng: &mut R,
         peers: I,
+        strategy: Sampling,
         step: usize,
         observation: &Observation,
     ) {
+        let peers: Vec<_> = peers.into_iter().collect();
+        let peers = sample(rng, &peers, strategy);
         for peer in peers {
             let observations = self
                 .queues
@@ -265,6 +244,10 @@ pub struct ScheduleOptions {
     pub max_observation_delay: usize,
     /// The binomial distribution p coefficient for observation delay
     pub p_observation_delay: f64,
+    /// Number of peers that vote on opaque payloads
+    pub opaque_voters: Sampling,
+    /// Number of peers that vote on transparent payloads (Add, Remove, ...)
+    pub transparent_voters: Sampling,
 }
 
 impl ScheduleOptions {
@@ -318,6 +301,8 @@ impl Default for ScheduleOptions {
             max_observation_delay: 100,
             // with binomial p coefficient 0.45
             p_observation_delay: 0.45,
+            opaque_voters: Sampling::Fraction(1.0, 1.0),
+            transparent_voters: Sampling::Fraction(1.0, 1.0),
         }
     }
 }
@@ -552,7 +537,13 @@ impl Schedule {
         if options.votes_before_gossip {
             let opaque_transactions = obs_schedule.extract_opaque();
             for obs in opaque_transactions {
-                pending.peers_make_observation(&mut env.rng, peers.active_peers(), step, &obs);
+                pending.peers_make_observation(
+                    &mut env.rng,
+                    peers.active_peers(),
+                    options.opaque_voters,
+                    step,
+                    &obs,
+                );
                 observations_made.push(obs);
             }
         }
@@ -571,6 +562,7 @@ impl Schedule {
                         pending.peers_make_observation(
                             &mut env.rng,
                             peers.active_peers(),
+                            options.transparent_voters,
                             step,
                             &observation,
                         );
@@ -583,9 +575,16 @@ impl Schedule {
                         // consensused; this is something that can validly happen in a real
                         // network, but causes problems with evaluating test results
                         for obs in &observations_made {
+                            let sampling = if let ParsecObservation::OpaquePayload(_) = obs {
+                                options.opaque_voters
+                            } else {
+                                options.transparent_voters
+                            };
+
                             pending.peers_make_observation(
                                 &mut env.rng,
                                 iter::once(&new_peer),
+                                sampling,
                                 step,
                                 obs,
                             );
@@ -603,6 +602,7 @@ impl Schedule {
                         pending.peers_make_observation(
                             &mut env.rng,
                             peers.active_peers(),
+                            options.transparent_voters,
                             step,
                             &observation,
                         );
@@ -615,6 +615,7 @@ impl Schedule {
                         pending.peers_make_observation(
                             &mut env.rng,
                             peers.active_peers(),
+                            options.opaque_voters,
                             step,
                             &observation,
                         );
@@ -658,4 +659,52 @@ impl Schedule {
         result.save(options);
         result
     }
+}
+
+// A function generating a Poisson-distributed random number.
+fn poisson<R: Rng>(rng: &mut R, lambda: f64) -> usize {
+    let mut result = 0;
+    let mut p = 1.0;
+    let l = (-lambda).exp();
+    loop {
+        p *= rng.gen::<f64>();
+        if p <= l {
+            break;
+        }
+        result += 1;
+    }
+    result
+}
+
+fn binomial<R: Rng>(rng: &mut R, n: usize, p: f64) -> usize {
+    let mut successes = 0;
+    for _ in 0..n {
+        if rng.gen::<f64>() < p {
+            successes += 1;
+        }
+    }
+    successes
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Sampling {
+    // Sample the given amount of items.
+    Constant(usize),
+    // Fraction of all items, where the fraction is randomly selected from the given closed
+    // interval.
+    Fraction(f64, f64),
+}
+
+/// Return a random subset of `items` according to the given sampling strategy.
+fn sample<T: Clone, R: Rng>(rng: &mut R, items: &[T], strategy: Sampling) -> Vec<T> {
+    let amount = match strategy {
+        Sampling::Constant(amount) => amount,
+        Sampling::Fraction(min, max) => {
+            let min = (items.len() as f64 * min).ceil() as usize;
+            let max = (items.len() as f64 * max).floor() as usize + 1;
+            rng.gen_range(min, max)
+        }
+    };
+
+    seq::sample_slice(rng, items, amount)
 }
