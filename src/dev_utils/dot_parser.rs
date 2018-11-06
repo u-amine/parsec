@@ -431,11 +431,17 @@ fn parse_genesis() -> Parser<u8, Observation<Transaction, PeerId>> {
 }
 
 fn parse_add() -> Parser<u8, Observation<Transaction, PeerId>> {
-    (seq(b"Add(") * parse_peer_id() - seq(b")")).map(Observation::Add)
+    (seq(b"Add(") * parse_peer_id() - seq(b")")).map(|peer_id| Observation::Add {
+        peer_id,
+        related_info: vec![],
+    })
 }
 
 fn parse_remove() -> Parser<u8, Observation<Transaction, PeerId>> {
-    (seq(b"Remove(") * parse_peer_id() - seq(b")")).map(Observation::Remove)
+    (seq(b"Remove(") * parse_peer_id() - seq(b")")).map(|peer_id| Observation::Remove {
+        peer_id,
+        related_info: vec![],
+    })
 }
 
 fn parse_opaque() -> Parser<u8, Observation<Transaction, PeerId>> {

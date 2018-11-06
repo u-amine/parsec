@@ -20,9 +20,19 @@ pub enum Observation<T: NetworkEvent, P: PublicId> {
     /// Genesis group
     Genesis(BTreeSet<P>),
     /// Vote to add the indicated peer to the network.
-    Add(P),
+    Add {
+        /// Public id of the peer to be added
+        peer_id: P,
+        /// Extra arbitrary information for use by the client
+        related_info: Vec<u8>,
+    },
     /// Vote to remove the indicated peer from the network.
-    Remove(P),
+    Remove {
+        /// Public id of the peer to be removed
+        peer_id: P,
+        /// Extra arbitrary information for use by the client
+        related_info: Vec<u8>,
+    },
     /// Vote to accuse a peer of malicious behaviour.
     Accusation {
         /// Public id of the peer committing the malice.

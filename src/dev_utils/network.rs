@@ -279,13 +279,13 @@ impl Network {
                     // should be empty at this point
                     valid_voters = g.clone();
                 }
-                ParsecObservation::Add(ref p) => {
+                ParsecObservation::Add { ref peer_id, .. } => {
                     Self::check_block_signatories(block, &valid_voters)?;
-                    let _ = valid_voters.insert(p.clone());
+                    let _ = valid_voters.insert(peer_id.clone());
                 }
-                ParsecObservation::Remove(ref p) => {
+                ParsecObservation::Remove { ref peer_id, .. } => {
                     Self::check_block_signatories(block, &valid_voters)?;
-                    let _ = valid_voters.remove(p);
+                    let _ = valid_voters.remove(peer_id);
                 }
                 _ => {
                     Self::check_block_signatories(block, &valid_voters)?;

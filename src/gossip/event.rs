@@ -322,9 +322,15 @@ impl Event<Transaction, PeerId> {
                         .collect();
                     Observation::Genesis(peer_ids)
                 } else if cause.contains("Add") {
-                    Observation::Add(PeerId::new(content))
+                    Observation::Add {
+                        peer_id: PeerId::new(content),
+                        related_info: vec![],
+                    }
                 } else if cause.contains("Remove") {
-                    Observation::Remove(PeerId::new(content))
+                    Observation::Remove {
+                        peer_id: PeerId::new(content),
+                        related_info: vec![],
+                    }
                 } else {
                     panic!("wrong cause string: {:?}", cause);
                 };

@@ -562,7 +562,10 @@ impl Schedule {
             for observation in obs_for_step {
                 match observation {
                     ObservationEvent::AddPeer(new_peer) => {
-                        let observation = ParsecObservation::Add(new_peer.clone());
+                        let observation = ParsecObservation::Add {
+                            peer_id: new_peer.clone(),
+                            related_info: vec![],
+                        };
 
                         peers.add_peer(new_peer.clone());
                         pending.peers_make_observation(
@@ -591,7 +594,10 @@ impl Schedule {
                         observations_made.push(observation);
                     }
                     ObservationEvent::RemovePeer(peer) => {
-                        let observation = ParsecObservation::Remove(peer.clone());
+                        let observation = ParsecObservation::Remove {
+                            peer_id: peer.clone(),
+                            related_info: vec![],
+                        };
 
                         peers.remove_peer(&peer);
                         pending.peers_make_observation(
