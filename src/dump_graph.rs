@@ -406,8 +406,8 @@ mod detail {
         ) -> io::Result<()> {
             self.writeln(format_args!("  style=invis"))?;
             self.writeln(format_args!("  subgraph cluster_{:?} {{", peer_id))?;
-            self.writeln(format_args!("    label={:?}", peer_id))?;
-            self.writeln(format_args!("    {:?} [style=invis]", peer_id))?;
+            self.writeln(format_args!("    label=\"{:?}\"", peer_id))?;
+            self.writeln(format_args!("    \"{:?}\" [style=invis]", peer_id))?;
             self.write_self_parents(peer_id, positions)?;
             self.writeln(format_args!("  }}"))
         }
@@ -480,7 +480,7 @@ mod detail {
             let mut peer_ids = self.peer_list.all_ids().collect::<Vec<_>>();
             for peer_id in &peer_ids {
                 self.writeln(format_args!(
-                    "    {:?} [style=filled, color=white]",
+                    "    \"{:?}\" [style=filled, color=white]",
                     peer_id
                 ))?;
             }
@@ -489,10 +489,10 @@ mod detail {
             let mut peer_order = String::new();
             let last_peer_id = peer_ids.pop();
             for peer_id in peer_ids {
-                peer_order.push_str(&format!("{:?} -> ", peer_id));
+                peer_order.push_str(&format!("\"{:?}\" -> ", peer_id));
             }
             if let Some(peer_id) = last_peer_id {
-                peer_order.push_str(&format!("{:?} [style=invis]", peer_id));
+                peer_order.push_str(&format!("\"{:?}\" [style=invis]", peer_id));
             }
             self.writeln(format_args!("  {}\n", peer_order))
         }
