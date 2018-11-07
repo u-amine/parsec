@@ -434,7 +434,11 @@ mod detail {
                             1
                         };
                         (
-                            format!("\"{}\"", unwrap!(self.hash_to_short_name(parent_hash))),
+                            format!(
+                                "\"{}\"",
+                                self.hash_to_short_name(parent_hash)
+                                    .unwrap_or_else(|| "???".to_string())
+                            ),
                             format!("[minlen={}]", minlen),
                         )
                     }
@@ -641,11 +645,12 @@ mod detail {
                 let meta_events = election
                     .meta_events
                     .iter()
-                    .map(|(hash, mev)| {
-                        let event = unwrap!(self.gossip_graph.get(hash));
-                        let creator_and_index = (event.creator(), event.index_by_creator());
-                        let short_name_and_mev = (event.short_name(), mev);
-                        (creator_and_index, short_name_and_mev)
+                    .filter_map(|(hash, mev)| {
+                        self.gossip_graph.get(hash).map(|event| {
+                            let creator_and_index = (event.creator(), event.index_by_creator());
+                            let short_name_and_mev = (event.short_name(), mev);
+                            (creator_and_index, short_name_and_mev)
+                        })
                     }).collect::<BTreeMap<_, _>>();
 
                 for (short_name, mev) in meta_events.values() {

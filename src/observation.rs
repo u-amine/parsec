@@ -12,10 +12,11 @@ use id::PublicId;
 use network_event::NetworkEvent;
 use serialise;
 use std::collections::BTreeSet;
+use std::fmt::{self, Debug, Formatter};
 
 /// An enum of the various network events for which a peer can vote.
 #[serde(bound = "")]
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Debug)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Observation<T: NetworkEvent, P: PublicId> {
     /// Genesis group
     Genesis(BTreeSet<P>),
@@ -48,6 +49,29 @@ impl<T: NetworkEvent, P: PublicId> Observation<T, P> {
     /// Compute hash of this `Observation`.
     pub fn create_hash(&self) -> Hash {
         Hash::from(serialise(self).as_slice())
+    }
+}
+
+impl<T: NetworkEvent, P: PublicId> Debug for Observation<T, P> {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        match self {
+            Observation::Genesis(group) => write!(formatter, "Genesis({:?})", group),
+            Observation::Add { peer_id, .. } => write!(formatter, "Add({:?})", peer_id),
+            Observation::Remove { peer_id, .. } => write!(formatter, "Remove({:?})", peer_id),
+            Observation::Accusation { offender, malice } => {
+                write!(formatter, "Accusation {{ {:?}, {:?} }}", offender, malice)
+            }
+            Observation::OpaquePayload(payload) => {
+                let max_length = 16;
+                let mut payload_str = format!("{:?}", payload);
+                if payload_str.len() > max_length {
+                    payload_str.truncate(max_length - 2);
+                    payload_str.push('.');
+                    payload_str.push('.');
+                }
+                write!(formatter, "OpaquePayload({})", payload_str)
+            }
+        }
     }
 }
 
