@@ -14,7 +14,7 @@ use error::Error;
 use gossip::{Request, Response};
 use mock::{PeerId, Transaction};
 use observation::{Malice, Observation as ParsecObservation};
-use parsec::is_supermajority;
+use parsec::{is_supermajority, IsInterestingEventFn};
 use std::collections::{BTreeMap, BTreeSet};
 
 enum Message {
@@ -28,11 +28,11 @@ struct QueueEntry {
     pub deliver_after: usize,
 }
 
-#[derive(Default)]
 pub struct Network {
     pub peers: BTreeMap<PeerId, Peer>,
     genesis: BTreeSet<PeerId>,
     msg_queue: BTreeMap<PeerId, Vec<QueueEntry>>,
+    is_interesting_event: IsInterestingEventFn<PeerId>,
 }
 
 #[derive(Debug)]
@@ -72,21 +72,34 @@ pub enum ConsensusError {
 
 impl Network {
     /// Create an empty test network
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(is_interesting_event: IsInterestingEventFn<PeerId>) -> Self {
+        Network {
+            peers: BTreeMap::new(),
+            genesis: BTreeSet::new(),
+            msg_queue: BTreeMap::new(),
+            is_interesting_event,
+        }
     }
 
     /// Create a test network with initial peers constructed from the given IDs
-    pub fn with_peers<I: IntoIterator<Item = PeerId>>(all_ids: I) -> Self {
+    pub fn with_peers<I: IntoIterator<Item = PeerId>>(
+        all_ids: I,
+        is_interesting_event: IsInterestingEventFn<PeerId>,
+    ) -> Self {
         let genesis_group = all_ids.into_iter().collect::<BTreeSet<_>>();
         let peers = genesis_group
             .iter()
-            .map(|id| (id.clone(), Peer::new(id.clone(), &genesis_group)))
-            .collect();
+            .map(|id| {
+                (
+                    id.clone(),
+                    Peer::from_genesis(id.clone(), &genesis_group, is_interesting_event),
+                )
+            }).collect();
         Network {
             genesis: genesis_group,
             peers,
             msg_queue: BTreeMap::new(),
+            is_interesting_event,
         }
     }
 
@@ -323,8 +336,16 @@ impl Network {
                 ScheduleEvent::Genesis(genesis_group) => {
                     let peers = genesis_group
                         .iter()
-                        .map(|id| (id.clone(), Peer::new(id.clone(), &genesis_group)))
-                        .collect();
+                        .map(|id| {
+                            (
+                                id.clone(),
+                                Peer::from_genesis(
+                                    id.clone(),
+                                    &genesis_group,
+                                    self.is_interesting_event,
+                                ),
+                            )
+                        }).collect();
                     self.peers = peers;
                     self.genesis = genesis_group;
                     // do a full reset while we're at it
@@ -339,7 +360,12 @@ impl Network {
                         .collect();
                     let _ = self.peers.insert(
                         peer.clone(),
-                        Peer::new_joining(peer.clone(), &current_peers, &self.genesis),
+                        Peer::from_existing(
+                            peer.clone(),
+                            &self.genesis,
+                            &current_peers,
+                            self.is_interesting_event,
+                        ),
                     );
                 }
                 ScheduleEvent::RemovePeer(peer) => {
