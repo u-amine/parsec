@@ -53,42 +53,39 @@
     variant_size_differences
 )]
 
-#[macro_use]
 #[cfg(feature = "testing")]
+#[macro_use]
 extern crate criterion;
 #[cfg(feature = "testing")]
 extern crate parsec;
+#[cfg(feature = "testing")]
+#[macro_use]
+extern crate unwrap;
 
 #[cfg(feature = "testing")]
 use criterion::Criterion;
-
 #[cfg(feature = "testing")]
-use parsec::dev_utils::{Environment, RngChoice, Schedule, ScheduleOptions};
+use parsec::dev_utils::Record;
 
 #[cfg(feature = "testing")]
 fn bench(c: &mut Criterion) {
-    let _ = c.bench_function("minimal", |b| {
-        b.iter_with_setup(
-            || {
-                let mut env = Environment::new(RngChoice::SeededRandom);
-                let schedule = Schedule::new(&mut env, &ScheduleOptions::default());
+    bench_dot_file(c, "minimal");
+}
 
-                (env, schedule)
-            },
-            |(mut env, schedule)| {
-                let _ = env.network.execute_schedule(schedule);
-            },
-        )
+#[cfg(feature = "testing")]
+fn bench_dot_file(c: &mut Criterion, name: &'static str) {
+    let _ = c.bench_function(name, move |b| {
+        let record = unwrap!(Record::parse(format!("input_graphs/benches/{}.dot", name)));
+        b.iter_with_setup(|| record.clone(), |record| record.play())
     });
 }
 
 #[cfg(feature = "testing")]
 criterion_group!(benches, bench);
-
 #[cfg(feature = "testing")]
 criterion_main!(benches);
 
 #[cfg(not(feature = "testing"))]
 fn main() {
-    println!("For benchmark tests, run with '--features=testing'.");
+    println!("Benchmarks require `--features=testing`")
 }

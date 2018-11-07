@@ -66,7 +66,7 @@ impl PeerId {
     }
 
     // Only being used by the dot_parser.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testing"))]
     pub fn from_initial(initial: char) -> Self {
         for name in NAMES.iter() {
             if name.starts_with(initial) {

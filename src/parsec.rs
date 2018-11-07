@@ -222,6 +222,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             &self.events,
             &self.peer_list,
         );
+
         self.add_event(event)
     }
 
@@ -1835,6 +1836,14 @@ enum PostConsensusAction {
     Stop,
 }
 
+#[cfg(all(test, feature = "testing"))]
+pub(crate) fn assert_graphs_equal<T: NetworkEvent, S: SecretId>(
+    a: &Parsec<T, S>,
+    b: &Parsec<T, S>,
+) {
+    assert_eq!(a.events, b.events);
+}
+
 #[cfg(test)]
 mod functional_tests {
     use super::*;
@@ -1846,7 +1855,7 @@ mod functional_tests {
     use std::collections::BTreeMap;
 
     #[derive(Debug, PartialEq, Eq)]
-    pub struct Snapshot {
+    struct Snapshot {
         peer_list: BTreeMap<PeerId, (PeerState, BTreeMap<u64, Hash>)>,
         events: BTreeSet<Hash>,
         consensused_blocks: VecDeque<Block<Transaction, PeerId>>,

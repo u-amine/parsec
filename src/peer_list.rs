@@ -10,7 +10,7 @@ use error::Error;
 use gossip::Event;
 use hash::Hash;
 use id::{PublicId, SecretId};
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
 use serialise;
@@ -373,7 +373,7 @@ impl<S: SecretId> Debug for PeerList<S> {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 impl PeerList<PeerId> {
     // Creates a new PeerList using the input parameters directly.
     pub(super) fn new_from_dot_input(

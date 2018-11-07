@@ -12,9 +12,9 @@ mod meta_event;
 mod meta_vote;
 mod meta_vote_counts;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) use self::bool_set::BoolSet;
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub(crate) use self::meta_elections::MetaElection;
 pub(crate) use self::meta_elections::{MetaElectionHandle, MetaElections};
 pub(crate) use self::meta_event::{MetaEvent, MetaEventBuilder};

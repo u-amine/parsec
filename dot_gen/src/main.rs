@@ -148,6 +148,18 @@ fn main() {
         },
     );
 
+    let _ = scenarios
+        .add("benches", |env| {
+            Schedule::new(
+                env,
+                &ScheduleOptions {
+                    genesis_size: 4,
+                    opaque_to_add: 1,
+                    ..Default::default()
+                },
+            )
+        }).file("Alice", "minimal.dot");
+
     // Do not edit below this line.
     // -------------------------------------------------------------------------
 
@@ -187,6 +199,12 @@ impl Scenario {
     pub fn file(&mut self, peer_name: &str, dst_file: &str) -> &mut Self {
         let _ = self.files.insert(peer_name.into(), dst_file.into());
         self
+    }
+
+    fn matches(&self, pattern: &str) -> bool {
+        self.files
+            .values()
+            .any(|file| format!("{}/{}", self.name, file).contains(pattern))
     }
 
     fn run(&mut self, mode: Mode) {
@@ -361,7 +379,7 @@ fn run(mut scenarios: Scenarios) {
     if let Some(name) = matches.value_of("name") {
         for scenario in scenarios
             .iter_mut()
-            .filter(|scenario| scenario.name.contains(name))
+            .filter(|scenario| scenario.matches(name))
         {
             scenario.run(mode);
         }
