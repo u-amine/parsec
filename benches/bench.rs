@@ -68,6 +68,8 @@ use parsec::dev_utils::Record;
 #[cfg(feature = "testing")]
 fn bench(c: &mut Criterion) {
     bench_dot_file(c, "minimal");
+    bench_dot_file(c, "static");
+    bench_dot_file(c, "dynamic");
 }
 
 #[cfg(feature = "testing")]

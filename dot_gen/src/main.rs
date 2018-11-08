@@ -158,6 +158,31 @@ fn main() {
             )
         }).file("Alice", "minimal.dot");
 
+    let _ = scenarios
+        .add("benches", |env| {
+            Schedule::new(
+                env,
+                &ScheduleOptions {
+                    genesis_size: 5,
+                    opaque_to_add: 5,
+                    ..Default::default()
+                },
+            )
+        }).file("Alice", "static.dot");
+
+    let _ = scenarios
+        .add("benches", |env| {
+            Schedule::new(
+                env,
+                &ScheduleOptions {
+                    genesis_size: 2,
+                    peers_to_add: 3,
+                    opaque_to_add: 5,
+                    ..Default::default()
+                },
+            )
+        }).file("Alice", "dynamic.dot");
+
     // Do not edit below this line.
     // -------------------------------------------------------------------------
 
