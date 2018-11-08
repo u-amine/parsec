@@ -122,24 +122,32 @@ impl Debug for Peer {
     }
 }
 
-pub struct PeerStatuses(BTreeMap<PeerId, PeerStatus>);
+pub struct PeerStatuses {
+    statuses: BTreeMap<PeerId, PeerStatus>,
+    last_change_step: Option<usize>,
+    pub wait_between_changes: usize,
+}
+
+const DEFAULT_WAIT_BETWEEN_CHANGES: usize = 400;
 
 impl PeerStatuses {
     /// Creates a new PeerStatuses struct with the given active peers
     pub fn new(names: &BTreeSet<PeerId>) -> PeerStatuses {
-        PeerStatuses(
-            names
+        PeerStatuses {
+            statuses: names
                 .into_iter()
                 .map(|x| (x.clone(), PeerStatus::Active))
                 .collect(),
-        )
+            last_change_step: None,
+            wait_between_changes: DEFAULT_WAIT_BETWEEN_CHANGES,
+        }
     }
 
     fn peers_by_status<F: Fn(&PeerStatus) -> bool>(
         &self,
         f: F,
     ) -> impl Iterator<Item = (&PeerId, &PeerStatus)> {
-        self.0.iter().filter(move |&(_, status)| f(status))
+        self.statuses.iter().filter(move |&(_, status)| f(status))
     }
 
     fn choose_name_to_remove<R: Rng>(&self, rng: &mut R) -> PeerId {
@@ -179,19 +187,30 @@ impl PeerStatuses {
     }
 
     /// Adds an active peer.
-    pub fn add_peer(&mut self, p: PeerId) {
-        let _ = self.0.insert(p, PeerStatus::Active);
+    pub fn add_peer(&mut self, p: PeerId, step: usize) {
+        self.last_change_step = Some(step);
+        let _ = self.statuses.insert(p, PeerStatus::Active);
     }
 
     // Randomly chooses a peer to remove. Only actually removes if removing won't cause the failed
     // peers to go over N/3.
     // Returns the removed peer's name if removing occurred.
-    pub fn remove_random_peer<R: Rng>(&mut self, rng: &mut R, min_active: usize) -> Option<PeerId> {
+    pub fn remove_random_peer<R: Rng>(
+        &mut self,
+        rng: &mut R,
+        min_active: usize,
+        step: usize,
+    ) -> Option<PeerId> {
+        if let Some(lstep) = self.last_change_step {
+            if step <= lstep + self.wait_between_changes {
+                return None;
+            }
+        }
         let mut active_peers = self.num_active_peers();
         let mut failed_peers = self.num_failed_peers();
         let name = self.choose_name_to_remove(rng);
         {
-            let status = &self.0[&name];
+            let status = &self.statuses[&name];
             if *status == PeerStatus::Active {
                 active_peers -= 1;
             } else if *status == PeerStatus::Failed {
@@ -201,8 +220,9 @@ impl PeerStatuses {
             }
         }
         if 2 * failed_peers < active_peers && active_peers >= min_active {
-            let status = self.0.get_mut(&name).unwrap();
+            let status = self.statuses.get_mut(&name).unwrap();
             *status = PeerStatus::Removed;
+            self.last_change_step = Some(step);
             Some(name)
         } else {
             None
@@ -211,20 +231,31 @@ impl PeerStatuses {
 
     /// Remove the given peer
     pub fn remove_peer(&mut self, peer: &PeerId) {
-        let status = self.0.get_mut(peer).unwrap();
+        let status = self.statuses.get_mut(peer).unwrap();
         *status = PeerStatus::Removed;
     }
 
     /// Randomly chooses a peer to fail. Only actually fails if it won't cause the failed peers to
     /// go over N/3.
     /// Returns the failed peer's name if failing occurred.
-    pub fn fail_random_peer<R: Rng>(&mut self, rng: &mut R, min_active: usize) -> Option<PeerId> {
+    pub fn fail_random_peer<R: Rng>(
+        &mut self,
+        rng: &mut R,
+        min_active: usize,
+        step: usize,
+    ) -> Option<PeerId> {
+        if let Some(lstep) = self.last_change_step {
+            if step <= lstep + self.wait_between_changes {
+                return None;
+            }
+        }
         let active_peers = self.num_active_peers() - 1;
         let failed_peers = self.num_failed_peers() + 1;
         if 2 * failed_peers < active_peers && active_peers >= min_active {
             let name = self.choose_name_to_fail(rng);
-            let status = self.0.get_mut(&name).unwrap();
+            let status = self.statuses.get_mut(&name).unwrap();
             *status = PeerStatus::Failed;
+            self.last_change_step = Some(step);
             Some(name)
         } else {
             None
@@ -232,13 +263,13 @@ impl PeerStatuses {
     }
 
     pub fn fail_peer(&mut self, peer: &PeerId) {
-        let status = self.0.get_mut(peer).unwrap();
+        let status = self.statuses.get_mut(peer).unwrap();
         *status = PeerStatus::Failed;
     }
 }
 
 impl Into<BTreeMap<PeerId, PeerStatus>> for PeerStatuses {
     fn into(self) -> BTreeMap<PeerId, PeerStatus> {
-        self.0
+        self.statuses
     }
 }
