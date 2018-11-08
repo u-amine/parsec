@@ -792,22 +792,30 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     this_payload,
                     start_index,
                 );
-                if (self.is_interesting_event)(
-                    &peers_that_did_vote.keys().cloned().collect(),
-                    &peers_that_can_vote,
-                ) {
-                    Some((
-                        this_payload.clone(),
-                        peers_that_did_vote
+                {
+                    let check_interesting: IsInterestingEventFn<S::PublicId> =
+                        if let &Observation::OpaquePayload(_) = this_payload {
+                            self.is_interesting_event
+                        } else {
+                            is_supermajority
+                        };
+                    if check_interesting(
+                        &peers_that_did_vote.keys().cloned().collect(),
+                        &peers_that_can_vote,
+                    ) {
+                        Some((
+                            this_payload.clone(),
+                            peers_that_did_vote
                             .get(builder.event().creator())
                             .cloned()
                             // Sometimes the interesting event's creator won't have voted for the
                             // payload that became interesting - in such a case we would like it
                             // sorted at the end of the "queue"
                             .unwrap_or(u64::MAX),
-                    ))
-                } else {
-                    None
+                        ))
+                    } else {
+                        None
+                    }
                 }
             }).collect();
 
