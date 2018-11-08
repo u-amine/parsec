@@ -258,24 +258,30 @@ impl Network {
     }
 
     fn check_block_signatories(
+        &self,
         block: &Block<Transaction, PeerId>,
         section: &BTreeSet<PeerId>,
     ) -> Result<(), ConsensusError> {
         let signatories: BTreeSet<_> = block
             .proofs()
             .into_iter()
-            .map(|proof| proof.public_id())
+            .map(|proof| proof.public_id().clone())
             .collect();
-        if let Some(&pub_id) = signatories.iter().find(|pub_id| !section.contains(pub_id)) {
+        if let Some(pub_id) = signatories.difference(section).next() {
             return Err(ConsensusError::InvalidSignatory {
                 observation: block.payload().clone(),
                 signatory: pub_id.clone(),
             });
         }
-        if !is_supermajority(&signatories, &section.into_iter().collect()) {
+        let correct_signatories = if let ParsecObservation::OpaquePayload(_) = *block.payload() {
+            (self.is_interesting_event)(&signatories, section)
+        } else {
+            is_supermajority(&signatories, section)
+        };
+        if !correct_signatories {
             return Err(ConsensusError::TooFewSignatures {
                 observation: block.payload().clone(),
-                signatures: signatories.into_iter().cloned().collect(),
+                signatures: signatories,
             });
         }
         Ok(())
@@ -293,15 +299,15 @@ impl Network {
                     valid_voters = g.clone();
                 }
                 ParsecObservation::Add { ref peer_id, .. } => {
-                    Self::check_block_signatories(block, &valid_voters)?;
+                    self.check_block_signatories(block, &valid_voters)?;
                     let _ = valid_voters.insert(peer_id.clone());
                 }
                 ParsecObservation::Remove { ref peer_id, .. } => {
-                    Self::check_block_signatories(block, &valid_voters)?;
+                    self.check_block_signatories(block, &valid_voters)?;
                     let _ = valid_voters.remove(peer_id);
                 }
                 _ => {
-                    Self::check_block_signatories(block, &valid_voters)?;
+                    self.check_block_signatories(block, &valid_voters)?;
                 }
             }
         }
