@@ -774,12 +774,16 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let peers_that_can_vote = self.voters(builder.election());
         let start_index = self.meta_elections.start_index(builder.election());
 
-        let indexed_payloads_map: BTreeMap<_, _> = self
-            .events
-            .values()
-            .filter(|event| event.topological_index() >= start_index)
-            .filter_map(|event| event.vote().map(|vote| vote.payload()))
-            .filter(|&this_payload| {
+        let mut payloads: Vec<_> = self
+            .peer_list
+            .iter()
+            .flat_map(|(_peer_id, peer)| {
+                peer.events().filter_map(|hash| {
+                    self.events
+                        .get(hash)
+                        .and_then(|event| event.vote().map(|vote| vote.payload()))
+                })
+            }).filter(|&this_payload| {
                 self.meta_elections.is_interesting_content_candidate(
                     builder.election(),
                     builder.event().creator(),
@@ -792,40 +796,40 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     this_payload,
                     start_index,
                 );
-                {
-                    let check_interesting: IsInterestingEventFn<S::PublicId> =
-                        if let &Observation::OpaquePayload(_) = this_payload {
-                            self.is_interesting_event
-                        } else {
-                            is_supermajority
-                        };
-                    if check_interesting(
-                        &peers_that_did_vote.keys().cloned().collect(),
-                        &peers_that_can_vote,
-                    ) {
-                        Some((
-                            this_payload.clone(),
-                            peers_that_did_vote
-                            .get(builder.event().creator())
-                            .cloned()
-                            // Sometimes the interesting event's creator won't have voted for the
-                            // payload that became interesting - in such a case we would like it
-                            // sorted at the end of the "queue"
-                            .unwrap_or(u64::MAX),
-                        ))
-                    } else {
-                        None
-                    }
+                let is_interesting = if let Observation::OpaquePayload(_) = *this_payload {
+                    (self.is_interesting_event)(&peers_that_did_vote, &peers_that_can_vote)
+                } else {
+                    is_supermajority(&peers_that_did_vote, &peers_that_can_vote)
+                };
+                if is_interesting {
+                    Some(this_payload.clone())
+                } else {
+                    None
                 }
             }).collect();
 
-        let mut indexed_payloads: Vec<_> = indexed_payloads_map.into_iter().collect();
-        indexed_payloads.sort_by_key(|&(_, index)| index);
+        {
+            // separate scope because vote_index borrows builder
+            let vote_index = |payload: &Observation<T, S::PublicId>| {
+                self.peer_list
+                .peer_events(builder.event().creator())
+                .filter_map(|hash| self.get_known_event(hash).ok())
+                .filter_map(|event| {
+                    event.vote().and_then(|vote| {
+                        if vote.payload() == payload {
+                            Some(event.index_by_creator())
+                        } else {
+                            None
+                        }
+                    })
+                }).next()
+                // if there is no vote for the given payload by the event's creator, we sort it at
+                // the end of the "queue"
+                .unwrap_or(u64::MAX)
+            };
 
-        let payloads = indexed_payloads
-            .into_iter()
-            .map(|(payload, _index)| payload)
-            .collect();
+            payloads.sort_by_key(vote_index);
+        }
 
         builder.set_interesting_content(payloads);
     }
@@ -870,7 +874,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         event: &Event<T, S::PublicId>,
         payload: &Observation<T, S::PublicId>,
         start_index: usize,
-    ) -> BTreeMap<S::PublicId, u64> {
+    ) -> BTreeSet<S::PublicId> {
         self.peer_list
             .iter()
             .filter(|(peer_id, _)| voters.contains(peer_id))
@@ -882,7 +886,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     .find(|(_, that_event)| {
                         Some(payload) == that_event.vote().map(Vote::payload)
                             && event.sees(that_event)
-                    }).map(|(index, _)| (peer_id.clone(), index))
+                    }).map(|_| peer_id.clone())
             }).collect()
     }
 
