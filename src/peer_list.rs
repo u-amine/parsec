@@ -468,26 +468,26 @@ impl Debug for PeerState {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let mut separator = false;
 
-        write!(f, "PeerState(");
+        write!(f, "PeerState(")?;
 
         if self.contains(Self::VOTE) {
             separator = true;
-            write!(f, "VOTE");
+            write!(f, "VOTE")?;
         }
 
         if self.contains(Self::SEND) {
             if separator {
-                write!(f, "|");
+                write!(f, "|")?;
             }
             separator = true;
-            write!(f, "SEND");
+            write!(f, "SEND")?;
         }
 
         if self.contains(Self::RECV) {
             if separator {
-                write!(f, "|");
+                write!(f, "|")?;
             }
-            write!(f, "RECV");
+            write!(f, "RECV")?;
         }
 
         write!(f, ")")
