@@ -406,8 +406,8 @@ mod detail {
         ) -> io::Result<()> {
             self.writeln(format_args!("  style=invis"))?;
             self.writeln(format_args!("  subgraph cluster_{:?} {{", peer_id))?;
-            self.writeln(format_args!("    label={:?}", peer_id))?;
-            self.writeln(format_args!("    {:?} [style=invis]", peer_id))?;
+            self.writeln(format_args!("    label=\"{:?}\"", peer_id))?;
+            self.writeln(format_args!("    \"{:?}\" [style=invis]", peer_id))?;
             self.write_self_parents(peer_id, positions)?;
             self.writeln(format_args!("  }}"))
         }
@@ -434,7 +434,11 @@ mod detail {
                             1
                         };
                         (
-                            format!("\"{}\"", unwrap!(self.hash_to_short_name(parent_hash))),
+                            format!(
+                                "\"{}\"",
+                                self.hash_to_short_name(parent_hash)
+                                    .unwrap_or_else(|| "???".to_string())
+                            ),
                             format!("[minlen={}]", minlen),
                         )
                     }
@@ -480,7 +484,7 @@ mod detail {
             let mut peer_ids = self.peer_list.all_ids().collect::<Vec<_>>();
             for peer_id in &peer_ids {
                 self.writeln(format_args!(
-                    "    {:?} [style=filled, color=white]",
+                    "    \"{:?}\" [style=filled, color=white]",
                     peer_id
                 ))?;
             }
@@ -489,10 +493,10 @@ mod detail {
             let mut peer_order = String::new();
             let last_peer_id = peer_ids.pop();
             for peer_id in peer_ids {
-                peer_order.push_str(&format!("{:?} -> ", peer_id));
+                peer_order.push_str(&format!("\"{:?}\" -> ", peer_id));
             }
             if let Some(peer_id) = last_peer_id {
-                peer_order.push_str(&format!("{:?} [style=invis]", peer_id));
+                peer_order.push_str(&format!("\"{:?}\" [style=invis]", peer_id));
             }
             self.writeln(format_args!("  {}\n", peer_order))
         }
@@ -641,11 +645,12 @@ mod detail {
                 let meta_events = election
                     .meta_events
                     .iter()
-                    .map(|(hash, mev)| {
-                        let event = unwrap!(self.gossip_graph.get(hash));
-                        let creator_and_index = (event.creator(), event.index_by_creator());
-                        let short_name_and_mev = (event.short_name(), mev);
-                        (creator_and_index, short_name_and_mev)
+                    .filter_map(|(hash, mev)| {
+                        self.gossip_graph.get(hash).map(|event| {
+                            let creator_and_index = (event.creator(), event.index_by_creator());
+                            let short_name_and_mev = (event.short_name(), mev);
+                            (creator_and_index, short_name_and_mev)
+                        })
                     }).collect::<BTreeMap<_, _>>();
 
                 for (short_name, mev) in meta_events.values() {

@@ -56,7 +56,7 @@ impl PeerId {
             .clone()
     }
 
-    fn new_with_random_keypair(id: &str) -> Self {
+    pub fn new_with_random_keypair(id: &str) -> Self {
         let (pub_sign, sec_sign) = gen_sign_keypair();
         Self {
             id: id.to_string(),
@@ -162,10 +162,6 @@ impl Rand for Transaction {
 
 /// **NOT FOR PRODUCTION USE**: Returns a collection of mock node IDs with human-readable names.
 pub fn create_ids(count: usize) -> Vec<PeerId> {
-    assert!(count <= names_len());
+    assert!(count <= NAMES.len());
     NAMES.iter().take(count).cloned().map(PeerId::new).collect()
-}
-
-pub fn names_len() -> usize {
-    NAMES.len()
 }
