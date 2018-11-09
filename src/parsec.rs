@@ -489,10 +489,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.confirm_self_state(PeerState::RECV)?;
         self.confirm_peer_state(src, PeerState::SEND)?;
 
-        // We have received at least one gossip from the sender, so they can now receive gossips
-        // from us as well.
-        self.peer_list.change_peer_state(src, PeerState::RECV);
-
         let mut prev_forking_peers = BTreeSet::new();
         for packed_event in packed_events {
             if let Some(event) = Event::unpack(
@@ -509,7 +505,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 {
                     let _ = prev_forking_peers.insert(event.creator().clone());
                 }
+                let event_creator = event.creator().clone();
                 self.add_event(event)?;
+                // We have received an event of a peer in the message. The peer can now receive
+                // gossips from us as well.
+                self.peer_list
+                    .change_peer_state(&event_creator, PeerState::RECV);
             }
         }
         Ok(prev_forking_peers)
