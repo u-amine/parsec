@@ -789,6 +789,7 @@ fn convert_to_meta_election(
             }).collect(),
         consensus_len: meta_election.consensus_len,
         payload: meta_election.payload,
+        start_index: 0,
     }
 }
 

@@ -58,10 +58,12 @@ pub(crate) struct MetaElection<T: NetworkEvent, P: PublicId> {
     pub(crate) consensus_len: usize,
     // Payload decided by this meta-election.
     pub(crate) payload: Option<Observation<T, P>>,
+    // Topological index of the first event processed in this meta-election.
+    pub(crate) start_index: usize,
 }
 
 impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
-    fn new(voters: BTreeSet<P>, consensus_len: usize) -> Self {
+    fn new(voters: BTreeSet<P>, consensus_len: usize, start_index: usize) -> Self {
         MetaElection {
             meta_events: BTreeMap::new(),
             round_hashes: BTreeMap::new(),
@@ -70,6 +72,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
             interesting_events: BTreeMap::new(),
             consensus_len,
             payload: None,
+            start_index,
         }
     }
 
@@ -123,7 +126,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
     pub fn new(voters: BTreeSet<P>) -> Self {
         MetaElections {
             next_index: 0,
-            current_election: MetaElection::new(voters, 0),
+            current_election: MetaElection::new(voters, 0, 0),
             previous_elections: BTreeMap::new(),
             consensus_history: Vec::new(),
         }
@@ -289,16 +292,21 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         !self.consensus_history()[..election.consensus_len].contains(&hash)
     }
 
+    pub fn start_index(&self, handle: MetaElectionHandle) -> usize {
+        self.get(handle).map(|e| e.start_index).unwrap_or(0)
+    }
+
     /// Creates new election and returns handle of the previous election.
     pub fn new_election(
         &mut self,
         payload: Observation<T, P>,
         voters: BTreeSet<P>,
+        start_index: usize,
     ) -> MetaElectionHandle {
         let hash = payload.create_hash();
         self.consensus_history.push(hash);
 
-        let new = MetaElection::new(voters, self.consensus_history.len());
+        let new = MetaElection::new(voters, self.consensus_history.len(), start_index);
 
         let mut previous = mem::replace(&mut self.current_election, new);
         previous.payload = Some(payload);
@@ -337,21 +345,13 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         }
     }
 
-    pub fn restart_current_election<'a, I>(&mut self, peer_ids: I)
+    pub fn initialise_current_election<'a, I>(&mut self, peer_ids: I)
     where
         I: IntoIterator<Item = &'a P>,
         P: 'a,
     {
         let hash = self.consensus_history.last().cloned().unwrap_or(Hash::ZERO);
         self.current_election.initialise(peer_ids, hash);
-    }
-
-    pub fn initialise_current_election<'a, I>(&mut self, peer_ids: I, initial_hash: Hash)
-    where
-        I: IntoIterator<Item = &'a P>,
-        P: 'a,
-    {
-        self.current_election.initialise(peer_ids, initial_hash);
     }
 
     #[cfg(any(test, feature = "dump-graphs"))]
