@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use gossip::Event;
+use gossip::{CauseInput, Event};
 use hash::Hash;
 use hash::{HASH_LEN, HEX_DIGITS_PER_BYTE};
 use meta_voting::{
@@ -15,7 +15,7 @@ use meta_voting::{
 use mock::{PeerId, Transaction};
 use observation::Observation;
 use peer_list::{PeerList, PeerState};
-use pom::char_class::{alphanum, digit, hex_digit, space};
+use pom::char_class::{alphanum, digit, hex_digit, multispace, space};
 use pom::parser::*;
 use pom::Result as PomResult;
 use pom::{DataInput, Parser};
@@ -34,8 +34,14 @@ fn next_line() -> Parser<u8, ()> {
     none_of(b"\r\n").repeat(0..) * newline()
 }
 
+// Skip spaces or tabs.
 fn spaces() -> Parser<u8, ()> {
     is_a(space).repeat(0..).discard()
+}
+
+// Skip any whitespace including newlines.
+fn whitespace() -> Parser<u8, ()> {
+    is_a(multispace).repeat(0..).discard()
 }
 
 fn comment_prefix() -> Parser<u8, ()> {
@@ -182,17 +188,26 @@ struct ParsedSubgraph {
 const SKIP_AFTER_SUBGRAPH: usize = 3;
 
 fn parse_subgraph() -> Parser<u8, ParsedSubgraph> {
-    let id = next_line() * spaces() * seq(b"subgraph cluster_") * parse_peer_id()
-        - next_line().repeat(SKIP_AFTER_SUBGRAPH);
-    let data = id + parse_edge().repeat(0..) - spaces() - sym(b'}') - next_line()
-        + parse_edge().repeat(0..)
-        - next_line();
-    // edges1 will contain the creator's line - we are only interested in the set of events at the
+    let id = whitespace()
+        * seq(b"style=invis")
+        * whitespace()
+        * seq(b"subgraph cluster_")
+        * parse_peer_id();
+
+    let events = whitespace()
+        * sym(b'{')
+        * next_line().repeat(SKIP_AFTER_SUBGRAPH)
+        * parse_edge().repeat(0..)
+        - whitespace()
+        - sym(b'}');
+    let other_parents = whitespace() * parse_edge().repeat(0..);
+
+    // `events` will contain the creator's line - we are only interested in the set of events at the
     // end of edges
-    data.map(|((id, edges1), edges2)| ParsedSubgraph {
+    (id + events + other_parents).map(|((id, events), other_parents)| ParsedSubgraph {
         creator: id,
-        events: edges1.into_iter().map(|edge| edge.end).collect(),
-        other_parents: edges2
+        events: events.into_iter().map(|edge| edge.end).collect(),
+        other_parents: other_parents
             .into_iter()
             .map(|edge| (edge.end, edge.start))
             .collect(),
@@ -221,7 +236,7 @@ fn parse_event_details() -> Parser<u8, BTreeMap<String, EventDetails>> {
 
 #[derive(Debug)]
 struct EventDetails {
-    cause: String,
+    cause: CauseInput,
     last_ancestors: BTreeMap<PeerId, u64>,
 }
 
@@ -244,9 +259,15 @@ fn parse_single_event_detail() -> Parser<u8, (String, EventDetails)> {
     })
 }
 
-fn parse_cause() -> Parser<u8, String> {
-    (comment_prefix() * seq(b"cause: ") * none_of(b"\r\n").repeat(1..) - newline())
-        .convert(String::from_utf8)
+fn parse_cause() -> Parser<u8, CauseInput> {
+    let prefix = comment_prefix() * seq(b"cause: ");
+    let initial = seq(b"Initial").map(|_| CauseInput::Initial);
+    let request = seq(b"Request").map(|_| CauseInput::Request);
+    let response = seq(b"Response").map(|_| CauseInput::Response);
+    let observation =
+        (seq(b"Observation(") * parse_observation() - sym(b')')).map(CauseInput::Observation);
+
+    prefix * (initial | request | response | observation) - newline()
 }
 
 fn parse_last_ancestors() -> Parser<u8, BTreeMap<PeerId, u64>> {
@@ -430,17 +451,36 @@ fn parse_genesis() -> Parser<u8, Observation<Transaction, PeerId>> {
 }
 
 fn parse_add() -> Parser<u8, Observation<Transaction, PeerId>> {
-    (seq(b"Add(") * parse_peer_id() - seq(b")")).map(|peer_id| Observation::Add {
+    seq(b"Add") * parse_add_or_remove().map(|(peer_id, related_info)| Observation::Add {
         peer_id,
-        related_info: vec![],
+        related_info,
     })
 }
 
 fn parse_remove() -> Parser<u8, Observation<Transaction, PeerId>> {
-    (seq(b"Remove(") * parse_peer_id() - seq(b")")).map(|peer_id| Observation::Remove {
+    seq(b"Remove") * parse_add_or_remove().map(|(peer_id, related_info)| Observation::Remove {
         peer_id,
-        related_info: vec![],
+        related_info,
     })
+}
+
+fn parse_add_or_remove() -> Parser<u8, (PeerId, Vec<u8>)> {
+    parse_add_or_remove_with_related_info() | parse_add_or_remove_without_related_info()
+}
+
+fn parse_add_or_remove_with_related_info() -> Parser<u8, (PeerId, Vec<u8>)> {
+    let peer_id = seq(b"peer_id:") * spaces() * parse_peer_id();
+    let related_info =
+        seq(b"related_info:") * spaces() * sym(b'[') * none_of(b"]").repeat(0..) - sym(b']');
+
+    spaces() * sym(b'{') * spaces() * peer_id - spaces() - sym(b',') - spaces() + related_info
+        - spaces()
+        - sym(b'}')
+}
+
+fn parse_add_or_remove_without_related_info() -> Parser<u8, (PeerId, Vec<u8>)> {
+    (spaces() * sym(b'(') * spaces() * parse_peer_id() - spaces() - sym(b')'))
+        .map(|peer_id| (peer_id, vec![]))
 }
 
 fn parse_opaque() -> Parser<u8, Observation<Transaction, PeerId>> {
@@ -662,7 +702,7 @@ fn convert_into_parsed_contents(result: ParsedFile) -> ParsedContents {
 
     let mut parsed_contents = ParsedContents::new(our_id.clone());
     let mut event_hashes =
-        create_events(&mut graph.graph, &graph.event_details, &mut parsed_contents);
+        create_events(&mut graph.graph, graph.event_details, &mut parsed_contents);
 
     let peer_states = peer_list
         .0
@@ -738,16 +778,16 @@ fn convert_to_meta_election(
 
 fn create_events(
     graph: &mut BTreeMap<String, ParsedEvent>,
-    details: &BTreeMap<String, EventDetails>,
+    mut details: BTreeMap<String, EventDetails>,
     parsed_contents: &mut ParsedContents,
 ) -> BTreeMap<String, Hash> {
     let mut event_hashes = BTreeMap::new();
     while !graph.is_empty() {
         let (ev_id, next_parsed_event) = next_topological_event(graph, &event_hashes);
-        let next_event_details = unwrap!(details.get(&ev_id));
+        let next_event_details = unwrap!(details.remove(&ev_id));
         let next_event = Event::new_from_dot_input(
             &next_parsed_event.creator,
-            &next_event_details.cause,
+            next_event_details.cause,
             next_parsed_event
                 .self_parent
                 .and_then(|ref id| event_hashes.get(id).cloned()),

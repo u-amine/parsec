@@ -15,6 +15,8 @@ mod packed_event;
 
 #[cfg(test)]
 pub(super) use self::event::find_event_by_short_name;
+#[cfg(any(test, feature = "testing"))]
+pub(super) use self::event::CauseInput;
 pub(super) use self::event::Event;
 pub use self::messages::{Request, Response};
 pub use self::packed_event::PackedEvent;

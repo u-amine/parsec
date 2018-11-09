@@ -291,59 +291,16 @@ impl Event<Transaction, PeerId> {
     // Creates a new event using the input parameters directly.
     pub(crate) fn new_from_dot_input(
         creator: &PeerId,
-        cause: &str,
+        cause: CauseInput,
         self_parent: Option<Hash>,
         other_parent: Option<Hash>,
         topological_index: usize,
         index_by_creator: u64,
         last_ancestors: BTreeMap<PeerId, u64>,
     ) -> Self {
-        let cause = match cause {
-            "Initial" => Cause::Initial,
-            // For the dot file contains only partial graph, we have to manually change the info of
-            // ancestor to null for some events. In that case, populate ancestors with empty hash.
-            "Request" => Cause::Request {
-                self_parent: self_parent.unwrap_or(Hash::ZERO),
-                other_parent: other_parent.unwrap_or(Hash::ZERO),
-            },
-            "Response" => Cause::Response {
-                self_parent: self_parent.unwrap_or(Hash::ZERO),
-                other_parent: other_parent.unwrap_or(Hash::ZERO),
-            },
-            _ => {
-                let content = unwrap!(unwrap!(cause.split('(').nth(2)).split(')').next());
-                let observation = if cause.contains("OpaquePayload") {
-                    Observation::OpaquePayload(Transaction::new(content))
-                } else if cause.contains("Genesis") {
-                    // `content` will contain e.g. "{Alice, Bob, Carol, Dave, Eric}".
-                    let peer_ids = content[1..content.len() - 1]
-                        .split(", ")
-                        .map(PeerId::new)
-                        .collect();
-                    Observation::Genesis(peer_ids)
-                } else if cause.contains("Add") {
-                    Observation::Add {
-                        peer_id: PeerId::new(content),
-                        related_info: vec![],
-                    }
-                } else if cause.contains("Remove") {
-                    Observation::Remove {
-                        peer_id: PeerId::new(content),
-                        related_info: vec![],
-                    }
-                } else {
-                    panic!("wrong cause string: {:?}", cause);
-                };
-                Cause::Observation {
-                    self_parent: self_parent.unwrap_or(Hash::ZERO),
-                    vote: Vote::new(creator, observation),
-                }
-            }
-        };
-
         let content = Content {
             creator: creator.clone(),
-            cause,
+            cause: Cause::new_from_dot_input(cause, creator, self_parent, other_parent),
         };
 
         let serialised_content = serialise(&content);
@@ -363,6 +320,15 @@ impl Event<Transaction, PeerId> {
             cache,
         }
     }
+}
+
+#[cfg(any(test, feature = "testing"))]
+#[derive(Debug)]
+pub(crate) enum CauseInput {
+    Initial,
+    Request,
+    Response,
+    Observation(Observation<Transaction, PeerId>),
 }
 
 // Properties of `Event` that can be computed from its `Content`.
