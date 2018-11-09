@@ -11,22 +11,25 @@ use super::meta_vote::{MetaVote, MetaVotes};
 use gossip::Event;
 use id::PublicId;
 use network_event::NetworkEvent;
-use observation::Observation;
+use observation::ObservationHash;
 use std::collections::BTreeSet;
 
 #[serde(bound = "")]
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub(crate) struct MetaEvent<T: NetworkEvent, P: PublicId> {
+pub(crate) struct MetaEvent<P: PublicId> {
     // The set of peers for which this event can strongly-see an event by that peer which carries a
     // valid block.  If there are a supermajority of peers here, this event is an "observer".
     pub observees: BTreeSet<P>,
-    // Payloads of all the votes deemed interesting by this event.
-    pub interesting_content: Vec<Observation<T, P>>,
+    // Hashes of payloads of all the votes deemed interesting by this event.
+    pub interesting_content: Vec<ObservationHash>,
     pub meta_votes: MetaVotes<P>,
 }
 
-impl<T: NetworkEvent, P: PublicId> MetaEvent<T, P> {
-    pub fn build(election: MetaElectionHandle, event: &Event<T, P>) -> MetaEventBuilder<T, P> {
+impl<P: PublicId> MetaEvent<P> {
+    pub fn build<T: NetworkEvent>(
+        election: MetaElectionHandle,
+        event: &Event<T, P>,
+    ) -> MetaEventBuilder<T, P> {
         MetaEventBuilder {
             election,
             event,
@@ -42,7 +45,7 @@ impl<T: NetworkEvent, P: PublicId> MetaEvent<T, P> {
 pub(crate) struct MetaEventBuilder<'a, T: NetworkEvent + 'a, P: PublicId + 'a> {
     election: MetaElectionHandle,
     event: &'a Event<T, P>,
-    meta_event: MetaEvent<T, P>,
+    meta_event: MetaEvent<P>,
 }
 
 impl<'a, T: NetworkEvent + 'a, P: PublicId + 'a> MetaEventBuilder<'a, T, P> {
@@ -66,15 +69,15 @@ impl<'a, T: NetworkEvent + 'a, P: PublicId + 'a> MetaEventBuilder<'a, T, P> {
         self.meta_event.observees = observees;
     }
 
-    pub fn set_interesting_content(&mut self, content: Vec<Observation<T, P>>) {
-        self.meta_event.interesting_content = content;
+    pub fn set_interesting_content(&mut self, content_hash: Vec<ObservationHash>) {
+        self.meta_event.interesting_content = content_hash;
     }
 
     pub fn add_meta_votes(&mut self, peer_id: P, votes: Vec<MetaVote>) {
         let _ = self.meta_event.meta_votes.insert(peer_id, votes);
     }
 
-    pub fn finish(self) -> MetaEvent<T, P> {
+    pub fn finish(self) -> MetaEvent<P> {
         self.meta_event
     }
 }

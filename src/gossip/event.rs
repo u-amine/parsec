@@ -190,6 +190,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         &self.cache.last_ancestors
     }
 
+    #[cfg(feature = "testing")]
     pub fn is_request(&self) -> bool {
         if let Cause::Request { .. } = self.content.cause {
             true

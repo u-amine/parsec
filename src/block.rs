@@ -7,7 +7,6 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use error::Error;
-use hash::Hash;
 use id::{Proof, PublicId};
 use network_event::NetworkEvent;
 use observation::Observation;
@@ -48,11 +47,6 @@ impl<T: NetworkEvent, P: PublicId> Block<T, P> {
     /// Returns the proofs of this block.
     pub fn proofs(&self) -> &BTreeSet<Proof<P>> {
         &self.proofs
-    }
-
-    /// Returns the hash of this block's payload.
-    pub fn create_payload_hash(&self) -> Hash {
-        self.payload.create_hash()
     }
 
     /// Converts `vote` to a `Proof` and attempts to add it to the block.  Returns an error if
