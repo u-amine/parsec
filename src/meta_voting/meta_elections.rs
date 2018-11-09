@@ -129,7 +129,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testing"))]
     pub fn from_map_and_history(
         mut elections_map: BTreeMap<MetaElectionHandle, MetaElection<T, P>>,
         history: Vec<Hash>,

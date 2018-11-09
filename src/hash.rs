@@ -11,7 +11,7 @@ use std::fmt::{self, Debug, Formatter};
 use tiny_keccak;
 
 pub const HASH_LEN: usize = 32;
-#[cfg(any(test, feature = "dump-graphs"))]
+#[cfg(any(test, feature = "testing", feature = "dump-graphs"))]
 pub const HEX_DIGITS_PER_BYTE: usize = 2;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -32,7 +32,7 @@ impl Hash {
         Ordering::Equal
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "testing"))]
     pub fn from_bytes(bytes: [u8; HASH_LEN]) -> Self {
         Hash(bytes)
     }

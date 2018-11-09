@@ -7,13 +7,15 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 /// This is used to read a dumped dot file and rebuild the event graph and associated info.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 mod dot_parser;
 mod environment;
 mod network;
 mod peer;
 #[cfg(feature = "testing")]
 pub mod proptest;
+#[cfg(feature = "testing")]
+mod record;
 mod schedule;
 
 #[cfg(all(test, feature = "malice-detection"))]
@@ -23,6 +25,8 @@ pub(crate) use self::dot_parser::{parse_test_dot_file, ParsedContents};
 pub use self::environment::{Environment, RngChoice};
 pub use self::network::Network;
 pub use self::peer::{Peer, PeerStatus, PeerStatuses};
+#[cfg(feature = "testing")]
+pub use self::record::Record;
 pub use self::schedule::*;
 
 type Observation = super::observation::Observation<super::mock::Transaction, super::mock::PeerId>;

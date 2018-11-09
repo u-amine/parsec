@@ -23,9 +23,8 @@ use round_hash::RoundHash;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{self, Read};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
-use std::thread;
 
 fn newline() -> Parser<u8, ()> {
     (seq(b"\n") | seq(b"\r\n")).discard()
@@ -570,7 +569,10 @@ impl ParsedContents {
             peer_list,
         }
     }
+}
 
+#[cfg(test)]
+impl ParsedContents {
     /// Remove and return the latest (newest) event from the `ParsedContents`, if any.
     pub fn remove_latest_event(&mut self) -> Option<Event<Transaction, PeerId>> {
         let hash = *self
@@ -597,14 +599,17 @@ impl ParsedContents {
 }
 
 /// Read a dumped dot file and return with parsed event graph and associated info.
-pub(crate) fn parse_dot_file(full_path: &Path) -> io::Result<ParsedContents> {
+pub(crate) fn parse_dot_file<P: AsRef<Path>>(full_path: P) -> io::Result<ParsedContents> {
     let result = unwrap!(read(File::open(full_path)?));
     Ok(convert_into_parsed_contents(result))
 }
 
 /// For use by functional/unit tests which provide a dot file for the test setup.  This put the test
 /// name as part of the path automatically.
+#[cfg(test)]
 pub(crate) fn parse_test_dot_file(filename: &str) -> ParsedContents {
+    use std::thread;
+
     parse_dot_file_with_test_name(
         filename,
         &unwrap!(thread::current().name()).replace("::", "_"),
@@ -613,7 +618,10 @@ pub(crate) fn parse_test_dot_file(filename: &str) -> ParsedContents {
 
 /// For use by functional/unit tests which provide a dot file for the test setup.  This reads and
 /// parses the dot file as per `parse_dot_file()` above, with test name being part of the path.
+#[cfg(test)]
 pub(crate) fn parse_dot_file_with_test_name(filename: &str, test_name: &str) -> ParsedContents {
+    use std::path::PathBuf;
+
     let mut dot_path = PathBuf::from("input_graphs");
     dot_path.push(test_name);
     dot_path.push(filename);
