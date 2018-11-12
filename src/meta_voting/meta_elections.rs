@@ -164,6 +164,15 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
             .map(|(handle, _)| *handle)
     }
 
+    pub fn preceding(&self, handle: MetaElectionHandle) -> Option<MetaElectionHandle> {
+        use std::ops::Bound::{Excluded, Unbounded};
+        self.previous_elections
+            .range((Unbounded, Excluded(&handle)))
+            .rev()
+            .map(|(handle, _)| *handle)
+            .next()
+    }
+
     pub fn add_meta_event(
         &mut self,
         handle: MetaElectionHandle,
@@ -238,6 +247,13 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
     /// List of voters participating in the given meta-election.
     pub fn voters(&self, handle: MetaElectionHandle) -> Option<&BTreeSet<P>> {
         self.get(handle).map(|election| &election.all_voters)
+    }
+
+    /// Number of voters participating in the given meta-election.
+    pub fn voter_count(&self, handle: MetaElectionHandle) -> usize {
+        self.get(handle)
+            .map(|election| election.all_voters.len())
+            .unwrap_or(0)
     }
 
     pub fn consensus_history(&self) -> &[Hash] {

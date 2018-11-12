@@ -764,6 +764,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     // Any payloads which this event sees as "interesting".  If this returns a non-empty set, then
     // this event is classed as an interesting one.
     fn set_interesting_content(&self, builder: &mut MetaEventBuilder<T, S::PublicId>) {
+        if let Some(payloads) =
+            self.previous_interesting_content(builder.election(), builder.event())
+        {
+            builder.set_interesting_content(payloads);
+            return;
+        }
+
         let peers_that_can_vote = self.voters(builder.election());
         let start_index = self.meta_elections.start_index(builder.election());
 
@@ -813,6 +820,40 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .collect();
 
         builder.set_interesting_content(payloads);
+    }
+
+    // Try to get interesting content of the given event from the previous meta-election.
+    fn previous_interesting_content(
+        &self,
+        election: MetaElectionHandle,
+        event: &Event<T, S::PublicId>,
+    ) -> Option<Vec<Observation<T, S::PublicId>>> {
+        let prev_election = self.meta_elections.preceding(election)?;
+
+        if self.meta_elections.voter_count(election)
+            != self.meta_elections.voter_count(prev_election)
+        {
+            // Membership change occurred. Can't reuse interesting content.
+            return None;
+        }
+
+        let prev_meta_event = self
+            .meta_elections
+            .meta_event(prev_election, event.hash())?;
+        let payloads = prev_meta_event
+            .interesting_content
+            .iter()
+            .filter(|payload| {
+                // Filter payloads that are still interesting.
+                self.meta_elections.is_interesting_content_candidate(
+                    election,
+                    event.creator(),
+                    payload,
+                )
+            }).cloned()
+            .collect();
+
+        Some(payloads)
     }
 
     fn ancestors_carrying_payload(
