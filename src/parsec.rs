@@ -562,13 +562,14 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         let elections: Vec<_> = self.meta_elections.all().collect();
         for election in elections {
-            self.advance_meta_election(election, event_hash)?;
+            self.create_meta_event(election, event_hash)?;
         }
 
         let creator = self.get_known_event(event_hash)?.creator().clone();
 
         if let Some(payload) = self.compute_consensus(MetaElectionHandle::CURRENT, event_hash) {
             self.output_consensus_info(&payload);
+            self.mark_observation_as_consensused(&payload);
 
             self.handle_self_consensus(&payload);
             if creator != *self.our_pub_id() {
@@ -586,11 +587,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .mark_as_decided(prev_election, self.peer_list.our_pub_id());
             self.meta_elections.mark_as_decided(prev_election, &creator);
 
-            let block = self.create_block(payload.clone())?;
+            let block = self.create_block(payload)?;
             self.consensused_blocks.push_back(block);
-            self.mark_observation_as_consensused(&payload);
 
-            self.restart_consensus(start_index);
+            self.restart_consensus(start_index)?;
         } else if creator != *self.our_pub_id() {
             let undecided: Vec<_> = self.meta_elections.undecided_by(&creator).collect();
             for election in undecided {
@@ -735,11 +735,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
     }
 
-    fn advance_meta_election(
-        &mut self,
-        election: MetaElectionHandle,
-        event_hash: &Hash,
-    ) -> Result<()> {
+    fn create_meta_event(&mut self, election: MetaElectionHandle, event_hash: &Hash) -> Result<()> {
         if self
             .meta_elections
             .meta_event(election, event_hash)
@@ -1285,14 +1281,16 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Block::new(payload, &votes)
     }
 
-    fn restart_consensus(&mut self, start_index: usize) {
+    fn restart_consensus(&mut self, start_index: usize) -> Result<()> {
         self.meta_elections
             .initialise_current_election(self.peer_list.all_ids());
 
         let hashes: Vec<_> = self.topologically_sorted_events_from(start_index).collect();
         for hash in hashes {
-            let _ = self.process_event(&hash);
+            self.process_event(&hash)?;
         }
+
+        Ok(())
     }
 
     fn compute_next_meta_election_start_index(&self) -> usize {
@@ -2400,7 +2398,9 @@ mod functional_tests {
             let genesis: BTreeSet<_> = alice_contents.peer_list.all_ids().cloned().collect();
 
             let mut alice = Parsec::from_parsed_contents(alice_contents);
-            alice.restart_consensus(0); // This is needed so the AddPeer(Eric) is consensused.
+
+            // This is needed so the AddPeer(Eric) is consensused.
+            unwrap!(alice.restart_consensus(0));
 
             // Simulate Eric creating unexpected genesis.
             let eric_id = PeerId::new("Eric");
