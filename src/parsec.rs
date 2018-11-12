@@ -1903,15 +1903,6 @@ mod functional_tests {
         };
     }
 
-    // Initialise membership lists of all peers.
-    // TODO: remove this when membership lists are handled by the dot parser itself.
-    fn initialise_membership_lists<S: SecretId>(peer_list: &mut PeerList<S>) {
-        let peer_ids: Vec<_> = peer_list.all_ids().cloned().collect();
-        for peer_id in &peer_ids {
-            peer_list.initialise_peer_membership_list(peer_id, peer_ids.clone());
-        }
-    }
-
     fn nth_event<T: NetworkEvent, P: PublicId>(
         events: &BTreeMap<Hash, Event<T, P>>,
         n: usize,
@@ -2083,7 +2074,6 @@ mod functional_tests {
         let d_18 = unwrap!(parsed_contents.remove_latest_event());
 
         let mut alice = Parsec::from_parsed_contents(parsed_contents);
-        initialise_membership_lists(&mut alice.peer_list);
         let genesis_group: BTreeSet<_> = alice.peer_list.all_ids().cloned().collect();
 
         let fred_id = PeerId::new("Fred");
@@ -2402,7 +2392,6 @@ mod functional_tests {
             let genesis: BTreeSet<_> = alice_contents.peer_list.all_ids().cloned().collect();
 
             let mut alice = Parsec::from_parsed_contents(alice_contents);
-            initialise_membership_lists(&mut alice.peer_list);
             alice.restart_consensus(); // This is needed so the AddPeer(Eric) is consensused.
 
             // Simulate Eric creating unexpected genesis.
@@ -2649,7 +2638,6 @@ mod functional_tests {
             // Check that adding C_4 triggers an accusation by Alice, but that C_4 is still added to the
             // graph.
             let mut alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
-            initialise_membership_lists(&mut alice.peer_list);
 
             let expected_accusations = vec![(
                 carol.our_pub_id().clone(),
@@ -2718,10 +2706,8 @@ mod functional_tests {
             // Generated with RNG seed: [753134140, 4096687351, 2912528994, 2847063513].
             //
             // Alice reports gossip to Bob from Carol that isn't in their section.
-            let mut alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
-            initialise_membership_lists(&mut alice.peer_list);
+            let alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
             let mut bob = Parsec::from_parsed_contents(parse_test_dot_file("bob.dot"));
-            initialise_membership_lists(&mut bob.peer_list);
 
             // Verify peer lists
             let alice_id = PeerId::new("Alice");

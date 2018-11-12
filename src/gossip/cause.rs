@@ -6,8 +6,12 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+#[cfg(any(test, feature = "testing"))]
+use super::event::CauseInput;
 use hash::Hash;
 use id::PublicId;
+#[cfg(any(test, feature = "testing"))]
+use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
 use std::fmt::{self, Display, Formatter};
 use vote::Vote;
@@ -46,5 +50,36 @@ impl<T: NetworkEvent, P: PublicId> Display for Cause<T, P> {
                 Cause::Initial => "Initial".to_string(),
             }
         )
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl Cause<Transaction, PeerId> {
+    pub(crate) fn new_from_dot_input(
+        input: CauseInput,
+        creator: &PeerId,
+        self_parent: Option<Hash>,
+        other_parent: Option<Hash>,
+    ) -> Self {
+        // When the dot file contains only partial graph, we have to manually change the info of
+        // ancestor to null for some events. In that case, populate ancestors with empty hash.
+        let self_parent = self_parent.unwrap_or(Hash::ZERO);
+        let other_parent = other_parent.unwrap_or(Hash::ZERO);
+
+        match input {
+            CauseInput::Initial => Cause::Initial,
+            CauseInput::Request => Cause::Request {
+                self_parent,
+                other_parent,
+            },
+            CauseInput::Response => Cause::Response {
+                self_parent,
+                other_parent,
+            },
+            CauseInput::Observation(observation) => Cause::Observation {
+                self_parent,
+                vote: Vote::new(creator, observation),
+            },
+        }
     }
 }
