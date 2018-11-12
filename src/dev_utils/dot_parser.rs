@@ -80,28 +80,36 @@ fn parse_our_id() -> Parser<u8, PeerId> {
 }
 
 #[derive(Debug)]
-struct ParsedPeerList(BTreeMap<PeerId, ListDef>);
+struct ParsedPeerList(BTreeMap<PeerId, ParsedPeer>);
 
 #[derive(Debug)]
-struct ListDef {
+struct ParsedPeer {
     state: PeerState,
-    peers: BTreeSet<PeerId>,
+    membership_list: BTreeSet<PeerId>,
 }
 
 fn parse_peer_list() -> Parser<u8, ParsedPeerList> {
     let list_defs =
-        comment_prefix() * seq(b"peer_list: {") * next_line() * parse_list_def().repeat(0..)
+        comment_prefix() * seq(b"peer_list: {") * next_line() * parse_peer().repeat(0..)
             - comment_prefix()
             - sym(b'}') * next_line();
     list_defs.map(|defs| ParsedPeerList(defs.into_iter().collect()))
 }
 
-fn parse_list_def() -> Parser<u8, (PeerId, ListDef)> {
+fn parse_peer() -> Parser<u8, (PeerId, ParsedPeer)> {
     let list_def = comment_prefix() * parse_peer_id() - seq(b"; ") + parse_peer_state()
         - seq(b"; peers: ")
         + parse_peers()
         - next_line();
-    list_def.map(|((id, state), peers)| (id, ListDef { state, peers }))
+    list_def.map(|((id, state), membership_list)| {
+        (
+            id,
+            ParsedPeer {
+                state,
+                membership_list,
+            },
+        )
+    })
 }
 
 fn parse_peer_state() -> Parser<u8, PeerState> {
@@ -704,12 +712,12 @@ fn convert_into_parsed_contents(result: ParsedFile) -> ParsedContents {
     let mut event_hashes =
         create_events(&mut graph.graph, graph.event_details, &mut parsed_contents);
 
-    let peer_states = peer_list
+    let peer_data = peer_list
         .0
-        .iter()
-        .map(|(id, list)| (id.clone(), list.state))
+        .into_iter()
+        .map(|(id, data)| (id, (data.state, data.membership_list)))
         .collect();
-    let peer_list = PeerList::new_from_dot_input(our_id, &parsed_contents.events, &peer_states);
+    let peer_list = PeerList::new_from_dot_input(our_id, &parsed_contents.events, peer_data);
 
     parsed_contents.peer_list = peer_list;
     parsed_contents.meta_elections = convert_to_meta_elections(meta_elections, &mut event_hashes);

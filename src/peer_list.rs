@@ -379,26 +379,36 @@ impl PeerList<PeerId> {
     pub(super) fn new_from_dot_input(
         our_id: PeerId,
         events_graph: &BTreeMap<Hash, Event<Transaction, PeerId>>,
-        peer_states: &BTreeMap<PeerId, PeerState>,
+        peer_data: BTreeMap<PeerId, (PeerState, BTreeSet<PeerId>)>,
     ) -> Self {
         let mut peers = BTreeMap::new();
-        for (peer_id, &state) in peer_states {
+        let peer_ids: BTreeSet<_> = peer_data.keys().cloned().collect();
+
+        for (peer_id, (state, membership_list)) in peer_data {
             let mut events = BTreeSet::new();
             for event in events_graph.values() {
-                if event.creator() == peer_id {
+                if *event.creator() == peer_id {
                     let _ = events.insert((event.index_by_creator(), *event.hash()));
-                } else if !peer_states.contains_key(event.creator()) {
+                } else if !peer_ids.contains(event.creator()) {
                     debug!(
-                        "peer_states list doesn't contain the creator of event {:?}",
+                        "peer_data list doesn't contain the creator of event {:?}",
                         event
                     );
                 }
             }
 
-            let mut peer = Peer::new(peer_id, state);
+            let mut peer = Peer::new(&peer_id, state);
             peer.events = events;
 
-            let _ = peers.insert(peer_id.clone(), peer);
+            for change in membership_list
+                .into_iter()
+                .chain(iter::once(peer_id.clone()))
+                .map(MembershipListChange::Add)
+            {
+                peer.change_membership_list(change)
+            }
+
+            let _ = peers.insert(peer_id, peer);
         }
 
         PeerList { our_id, peers }
