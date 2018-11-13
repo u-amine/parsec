@@ -1350,7 +1350,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     .unwrap_or(false)
             }).map(|event| event.topological_index())
             .next()
-            .unwrap_or(0)
+            .unwrap_or_else(|| self.events.len())
     }
 
     fn topologically_sorted_events_from<'a>(
