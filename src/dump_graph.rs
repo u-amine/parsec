@@ -634,6 +634,14 @@ mod detail {
                     ));
                 }
 
+                // write start index
+                lines.push(format!(
+                    "{}{}start_index: {}",
+                    Self::COMMENT,
+                    self.indentation(),
+                    election.start_index
+                ));
+
                 // write meta-events
                 lines.push(format!(
                     "{}{}meta_events: {{",

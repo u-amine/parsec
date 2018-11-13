@@ -68,6 +68,8 @@ use parsec::dev_utils::Record;
 #[cfg(feature = "testing")]
 fn bench(c: &mut Criterion) {
     bench_dot_file(c, "minimal");
+    bench_dot_file(c, "static");
+    bench_dot_file(c, "dynamic");
 }
 
 #[cfg(feature = "testing")]
@@ -79,7 +81,12 @@ fn bench_dot_file(c: &mut Criterion, name: &'static str) {
 }
 
 #[cfg(feature = "testing")]
-criterion_group!(benches, bench);
+criterion_group! {
+    name = benches;
+    config = Criterion::default().sample_size(10);
+    targets = bench
+}
+
 #[cfg(feature = "testing")]
 criterion_main!(benches);
 

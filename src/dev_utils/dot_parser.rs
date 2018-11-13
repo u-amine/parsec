@@ -341,6 +341,7 @@ struct ParsedMetaElection {
     all_voters: BTreeSet<PeerId>,
     undecided_voters: BTreeSet<PeerId>,
     payload: Option<Observation<Transaction, PeerId>>,
+    start_index: usize,
     meta_events: BTreeMap<String, MetaEvent<Transaction, PeerId>>,
 }
 
@@ -352,14 +353,18 @@ fn parse_meta_election() -> Parser<u8, (MetaElectionHandle, ParsedMetaElection)>
             + parse_all_voters()
             + parse_undecided_voters()
             + parse_payload().opt()
+            + parse_start_index().opt()
             + parse_meta_events()).map(
             |(
                 (
                     (
-                        (((consensus_len, round_hashes), interesting_events), all_voters),
-                        undecided_voters,
+                        (
+                            (((consensus_len, round_hashes), interesting_events), all_voters),
+                            undecided_voters,
+                        ),
+                        payload,
                     ),
-                    payload,
+                    start_index,
                 ),
                 meta_events,
             )| {
@@ -370,6 +375,7 @@ fn parse_meta_election() -> Parser<u8, (MetaElectionHandle, ParsedMetaElection)>
                     all_voters,
                     undecided_voters,
                     payload,
+                    start_index: start_index.unwrap_or(0),
                     meta_events,
                 }
             },
@@ -456,6 +462,10 @@ fn parse_undecided_voters() -> Parser<u8, BTreeSet<PeerId>> {
 
 fn parse_payload() -> Parser<u8, Observation<Transaction, PeerId>> {
     comment_prefix() * seq(b"payload: ") * parse_observation() - next_line()
+}
+
+fn parse_start_index() -> Parser<u8, usize> {
+    comment_prefix() * seq(b"start_index: ") * parse_usize() - next_line()
 }
 
 fn parse_observation() -> Parser<u8, Observation<Transaction, PeerId>> {
@@ -789,6 +799,7 @@ fn convert_to_meta_election(
             }).collect(),
         consensus_len: meta_election.consensus_len,
         payload: meta_election.payload,
+        start_index: meta_election.start_index,
     }
 }
 
