@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use gossip::PackedEvent;
+use gossip::{EventHash, PackedEvent};
 use hash::Hash;
 use id::PublicId;
 use network_event::NetworkEvent;
@@ -86,27 +86,27 @@ impl<T: NetworkEvent, P: PublicId> Debug for Observation<T, P> {
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Debug)]
 pub enum Malice<T: NetworkEvent, P: PublicId> {
     /// Event carries a vote for `Observation::Genesis`, but shouldn't.
-    UnexpectedGenesis(Hash),
+    UnexpectedGenesis(EventHash),
     /// Two or more votes with the same observation by the same creator.
-    DuplicateVote(Hash, Hash),
+    DuplicateVote(EventHash, EventHash),
     /// Event should be carrying a vote for `Observation::Genesis`, but doesn't
-    MissingGenesis(Hash),
+    MissingGenesis(EventHash),
     /// Event carries a vote for `Observation::Genesis` which doesn't correspond to what we know.
-    IncorrectGenesis(Hash),
+    IncorrectGenesis(EventHash),
     /// Event carries other_parent older than first ancestor of self_parent.
-    StaleOtherParent(Hash),
+    StaleOtherParent(EventHash),
     /// More than one events having this event as its self_parent.
-    Fork(Hash),
+    Fork(EventHash),
     /// A node incorrectly accused other node of malice. Contains hash of the invalid Accusation
     /// event.
-    InvalidAccusation(Hash),
+    InvalidAccusation(EventHash),
     /// We receive a gossip containing an event whose creator should not be known to the sender.
     /// Contains hash of the sync event whose ancestor has the invalid creator.
-    InvalidGossipCreator(Hash),
+    InvalidGossipCreator(EventHash),
     /// The peer shall raise an accusation against another peer creating a malice.
     /// Contains hash of the sync event whose creator shall detect such malice however failed to
     /// raise an accusation.
-    Accomplice(Hash),
+    Accomplice(EventHash),
     /// Event's creator is the same to its other_parent's creator. The accusation contains the
     /// original event so other peers can verify the accusation directly.
     OtherParentBySameCreator(Box<PackedEvent<T, P>>),

@@ -8,6 +8,7 @@
 
 use super::meta_event::MetaEvent;
 use super::meta_vote::MetaVote;
+use gossip::EventHash;
 use hash::Hash;
 use id::PublicId;
 use observation::ObservationHash;
@@ -42,7 +43,7 @@ impl Debug for MetaElectionHandle {
 #[serde(bound = "")]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct MetaElection<P: PublicId> {
-    pub(crate) meta_events: BTreeMap<Hash, MetaEvent<P>>,
+    pub(crate) meta_events: BTreeMap<EventHash, MetaEvent<P>>,
     // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
     // the one for round `x` is held at index `x`.
     pub(crate) round_hashes: BTreeMap<P, Vec<RoundHash>>,
@@ -52,7 +53,7 @@ pub(crate) struct MetaElection<P: PublicId> {
     // Set of peers which we haven't yet detected deciding this meta-election.
     pub(crate) undecided_voters: BTreeSet<P>,
     // The hashes of events for each peer that have a non-empty set of `interesting_content`.
-    pub(crate) interesting_events: BTreeMap<P, VecDeque<Hash>>,
+    pub(crate) interesting_events: BTreeMap<P, VecDeque<EventHash>>,
     // Length of `MetaElections::consensus_history` at the time this meta-election was created.
     pub(crate) consensus_len: usize,
     // Payload hash decided by this meta-election.
@@ -175,7 +176,7 @@ impl<P: PublicId> MetaElections<P> {
     pub fn add_meta_event(
         &mut self,
         handle: MetaElectionHandle,
-        event_hash: Hash,
+        event_hash: EventHash,
         creator: P,
         meta_event: MetaEvent<P>,
     ) {
@@ -217,7 +218,7 @@ impl<P: PublicId> MetaElections<P> {
     pub fn meta_event(
         &self,
         handle: MetaElectionHandle,
-        event_hash: &Hash,
+        event_hash: &EventHash,
     ) -> Option<&MetaEvent<P>> {
         self.get(handle)
             .and_then(|election| election.meta_events.get(event_hash))
@@ -226,7 +227,7 @@ impl<P: PublicId> MetaElections<P> {
     pub fn meta_votes(
         &self,
         handle: MetaElectionHandle,
-        event_hash: &Hash,
+        event_hash: &EventHash,
     ) -> Option<&BTreeMap<P, Vec<MetaVote>>> {
         self.get(handle)
             .and_then(|election| election.meta_events.get(event_hash))
@@ -262,7 +263,7 @@ impl<P: PublicId> MetaElections<P> {
     pub fn interesting_events(
         &self,
         handle: MetaElectionHandle,
-    ) -> impl Iterator<Item = (&P, &VecDeque<Hash>)> {
+    ) -> impl Iterator<Item = (&P, &VecDeque<EventHash>)> {
         self.get(handle)
             .into_iter()
             .flat_map(|election| &election.interesting_events)
@@ -372,7 +373,7 @@ impl<P: PublicId> MetaElections<P> {
     }
 
     #[cfg(any(test, feature = "dump-graphs"))]
-    pub fn current_meta_events(&self) -> &BTreeMap<Hash, MetaEvent<P>> {
+    pub fn current_meta_events(&self) -> &BTreeMap<EventHash, MetaEvent<P>> {
         &self.current_election.meta_events
     }
 

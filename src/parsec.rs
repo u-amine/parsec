@@ -11,7 +11,7 @@ use block::Block;
 use dev_utils::ParsedContents;
 use dump_graph;
 use error::{Error, Result};
-use gossip::{Event, Graph, PackedEvent, Request, Response};
+use gossip::{Event, EventHash, Graph, PackedEvent, Request, Response};
 use hash::Hash;
 use id::{PublicId, SecretId};
 use meta_voting::{MetaElectionHandle, MetaElections, MetaEvent, MetaEventBuilder, MetaVote, Step};
@@ -363,7 +363,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     /// Must only be used for events which have already been added to our graph.
-    fn get_known_event(&self, event_hash: &Hash) -> Result<&Event<T, S::PublicId>> {
+    fn get_known_event(&self, event_hash: &EventHash) -> Result<&Event<T, S::PublicId>> {
         self.events.get(event_hash).ok_or_else(|| {
             log_or_panic!(
                 "{:?} doesn't have event {:?}",
@@ -409,7 +409,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
     }
 
-    fn our_last_event_hash(&self) -> Hash {
+    fn our_last_event_hash(&self) -> EventHash {
         if let Some(hash) = self.peer_list.last_event(self.our_pub_id()) {
             *hash
         } else {
@@ -418,7 +418,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 self.our_pub_id(),
                 self.peer_list
             );
-            Hash::ZERO
+            EventHash::ZERO
         }
     }
 
@@ -555,7 +555,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Ok(())
     }
 
-    fn process_event(&mut self, event_hash: &Hash) -> Result<()> {
+    fn process_event(&mut self, event_hash: &EventHash) -> Result<()> {
         if self.peer_list.our_state() == PeerState::inactive() {
             return Ok(());
         }
@@ -752,7 +752,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
     }
 
-    fn create_meta_event(&mut self, election: MetaElectionHandle, event_hash: &Hash) -> Result<()> {
+    fn create_meta_event(
+        &mut self,
+        election: MetaElectionHandle,
+        event_hash: &EventHash,
+    ) -> Result<()> {
         if self
             .meta_elections
             .meta_event(election, event_hash)
@@ -1261,7 +1265,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     // Initialise the membership list of the creator of the given event to the same membership list
     // the creator of the other-parent had at the time of the other-parent's creation. Do nothing if
     // the event is not request or response or if the membership list is already initialised.
-    fn initialise_membership_list(&mut self, event_hash: &Hash) {
+    fn initialise_membership_list(&mut self, event_hash: &EventHash) {
         let (creator, changes) = {
             let event = if let Ok(event) = self.get_known_event(event_hash) {
                 event
@@ -1325,7 +1329,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn compute_consensus(
         &self,
         election: MetaElectionHandle,
-        event_hash: &Hash,
+        event_hash: &EventHash,
     ) -> Option<ObservationHash> {
         let last_meta_votes = self.meta_elections.meta_votes(election, event_hash)?;
 
@@ -1580,7 +1584,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     #[cfg(feature = "malice-detection")]
-    fn detect_malice_after_process(&mut self, event_hash: &Hash) {
+    fn detect_malice_after_process(&mut self, event_hash: &EventHash) {
         self.detect_invalid_gossip_creator(event_hash);
     }
 
@@ -1844,7 +1848,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         )
     }
 
-    fn detect_invalid_gossip_creator(&mut self, event_hash: &Hash) {
+    fn detect_invalid_gossip_creator(&mut self, event_hash: &EventHash) {
         let offender = {
             let event = if let Ok(event) = self.get_known_event(event_hash) {
                 event
@@ -2009,8 +2013,8 @@ mod functional_tests {
 
     #[derive(Debug, PartialEq, Eq)]
     struct Snapshot {
-        peer_list: BTreeMap<PeerId, (PeerState, BTreeMap<u64, Hash>)>,
-        events: BTreeSet<Hash>,
+        peer_list: BTreeMap<PeerId, (PeerState, BTreeMap<u64, EventHash>)>,
+        events: BTreeSet<EventHash>,
         consensused_blocks: VecDeque<Block<Transaction, PeerId>>,
         meta_elections: MetaElections<PeerId>,
     }
@@ -2914,7 +2918,7 @@ mod functional_tests {
             assert!(bob.events.contains(&a_2_hash));
         }
 
-        fn create_invalid_accusation() -> (Hash, Parsec<Transaction, PeerId>) {
+        fn create_invalid_accusation() -> (EventHash, Parsec<Transaction, PeerId>) {
             let mut alice_contents = parse_dot_file_with_test_name(
                 "alice.dot",
                 "parsec_functional_tests_handle_malice_accomplice",
@@ -2949,7 +2953,7 @@ mod functional_tests {
         fn verify_accused_accomplice(
             accuser: &Parsec<Transaction, PeerId>,
             suspect: &PeerId,
-            event_hash: &Hash,
+            event_hash: &EventHash,
         ) {
             let (offender, hash) = unwrap!(
                 our_votes(accuser)

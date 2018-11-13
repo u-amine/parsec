@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use gossip::{CauseInput, Event, Graph};
+use gossip::{CauseInput, Event, EventHash, Graph};
 use hash::Hash;
 use hash::HASH_LEN;
 use meta_voting::{
@@ -777,7 +777,7 @@ fn convert_into_parsed_contents(result: ParsedFile) -> ParsedContents {
 
 fn convert_to_meta_elections(
     meta_elections: ParsedMetaElections,
-    event_hashes: &mut BTreeMap<String, Hash>,
+    event_hashes: &mut BTreeMap<String, EventHash>,
 ) -> MetaElections<PeerId> {
     let meta_elections_map = meta_elections
         .meta_elections
@@ -794,7 +794,7 @@ fn convert_to_meta_elections(
 fn convert_to_meta_election(
     handle: MetaElectionHandle,
     meta_election: ParsedMetaElection,
-    event_hashes: &mut BTreeMap<String, Hash>,
+    event_hashes: &mut BTreeMap<String, EventHash>,
 ) -> MetaElection<PeerId> {
     MetaElection {
         meta_events: meta_election
@@ -804,7 +804,7 @@ fn convert_to_meta_election(
                 (
                     *event_hashes
                         .entry(ev_id.clone())
-                        .or_insert_with(|| Hash::from(ev_id.as_bytes())),
+                        .or_insert_with(|| EventHash::phony(ev_id.as_bytes())),
                     mev,
                 )
             }).collect(),
@@ -842,7 +842,7 @@ fn create_events(
     graph: &mut BTreeMap<String, ParsedEvent>,
     mut details: BTreeMap<String, EventDetails>,
     parsed_contents: &mut ParsedContents,
-) -> BTreeMap<String, Hash> {
+) -> BTreeMap<String, EventHash> {
     let mut event_hashes = BTreeMap::new();
     let mut event_indices = BTreeMap::new();
     while !graph.is_empty() {
@@ -875,7 +875,7 @@ fn create_events(
 
 fn next_topological_event(
     graph: &mut BTreeMap<String, ParsedEvent>,
-    hashes: &BTreeMap<String, Hash>,
+    hashes: &BTreeMap<String, EventHash>,
 ) -> (String, ParsedEvent) {
     let next_key = unwrap!(
         graph

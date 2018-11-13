@@ -6,11 +6,10 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use super::{
+    cause::Cause, content::Content, event_hash::EventHash, graph::Graph, packed_event::PackedEvent,
+};
 use error::Error;
-use gossip::cause::Cause;
-use gossip::content::Content;
-use gossip::graph::Graph;
-use gossip::packed_event::PackedEvent;
 use hash::Hash;
 use id::{PublicId, SecretId};
 #[cfg(any(test, feature = "testing"))]
@@ -38,8 +37,8 @@ pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
 impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     // Creates a new event as the result of receiving a gossip request message.
     pub fn new_from_request<S: SecretId<PublicId = P>>(
-        self_parent: Hash,
-        other_parent: Hash,
+        self_parent: EventHash,
+        other_parent: EventHash,
         graph: &Graph<T, P>,
         peer_list: &PeerList<S>,
         forking_peers: &BTreeSet<S::PublicId>,
@@ -57,8 +56,8 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
 
     // Creates a new event as the result of receiving a gossip response message.
     pub fn new_from_response<S: SecretId<PublicId = P>>(
-        self_parent: Hash,
-        other_parent: Hash,
+        self_parent: EventHash,
+        other_parent: EventHash,
         graph: &Graph<T, P>,
         peer_list: &PeerList<S>,
         forking_peers: &BTreeSet<S::PublicId>,
@@ -76,7 +75,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
 
     // Creates a new event as the result of observing a network event.
     pub fn new_from_observation<S: SecretId<PublicId = P>>(
-        self_parent: Hash,
+        self_parent: EventHash,
         observation: Observation<T, P>,
         graph: &Graph<T, P>,
         peer_list: &PeerList<S>,
@@ -160,15 +159,15 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         &self.content.creator
     }
 
-    pub fn self_parent(&self) -> Option<&Hash> {
+    pub fn self_parent(&self) -> Option<&EventHash> {
         self.content.self_parent()
     }
 
-    pub fn other_parent(&self) -> Option<&Hash> {
+    pub fn other_parent(&self) -> Option<&EventHash> {
         self.content.other_parent()
     }
 
-    pub fn hash(&self) -> &Hash {
+    pub fn hash(&self) -> &EventHash {
         &self.cache.hash
     }
 
@@ -293,8 +292,8 @@ impl Event<Transaction, PeerId> {
     pub(crate) fn new_from_dot_input(
         creator: &PeerId,
         cause: CauseInput,
-        self_parent: Option<Hash>,
-        other_parent: Option<Hash>,
+        self_parent: Option<EventHash>,
+        other_parent: Option<EventHash>,
         topological_index: usize,
         index_by_creator: u64,
         last_ancestors: BTreeMap<PeerId, u64>,
@@ -308,7 +307,7 @@ impl Event<Transaction, PeerId> {
         let signature = creator.sign_detached(&serialised_content);
 
         let cache = Cache {
-            hash: Hash::from(serialised_content.as_slice()),
+            hash: EventHash(Hash::from(serialised_content.as_slice())),
             topological_index,
             index_by_creator,
             last_ancestors,
@@ -337,7 +336,7 @@ pub(crate) enum CauseInput {
 #[derive(Serialize, Deserialize)]
 struct Cache<P: PublicId> {
     // Hash of `Event`s `Content`.
-    hash: Hash,
+    hash: EventHash,
     // Index of this event relative to all events in the graph, when sorted topologically.
     topological_index: usize,
     // Index of this event relative to other events by the same creator.
@@ -373,7 +372,7 @@ impl<P: PublicId> Cache<P> {
         let forking_peers = join_forking_peers(&content, graph, forking_peers);
         let signature = peer_list.our_id().sign_detached(&serialised_content);
         let cache = Self {
-            hash: Hash::from(serialised_content.as_slice()),
+            hash: EventHash(Hash::from(serialised_content.as_slice())),
             topological_index: graph.len(),
             index_by_creator,
             last_ancestors,
@@ -395,7 +394,7 @@ impl<P: PublicId> Cache<P> {
             .creator
             .verify_signature(&packed_event.signature, &serialised_content)
         {
-            Hash::from(serialised_content.as_slice())
+            EventHash(Hash::from(serialised_content.as_slice()))
         } else {
             return Err(Error::SignatureFailure);
         };
@@ -512,10 +511,7 @@ where
 #[cfg(test)]
 mod tests {
     use error::Error;
-    use gossip::cause::Cause;
-    use gossip::graph::Graph;
-    use gossip::Event;
-    use hash::Hash;
+    use gossip::{cause::Cause, event::Event, event_hash::EventHash, graph::Graph};
     use id::SecretId;
     use mock::{PeerId, Transaction};
     use observation::Observation;
@@ -550,7 +546,7 @@ mod tests {
     fn insert_into_gossip_graph(
         initial_event: Event<Transaction, PeerId>,
         graph: &mut Graph<Transaction, PeerId>,
-    ) -> Hash {
+    ) -> EventHash {
         assert!(!graph.contains(initial_event.hash()));
         graph.insert(initial_event)
     }
@@ -576,7 +572,7 @@ mod tests {
     fn create_gossip_graph_with_two_events(
         alice_initial: Event<Transaction, PeerId>,
         bob_initial: Event<Transaction, PeerId>,
-    ) -> (Hash, Hash, Graph<Transaction, PeerId>) {
+    ) -> (EventHash, EventHash, Graph<Transaction, PeerId>) {
         let mut graph = Graph::new();
         let alice_initial_hash = insert_into_gossip_graph(alice_initial, &mut graph);
         let bob_initial_hash = insert_into_gossip_graph(bob_initial, &mut graph);
@@ -638,7 +634,7 @@ mod tests {
     #[cfg(feature = "testing")]
     fn event_construction_from_observation_with_phony_hash() {
         let alice = create_event_with_single_peer("Alice");
-        let hash = Hash::from(vec![42].as_slice());
+        let hash = EventHash::phony(vec![42].as_slice());
         let events = Graph::new();
         let net_event = Observation::OpaquePayload(Transaction::new("event_observed_by_alice"));
         let _ = Event::<Transaction, PeerId>::new_from_observation(

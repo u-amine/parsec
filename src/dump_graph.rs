@@ -60,8 +60,7 @@ pub use self::detail::DIR;
 
 #[cfg(feature = "dump-graphs")]
 mod detail {
-    use gossip::{Event, Graph};
-    use hash::Hash;
+    use gossip::{Event, EventHash, Graph};
     use id::{PublicId, SecretId};
     use meta_voting::{MetaElections, MetaEvent, MetaVotes};
     use network_event::NetworkEvent;
@@ -178,13 +177,13 @@ mod detail {
 
     fn parent_pos(
         index: u64,
-        parent_hash: Option<&Hash>,
-        positions: &BTreeMap<Hash, u64>,
+        parent_hash: Option<&EventHash>,
+        positions: &BTreeMap<EventHash, u64>,
     ) -> Option<u64> {
         if let Some(parent_hash) = parent_hash {
             if let Some(parent_pos) = positions.get(parent_hash) {
                 Some(*parent_pos)
-            } else if *parent_hash == Hash::ZERO {
+            } else if *parent_hash == EventHash::ZERO {
                 Some(index)
             } else {
                 None
@@ -330,7 +329,7 @@ mod detail {
             self.indent -= 2;
         }
 
-        fn hash_to_short_name(&self, hash: &Hash) -> Option<String> {
+        fn hash_to_short_name(&self, hash: &EventHash) -> Option<String> {
             self.gossip_graph.get(hash).map(|event| event.short_name())
         }
 
@@ -390,7 +389,7 @@ mod detail {
             self.writeln(format_args!("{}{}}}", Self::COMMENT, indent))
         }
 
-        fn calculate_positions(&self) -> BTreeMap<Hash, u64> {
+        fn calculate_positions(&self) -> BTreeMap<EventHash, u64> {
             let mut positions = BTreeMap::new();
             while positions.len() < self.gossip_graph.len() {
                 for (hash, event) in self.gossip_graph.iter() {
@@ -421,7 +420,7 @@ mod detail {
         fn write_subgraph(
             &mut self,
             peer_id: &S::PublicId,
-            positions: &BTreeMap<Hash, u64>,
+            positions: &BTreeMap<EventHash, u64>,
         ) -> io::Result<()> {
             self.writeln(format_args!("  style=invis"))?;
             self.writeln(format_args!("  subgraph cluster_{:?} {{", peer_id))?;
@@ -434,7 +433,7 @@ mod detail {
         fn write_self_parents(
             &mut self,
             peer_id: &S::PublicId,
-            positions: &BTreeMap<Hash, u64>,
+            positions: &BTreeMap<EventHash, u64>,
         ) -> io::Result<()> {
             let mut lines = vec![];
             for event in self

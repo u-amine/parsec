@@ -6,8 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use gossip::cause::Cause;
-use hash::Hash;
+use super::{cause::Cause, event_hash::EventHash};
 use id::PublicId;
 use network_event::NetworkEvent;
 
@@ -23,7 +22,7 @@ pub(super) struct Content<T: NetworkEvent, P: PublicId> {
 
 impl<T: NetworkEvent, P: PublicId> Content<T, P> {
     // Hash of sender's latest event if the `cause` is a request or response; otherwise `None`.
-    pub fn other_parent(&self) -> Option<&Hash> {
+    pub fn other_parent(&self) -> Option<&EventHash> {
         match &self.cause {
             Cause::Request { other_parent, .. } | Cause::Response { other_parent, .. } => {
                 Some(other_parent)
@@ -34,7 +33,7 @@ impl<T: NetworkEvent, P: PublicId> Content<T, P> {
 
     // Hash of our latest event if the `cause` is a request, response or observation; otherwise
     // `None`.
-    pub fn self_parent(&self) -> Option<&Hash> {
+    pub fn self_parent(&self) -> Option<&EventHash> {
         match &self.cause {
             Cause::Request { self_parent, .. }
             | Cause::Response { self_parent, .. }

@@ -8,8 +8,7 @@
 
 //! Gossip graph
 
-use super::event::Event;
-use hash::Hash;
+use super::{event::Event, event_hash::EventHash};
 use id::PublicId;
 use network_event::NetworkEvent;
 use std::collections::BTreeMap;
@@ -17,27 +16,33 @@ use std::collections::BTreeMap;
 #[serde(bound = "")]
 #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub(crate) struct Graph<T: NetworkEvent, P: PublicId> {
-    events: BTreeMap<Hash, Event<T, P>>,
+    events: BTreeMap<EventHash, Event<T, P>>,
 }
 
-impl<T: NetworkEvent, P: PublicId> Graph<T, P> {
-    pub fn new() -> Self {
+impl<T: NetworkEvent, P: PublicId> Default for Graph<T, P> {
+    fn default() -> Self {
         Self {
             events: BTreeMap::new(),
         }
     }
+}
 
-    pub fn insert(&mut self, event: Event<T, P>) -> Hash {
+impl<T: NetworkEvent, P: PublicId> Graph<T, P> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn insert(&mut self, event: Event<T, P>) -> EventHash {
         let hash = *event.hash();
         let _ = self.events.insert(hash, event);
         hash
     }
 
-    pub fn get(&self, hash: &Hash) -> Option<&Event<T, P>> {
+    pub fn get(&self, hash: &EventHash) -> Option<&Event<T, P>> {
         self.events.get(hash)
     }
 
-    pub fn contains(&self, hash: &Hash) -> bool {
+    pub fn contains(&self, hash: &EventHash) -> bool {
         self.events.contains_key(hash)
     }
 
@@ -46,12 +51,12 @@ impl<T: NetworkEvent, P: PublicId> Graph<T, P> {
     }
 
     #[cfg(any(feature = "testing", feature = "dump-graphs"))]
-    pub fn iter(&self) -> impl Iterator<Item = (&Hash, &Event<T, P>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&EventHash, &Event<T, P>)> {
         self.events.iter()
     }
 
     #[cfg(any(test, feature = "testing"))]
-    pub fn hashes(&self) -> impl Iterator<Item = &Hash> {
+    pub fn hashes(&self) -> impl Iterator<Item = &EventHash> {
         self.events.keys()
     }
 
@@ -59,7 +64,7 @@ impl<T: NetworkEvent, P: PublicId> Graph<T, P> {
         self.events.values()
     }
 
-    pub fn sorted_events_from<'a>(&'a self, start: usize) -> Vec<&'a Event<T, P>> {
+    pub fn sorted_events_from(&self, start: usize) -> Vec<&Event<T, P>> {
         let mut events: Vec<_> = self
             .events
             .values()
@@ -71,7 +76,7 @@ impl<T: NetworkEvent, P: PublicId> Graph<T, P> {
 
     /// Returns an iterator over events sorted topologically starting at the given topological
     /// index.
-    pub fn sorted_hashes_from<'a>(&'a self, start: usize) -> Vec<Hash> {
+    pub fn sorted_hashes_from(&self, start: usize) -> Vec<EventHash> {
         let mut hashes: Vec<_> = self
             .events
             .values()
@@ -108,8 +113,8 @@ impl<T: NetworkEvent, P: PublicId> Graph<T, P> {
     }
 }
 
-impl<T: NetworkEvent, P: PublicId> Into<BTreeMap<Hash, Event<T, P>>> for Graph<T, P> {
-    fn into(self) -> BTreeMap<Hash, Event<T, P>> {
+impl<T: NetworkEvent, P: PublicId> Into<BTreeMap<EventHash, Event<T, P>>> for Graph<T, P> {
+    fn into(self) -> BTreeMap<EventHash, Event<T, P>> {
         self.events
     }
 }

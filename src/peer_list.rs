@@ -7,9 +7,9 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use error::Error;
-use gossip::Event;
 #[cfg(any(test, feature = "testing"))]
 use gossip::Graph;
+use gossip::{Event, EventHash};
 use hash::Hash;
 use id::{PublicId, SecretId};
 #[cfg(any(test, feature = "testing"))]
@@ -258,7 +258,7 @@ impl<S: SecretId> PeerList<S> {
     }
 
     /// Returns the hash of the last event created by this peer. Returns `None` if cannot find.
-    pub fn last_event(&self, peer_id: &S::PublicId) -> Option<&Hash> {
+    pub fn last_event(&self, peer_id: &S::PublicId) -> Option<&EventHash> {
         self.peers
             .get(peer_id)
             .and_then(|peer| peer.events().rev().next())
@@ -269,7 +269,7 @@ impl<S: SecretId> PeerList<S> {
         &self,
         peer_id: &S::PublicId,
         index: u64,
-    ) -> impl Iterator<Item = &Hash> {
+    ) -> impl Iterator<Item = &EventHash> {
         self.peers
             .get(peer_id)
             .into_iter()
@@ -306,7 +306,10 @@ impl<S: SecretId> PeerList<S> {
     }
 
     /// Hashes of events of the given creator, in insertion order.
-    pub fn peer_events(&self, peer_id: &S::PublicId) -> impl DoubleEndedIterator<Item = &Hash> {
+    pub fn peer_events(
+        &self,
+        peer_id: &S::PublicId,
+    ) -> impl DoubleEndedIterator<Item = &EventHash> {
         self.peers
             .get(peer_id)
             .into_iter()
@@ -315,7 +318,7 @@ impl<S: SecretId> PeerList<S> {
 
     /// Hashes of our events in insertion order.
     #[cfg(any(test, feature = "malice-detection"))]
-    pub fn our_events(&self) -> impl DoubleEndedIterator<Item = &Hash> {
+    pub fn our_events(&self) -> impl DoubleEndedIterator<Item = &EventHash> {
         self.peer_events(self.our_id.public_id())
     }
 
@@ -494,7 +497,7 @@ impl Debug for PeerState {
 pub struct Peer<P: PublicId> {
     id_hash: Hash,
     state: PeerState,
-    events: BTreeSet<(u64, Hash)>,
+    events: BTreeSet<(u64, EventHash)>,
     membership_list: BTreeSet<P>,
     membership_list_changes: Vec<(u64, MembershipListChange<P>)>,
 }
@@ -514,29 +517,29 @@ impl<P: PublicId> Peer<P> {
         self.state
     }
 
-    pub fn events(&self) -> impl DoubleEndedIterator<Item = &Hash> {
+    pub fn events(&self) -> impl DoubleEndedIterator<Item = &EventHash> {
         self.events.iter().map(|&(_, ref hash)| hash)
     }
 
     #[cfg(test)]
-    pub fn indexed_events(&self) -> impl DoubleEndedIterator<Item = (u64, &Hash)> {
+    pub fn indexed_events(&self) -> impl DoubleEndedIterator<Item = (u64, &EventHash)> {
         self.events.iter().map(|&(index, ref hash)| (index, hash))
     }
 
-    pub fn events_by_index(&self, index: u64) -> impl Iterator<Item = &Hash> {
+    pub fn events_by_index(&self, index: u64) -> impl Iterator<Item = &EventHash> {
         self.events
             .range((
-                Bound::Included((index, Hash::ZERO)),
-                Bound::Excluded((index + 1, Hash::ZERO)),
+                Bound::Included((index, EventHash::ZERO)),
+                Bound::Excluded((index + 1, EventHash::ZERO)),
             )).map(|&(_, ref hash)| hash)
     }
 
-    fn add_event(&mut self, index: u64, hash: Hash) {
+    fn add_event(&mut self, index: u64, hash: EventHash) {
         let _ = self.events.insert((index, hash));
     }
 
     #[cfg(test)]
-    fn remove_event(&mut self, index: u64, hash: Hash) {
+    fn remove_event(&mut self, index: u64, hash: EventHash) {
         let _ = self.events.remove(&(index, hash));
     }
 
