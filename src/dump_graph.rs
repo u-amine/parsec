@@ -6,8 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use gossip::Event;
-use hash::Hash;
+use gossip::Graph;
 use id::SecretId;
 use meta_voting::MetaElections;
 use network_event::NetworkEvent;
@@ -33,7 +32,7 @@ pub(crate) fn init() {
 #[cfg(feature = "dump-graphs")]
 pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
     owner_id: &S::PublicId,
-    gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
+    gossip_graph: &Graph<T, S::PublicId>,
     meta_elections: &MetaElections<S::PublicId>,
     peer_list: &PeerList<S>,
     observations: BTreeMap<&ObservationHash, &Observation<T, S::PublicId>>,
@@ -49,7 +48,7 @@ pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
 #[cfg(not(feature = "dump-graphs"))]
 pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
     _: &S::PublicId,
-    _: &BTreeMap<Hash, Event<T, S::PublicId>>,
+    _: &Graph<T, S::PublicId>,
     _: &MetaElections<S::PublicId>,
     _: &PeerList<S>,
     _: BTreeMap<&ObservationHash, &Observation<T, S::PublicId>>,
@@ -61,7 +60,7 @@ pub use self::detail::DIR;
 
 #[cfg(feature = "dump-graphs")]
 mod detail {
-    use gossip::Event;
+    use gossip::{Event, Graph};
     use hash::Hash;
     use id::{PublicId, SecretId};
     use meta_voting::{MetaElections, MetaEvent, MetaVotes};
@@ -118,7 +117,7 @@ mod detail {
 
     fn catch_dump<T: NetworkEvent, P: PublicId>(
         mut file_path: PathBuf,
-        gossip_graph: &BTreeMap<Hash, Event<T, P>>,
+        gossip_graph: &Graph<T, P>,
         meta_elections: &MetaElections<P>,
     ) {
         if let Some("dev_utils::dot_parser::tests::dot_parser") = thread::current().name() {
@@ -135,7 +134,7 @@ mod detail {
 
     pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
         owner_id: &S::PublicId,
-        gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
+        gossip_graph: &Graph<T, S::PublicId>,
         meta_elections: &MetaElections<S::PublicId>,
         peer_list: &PeerList<S>,
         observations: BTreeMap<&ObservationHash, &Observation<T, S::PublicId>>,
@@ -292,7 +291,7 @@ mod detail {
 
     struct DotWriter<'a, T: NetworkEvent + 'a, S: SecretId + 'a> {
         file: BufWriter<File>,
-        gossip_graph: &'a BTreeMap<Hash, Event<T, S::PublicId>>,
+        gossip_graph: &'a Graph<T, S::PublicId>,
         meta_elections: &'a MetaElections<S::PublicId>,
         peer_list: &'a PeerList<S>,
         observations: BTreeMap<&'a ObservationHash, &'a Observation<T, S::PublicId>>,
@@ -304,7 +303,7 @@ mod detail {
 
         fn new(
             file_path: &Path,
-            gossip_graph: &'a BTreeMap<Hash, Event<T, S::PublicId>>,
+            gossip_graph: &'a Graph<T, S::PublicId>,
             meta_elections: &'a MetaElections<S::PublicId>,
             peer_list: &'a PeerList<S>,
             observations: BTreeMap<&'a ObservationHash, &'a Observation<T, S::PublicId>>,

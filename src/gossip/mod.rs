@@ -9,7 +9,7 @@
 mod cause;
 mod content;
 mod event;
-pub(super) mod graph;
+mod graph;
 mod messages;
 mod packed_event;
 
@@ -18,5 +18,6 @@ pub(super) use self::event::find_event_by_short_name;
 #[cfg(any(test, feature = "testing"))]
 pub(super) use self::event::CauseInput;
 pub(super) use self::event::Event;
+pub(super) use self::graph::Graph;
 pub use self::messages::{Request, Response};
 pub use self::packed_event::PackedEvent;

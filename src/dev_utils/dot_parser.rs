@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use gossip::{CauseInput, Event};
+use gossip::{CauseInput, Event, Graph};
 use hash::Hash;
 use hash::HASH_LEN;
 use meta_voting::{
@@ -647,7 +647,7 @@ fn parse_end() -> Parser<u8, ()> {
 /// The event graph and associated info that were parsed from the dumped dot file.
 pub(crate) struct ParsedContents {
     pub our_id: PeerId,
-    pub events: BTreeMap<Hash, Event<Transaction, PeerId>>,
+    pub events: Graph<Transaction, PeerId>,
     pub meta_elections: MetaElections<PeerId>,
     pub peer_list: PeerList<PeerId>,
     pub observation_map: BTreeMap<ObservationHash, Observation<Transaction, PeerId>>,
@@ -661,7 +661,7 @@ impl ParsedContents {
 
         ParsedContents {
             our_id,
-            events: BTreeMap::new(),
+            events: Graph::new(),
             meta_elections,
             peer_list,
             observation_map: BTreeMap::new(),
@@ -671,15 +671,9 @@ impl ParsedContents {
 
 #[cfg(test)]
 impl ParsedContents {
-    /// Remove and return the latest (newest) event from the `ParsedContents`, if any.
-    pub fn remove_latest_event(&mut self) -> Option<Event<Transaction, PeerId>> {
-        let hash = *self
-            .events
-            .values()
-            .max_by_key(|event| event.topological_index())
-            .map(|event| event.hash())?;
-        let event = self.events.remove(&hash)?;
-
+    /// Remove and return the last (newest) event from the `ParsedContents`, if any.
+    pub fn remove_last_event(&mut self) -> Option<Event<Transaction, PeerId>> {
+        let event = self.events.remove_last()?;
         self.peer_list.remove_event(&event);
 
         Some(event)
@@ -690,9 +684,7 @@ impl ParsedContents {
     /// so this is useful for simulating all kinds of invalid or malicious situations.
     pub fn add_event(&mut self, event: Event<Transaction, PeerId>) {
         unwrap!(self.peer_list.add_event(&event));
-
-        let hash = *event.hash();
-        let _ = self.events.insert(hash, event);
+        let _ = self.events.insert(event);
     }
 }
 
@@ -876,9 +868,7 @@ fn create_events(
         );
         let _ = event_indices.insert(*next_event.hash(), index);
         let _ = event_hashes.insert(ev_id, *next_event.hash());
-        let _ = parsed_contents
-            .events
-            .insert(*next_event.hash(), next_event);
+        let _ = parsed_contents.events.insert(next_event);
     }
     event_hashes
 }
@@ -917,7 +907,7 @@ mod tests {
     use std::fs;
 
     type SerialisedGraph = (
-        BTreeMap<Hash, Event<Transaction, PeerId>>,
+        Graph<Transaction, PeerId>,
         MetaElections<PeerId>,
     );
 

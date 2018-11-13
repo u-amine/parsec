@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-//! Gossip graph utilities
+//! Gossip graph
 
 use super::event::Event;
 use hash::Hash;
@@ -14,23 +14,108 @@ use id::PublicId;
 use network_event::NetworkEvent;
 use std::collections::BTreeMap;
 
-/// Iterator over all ancestors of the given event (including itself) in reverse topological order.
-pub(crate) fn ancestors<'a, T: NetworkEvent, P: PublicId>(
-    graph: &'a BTreeMap<Hash, Event<T, P>>,
-    event: &'a Event<T, P>,
-) -> Ancestors<'a, T, P> {
-    let mut queue = BTreeMap::new();
-    let _ = queue.insert(event.topological_index(), event);
+#[serde(bound = "")]
+#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub(crate) struct Graph<T: NetworkEvent, P: PublicId> {
+    events: BTreeMap<Hash, Event<T, P>>,
+}
 
-    Ancestors {
-        graph,
-        queue,
-        visited: vec![false; event.topological_index() + 1],
+impl<T: NetworkEvent, P: PublicId> Graph<T, P> {
+    pub fn new() -> Self {
+        Self {
+            events: BTreeMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, event: Event<T, P>) -> Hash {
+        let hash = *event.hash();
+        let _ = self.events.insert(hash, event);
+        hash
+    }
+
+    pub fn get(&self, hash: &Hash) -> Option<&Event<T, P>> {
+        self.events.get(hash)
+    }
+
+    pub fn contains(&self, hash: &Hash) -> bool {
+        self.events.contains_key(hash)
+    }
+
+    pub fn len(&self) -> usize {
+        self.events.len()
+    }
+
+    #[cfg(any(feature = "testing", feature = "dump-graphs"))]
+    pub fn iter(&self) -> impl Iterator<Item = (&Hash, &Event<T, P>)> {
+        self.events.iter()
+    }
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn hashes(&self) -> impl Iterator<Item = &Hash> {
+        self.events.keys()
+    }
+
+    pub fn events(&self) -> impl Iterator<Item = &Event<T, P>> {
+        self.events.values()
+    }
+
+    pub fn sorted_events_from<'a>(&'a self, start: usize) -> Vec<&'a Event<T, P>> {
+        let mut events: Vec<_> = self
+            .events
+            .values()
+            .filter(|event| event.topological_index() >= start)
+            .collect();
+        events.sort_by_key(|event| event.topological_index());
+        events
+    }
+
+    /// Returns an iterator over events sorted topologically starting at the given topological
+    /// index.
+    pub fn sorted_hashes_from<'a>(&'a self, start: usize) -> Vec<Hash> {
+        let mut hashes: Vec<_> = self
+            .events
+            .values()
+            .filter(|event| event.topological_index() >= start)
+            .map(|event| (event.hash(), event.topological_index()))
+            .collect();
+        hashes.sort_by_key(|&(_, index)| index);
+        hashes.into_iter().map(|(hash, _)| *hash).collect()
+    }
+
+    /// Iterator over all ancestors of the given event (including itself) in reverse topological order.
+    pub fn ancestors<'a>(&'a self, event: &'a Event<T, P>) -> Ancestors<'a, T, P> {
+        let mut queue = BTreeMap::new();
+        let _ = queue.insert(event.topological_index(), event);
+
+        Ancestors {
+            graph: self,
+            queue,
+            visited: vec![false; event.topological_index() + 1],
+        }
+    }
+}
+
+#[cfg(test)]
+impl<T: NetworkEvent, P: PublicId> Graph<T, P> {
+    /// Remove the topologically last event.
+    pub fn remove_last(&mut self) -> Option<Event<T, P>> {
+        let hash = *self
+            .events
+            .values()
+            .max_by_key(|event| event.topological_index())
+            .map(|event| event.hash())?;
+        self.events.remove(&hash)
+    }
+}
+
+impl<T: NetworkEvent, P: PublicId> Into<BTreeMap<Hash, Event<T, P>>> for Graph<T, P> {
+    fn into(self) -> BTreeMap<Hash, Event<T, P>> {
+        self.events
     }
 }
 
 pub(crate) struct Ancestors<'a, T: NetworkEvent + 'a, P: PublicId + 'a> {
-    graph: &'a BTreeMap<Hash, Event<T, P>>,
+    graph: &'a Graph<T, P>,
     queue: BTreeMap<usize, &'a Event<T, P>>,
     visited: Vec<bool>, // TODO: replace with bitset, for space efficiency
 }
@@ -70,7 +155,6 @@ impl<'a, T: NetworkEvent, P: PublicId> Iterator for Ancestors<'a, T, P> {
 #[cfg(test)]
 mod tests {
     use super::super::find_event_by_short_name;
-    use super::*;
     use dev_utils::parse_test_dot_file;
 
     #[test]
@@ -79,7 +163,7 @@ mod tests {
         let contents = parse_test_dot_file("carol.dot");
         let graph = contents.events;
 
-        let event = unwrap!(find_event_by_short_name(graph.values(), "B_4"));
+        let event = unwrap!(find_event_by_short_name(graph.events(), "B_4"));
 
         let expected = vec![
             "B_4", "B_3", "D_2", "D_1", "D_0", "B_2", "B_1", "B_0", "A_1", "A_0",
@@ -88,7 +172,7 @@ mod tests {
         let mut actual_names = Vec::new();
         let mut actual_indices = Vec::new();
 
-        for event in ancestors(&graph, event) {
+        for event in graph.ancestors(event) {
             actual_names.push(event.short_name());
             actual_indices.push(event.topological_index());
         }

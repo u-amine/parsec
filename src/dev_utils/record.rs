@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use super::dot_parser::{parse_dot_file, ParsedContents};
-use gossip::{graph, Event, Request, Response};
+use gossip::{Event, Request, Response};
 use mock::{PeerId, Transaction};
 use observation::Observation;
 use parsec::{self, Parsec};
@@ -46,7 +46,7 @@ impl Record {
 
 impl From<ParsedContents> for Record {
     fn from(contents: ParsedContents) -> Self {
-        let mut events: Vec<_> = contents.events.values().collect();
+        let mut events: Vec<_> = contents.events.events().collect();
         events.sort_by_key(|event| event.topological_index());
 
         // Find the genesis group
@@ -110,10 +110,11 @@ impl From<ParsedContents> for Record {
 
                     let src = other_parent.creator().clone();
 
-                    let mut events_to_gossip: Vec<_> =
-                        graph::ancestors(&contents.events, other_parent)
-                            .filter(|event| !known[event.topological_index()])
-                            .collect();
+                    let mut events_to_gossip: Vec<_> = contents
+                        .events
+                        .ancestors(other_parent)
+                        .filter(|event| !known[event.topological_index()])
+                        .collect();
                     events_to_gossip.reverse();
 
                     for event in &events_to_gossip {

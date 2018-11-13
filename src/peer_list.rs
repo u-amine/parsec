@@ -8,6 +8,8 @@
 
 use error::Error;
 use gossip::Event;
+#[cfg(any(test, feature = "testing"))]
+use gossip::Graph;
 use hash::Hash;
 use id::{PublicId, SecretId};
 #[cfg(any(test, feature = "testing"))]
@@ -362,7 +364,7 @@ impl PeerList<PeerId> {
     // Creates a new PeerList using the input parameters directly.
     pub(super) fn new_from_dot_input(
         our_id: PeerId,
-        events_graph: &BTreeMap<Hash, Event<Transaction, PeerId>>,
+        graph: &Graph<Transaction, PeerId>,
         peer_data: BTreeMap<PeerId, (PeerState, BTreeSet<PeerId>)>,
     ) -> Self {
         let mut peers = BTreeMap::new();
@@ -370,7 +372,7 @@ impl PeerList<PeerId> {
 
         for (peer_id, (state, membership_list)) in peer_data {
             let mut events = BTreeSet::new();
-            for event in events_graph.values() {
+            for event in graph.events() {
                 if *event.creator() == peer_id {
                     let _ = events.insert((event.index_by_creator(), *event.hash()));
                 } else if !peer_ids.contains(event.creator()) {
