@@ -159,18 +159,17 @@ fn parse_graph() -> Parser<u8, ParsedGraph> {
     subgraphs.map(|(graphs, details)| {
         let mut graph = BTreeMap::new();
         for subgraph in graphs {
-            let mut self_parent = None;
             for event in subgraph.events {
+                let self_parent = subgraph.self_parents.get(&event).cloned();
                 let other_parent = subgraph.other_parents.get(&event).cloned();
                 let _ = graph.insert(
                     event.clone(),
                     ParsedEvent {
                         creator: subgraph.creator.clone(),
-                        self_parent: self_parent.clone(),
+                        self_parent,
                         other_parent,
                     },
                 );
-                self_parent = Some(event);
             }
         }
         ParsedGraph {
@@ -190,6 +189,7 @@ struct ParsedEdge {
 struct ParsedSubgraph {
     creator: PeerId,
     events: Vec<String>,
+    self_parents: BTreeMap<String, String>,
     other_parents: BTreeMap<String, String>,
 }
 
@@ -202,7 +202,7 @@ fn parse_subgraph() -> Parser<u8, ParsedSubgraph> {
         * seq(b"subgraph cluster_")
         * parse_peer_id();
 
-    let events = whitespace()
+    let self_parents = whitespace()
         * sym(b'{')
         * next_line().repeat(SKIP_AFTER_SUBGRAPH)
         * parse_edge().repeat(0..)
@@ -210,15 +210,23 @@ fn parse_subgraph() -> Parser<u8, ParsedSubgraph> {
         - sym(b'}');
     let other_parents = whitespace() * parse_edge().repeat(0..);
 
-    // `events` will contain the creator's line - we are only interested in the set of events at the
+    // `self_parents` will contain the creator's line - we are only interested in the set of events at the
     // end of edges
-    (id + events + other_parents).map(|((id, events), other_parents)| ParsedSubgraph {
-        creator: id,
-        events: events.into_iter().map(|edge| edge.end).collect(),
-        other_parents: other_parents
-            .into_iter()
-            .map(|edge| (edge.end, edge.start))
-            .collect(),
+    (id + self_parents + other_parents).map(|((id, self_parents), other_parents)| {
+        let events = self_parents.iter().map(|edge| edge.end.clone()).collect();
+        ParsedSubgraph {
+            creator: id,
+            events,
+            self_parents: self_parents
+                .into_iter()
+                .skip(1)    // skip the edge creator_id -> initial_event
+                .map(|edge| (edge.end, edge.start))
+                .collect(),
+            other_parents: other_parents
+                .into_iter()
+                .map(|edge| (edge.end, edge.start))
+                .collect(),
+        }
     })
 }
 
@@ -790,22 +798,29 @@ fn create_events(
     parsed_contents: &mut ParsedContents,
 ) -> BTreeMap<String, Hash> {
     let mut event_hashes = BTreeMap::new();
+    let mut event_indices = BTreeMap::new();
     while !graph.is_empty() {
         let (ev_id, next_parsed_event) = next_topological_event(graph, &event_hashes);
         let next_event_details = unwrap!(details.remove(&ev_id));
+        let self_parent_hash = next_parsed_event
+            .self_parent
+            .and_then(|ref id| event_hashes.get(id).cloned());
+        let index = self_parent_hash
+            .and_then(|hash| event_indices.get(&hash))
+            .map(|index| *index + 1)
+            .unwrap_or(0u64);
         let next_event = Event::new_from_dot_input(
             &next_parsed_event.creator,
             next_event_details.cause,
-            next_parsed_event
-                .self_parent
-                .and_then(|ref id| event_hashes.get(id).cloned()),
+            self_parent_hash,
             next_parsed_event
                 .other_parent
                 .and_then(|ref id| event_hashes.get(id).cloned()),
             parsed_contents.events.len(),
-            unwrap!(u64::from_str(unwrap!(ev_id.split('_').nth(1)))),
+            index,
             next_event_details.last_ancestors.clone(),
         );
+        let _ = event_indices.insert(*next_event.hash(), index);
         let _ = event_hashes.insert(ev_id, *next_event.hash());
         let _ = parsed_contents
             .events
