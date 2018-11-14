@@ -6,20 +6,20 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-mod cause;
-mod content;
-mod event;
-mod event_hash;
-mod graph;
-mod messages;
-mod packed_event;
+use std::usize;
 
-#[cfg(test)]
-pub(super) use self::event::find_event_by_short_name;
-#[cfg(any(test, feature = "testing"))]
-pub(super) use self::event::CauseInput;
-pub(super) use self::event::Event;
-pub use self::event_hash::EventHash;
-pub(super) use self::graph::{EventIndex, Graph, IndexedEventRef};
-pub use self::messages::{Request, Response};
-pub use self::packed_event::PackedEvent;
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize, Deserialize)]
+pub(crate) struct EventIndex(pub(super) usize);
+
+impl EventIndex {
+    pub const MIN: Self = EventIndex(0);
+
+    #[cfg(any(test, feature = "testing"))]
+    pub fn phony(index: usize) -> Self {
+        EventIndex(index)
+    }
+
+    pub fn topological_index(self) -> usize {
+        self.0
+    }
+}

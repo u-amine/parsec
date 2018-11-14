@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use gossip::{CauseInput, Event, EventHash, Graph};
+use gossip::{CauseInput, Event, EventIndex, Graph};
 use hash::Hash;
 use hash::HASH_LEN;
 use meta_voting::{
@@ -673,8 +673,9 @@ impl ParsedContents {
 impl ParsedContents {
     /// Remove and return the last (newest) event from the `ParsedContents`, if any.
     pub fn remove_last_event(&mut self) -> Option<Event<Transaction, PeerId>> {
-        let event = self.events.remove_last()?;
-        self.peer_list.remove_event(&event);
+        let (index_0, event) = self.events.remove_last()?;
+        let index_1 = self.peer_list.remove_last_event(event.creator());
+        assert_eq!(Some(index_0), index_1);
 
         Some(event)
     }
@@ -683,8 +684,8 @@ impl ParsedContents {
     /// Insert event into the `ParsedContents`. Note this does not perform any validations whatsoever,
     /// so this is useful for simulating all kinds of invalid or malicious situations.
     pub fn add_event(&mut self, event: Event<Transaction, PeerId>) {
-        unwrap!(self.peer_list.add_event(&event));
-        let _ = self.events.insert(event);
+        let indexed_event = self.events.insert(event);
+        self.peer_list.add_event(indexed_event);
     }
 }
 
@@ -777,7 +778,7 @@ fn convert_into_parsed_contents(result: ParsedFile) -> ParsedContents {
 
 fn convert_to_meta_elections(
     meta_elections: ParsedMetaElections,
-    event_hashes: &mut BTreeMap<String, EventHash>,
+    event_indices: &mut BTreeMap<String, EventIndex>,
 ) -> MetaElections<PeerId> {
     let meta_elections_map = meta_elections
         .meta_elections
@@ -785,7 +786,7 @@ fn convert_to_meta_elections(
         .map(|(handle, election)| {
             (
                 handle,
-                convert_to_meta_election(handle, election, event_hashes),
+                convert_to_meta_election(handle, election, event_indices),
             )
         }).collect();
     MetaElections::from_map_and_history(meta_elections_map, meta_elections.consensus_history)
@@ -794,17 +795,18 @@ fn convert_to_meta_elections(
 fn convert_to_meta_election(
     handle: MetaElectionHandle,
     meta_election: ParsedMetaElection,
-    event_hashes: &mut BTreeMap<String, EventHash>,
+    event_indices: &mut BTreeMap<String, EventIndex>,
 ) -> MetaElection<PeerId> {
     MetaElection {
         meta_events: meta_election
             .meta_events
             .into_iter()
             .map(|(ev_id, mev)| {
+                let next = event_indices.len();
                 (
-                    *event_hashes
+                    *event_indices
                         .entry(ev_id.clone())
-                        .or_insert_with(|| EventHash::phony(ev_id.as_bytes())),
+                        .or_insert_with(|| EventIndex::phony(next)),
                     mev,
                 )
             }).collect(),
@@ -821,7 +823,7 @@ fn convert_to_meta_election(
                         .into_iter()
                         .map(|ev_id| {
                             *unwrap!(
-                                event_hashes.get(&ev_id),
+                                event_indices.get(&ev_id),
                                 "Missing {:?} from meta_events section of meta election {:?}.  \
                                 This meta-event must be defined here as it's an Interesting Event.",
                                 ev_id,
@@ -842,40 +844,54 @@ fn create_events(
     graph: &mut BTreeMap<String, ParsedEvent>,
     mut details: BTreeMap<String, EventDetails>,
     parsed_contents: &mut ParsedContents,
-) -> BTreeMap<String, EventHash> {
-    let mut event_hashes = BTreeMap::new();
+) -> BTreeMap<String, EventIndex> {
     let mut event_indices = BTreeMap::new();
+
     while !graph.is_empty() {
-        let (ev_id, next_parsed_event) = next_topological_event(graph, &event_hashes);
+        let (ev_id, next_parsed_event) = next_topological_event(graph, &event_indices);
         let next_event_details = unwrap!(details.remove(&ev_id));
-        let self_parent_hash = next_parsed_event
-            .self_parent
-            .and_then(|ref id| event_hashes.get(id).cloned());
-        let index = self_parent_hash
-            .and_then(|hash| event_indices.get(&hash))
-            .map(|index| *index + 1)
-            .unwrap_or(0u64);
+
+        let (self_parent, other_parent, index_by_creator) = {
+            let self_parent = next_parsed_event
+                .self_parent
+                .and_then(|ref id| event_indices.get(id).cloned())
+                .and_then(|index| parsed_contents.events.get(index));
+
+            let other_parent = next_parsed_event
+                .other_parent
+                .and_then(|ref id| event_indices.get(id).cloned())
+                .and_then(|index| parsed_contents.events.get(index));
+
+            let index_by_creator = self_parent
+                .map(|ie| ie.index_by_creator() + 1)
+                .unwrap_or(0u64);
+
+            (
+                self_parent.map(|e| (e.event_index(), *e.hash())),
+                other_parent.map(|e| (e.event_index(), *e.hash())),
+                index_by_creator,
+            )
+        };
+
         let next_event = Event::new_from_dot_input(
             &next_parsed_event.creator,
             next_event_details.cause,
-            self_parent_hash,
-            next_parsed_event
-                .other_parent
-                .and_then(|ref id| event_hashes.get(id).cloned()),
-            parsed_contents.events.len(),
-            index,
+            self_parent,
+            other_parent,
+            index_by_creator,
             next_event_details.last_ancestors.clone(),
         );
-        let _ = event_indices.insert(*next_event.hash(), index);
-        let _ = event_hashes.insert(ev_id, *next_event.hash());
-        let _ = parsed_contents.events.insert(next_event);
+
+        let index = parsed_contents.events.insert(next_event).event_index();
+        let _ = event_indices.insert(ev_id, index);
     }
-    event_hashes
+
+    event_indices
 }
 
 fn next_topological_event(
     graph: &mut BTreeMap<String, ParsedEvent>,
-    hashes: &BTreeMap<String, EventHash>,
+    indices: &BTreeMap<String, EventIndex>,
 ) -> (String, ParsedEvent) {
     let next_key = unwrap!(
         graph
@@ -883,12 +899,12 @@ fn next_topological_event(
             .filter(|&(_, ref event)| event
                 .self_parent
                 .as_ref()
-                .map(|ev_id| hashes.contains_key(ev_id))
+                .map(|ev_id| indices.contains_key(ev_id))
                 .unwrap_or(true)
                 && event
                     .other_parent
                     .as_ref()
-                    .map(|ev_id| hashes.contains_key(ev_id))
+                    .map(|ev_id| indices.contains_key(ev_id))
                     .unwrap_or(true)).map(|(key, _)| key)
             .next()
     ).clone();

@@ -6,9 +6,9 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use gossip::content::Content;
+use super::content::Content;
 #[cfg(all(test, feature = "malice-detection"))]
-use gossip::event_hash::EventHash;
+use super::event_hash::EventHash;
 use id::PublicId;
 use network_event::NetworkEvent;
 use std::fmt::{self, Debug, Formatter};

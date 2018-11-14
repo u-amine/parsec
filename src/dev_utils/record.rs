@@ -46,14 +46,12 @@ impl Record {
 
 impl From<ParsedContents> for Record {
     fn from(contents: ParsedContents) -> Self {
-        let mut events: Vec<_> = contents.events.events().collect();
-        events.sort_by_key(|event| event.topological_index());
-
         // Find the genesis group
         let genesis_group = unwrap!(
-            events
+            contents
+                .events
                 .iter()
-                .filter_map(|event| extract_genesis_group(event))
+                .filter_map(|event| extract_genesis_group(event.inner()))
                 .next()
                 .cloned(),
             "No event carrying Observation::Genesis found"
@@ -66,19 +64,19 @@ impl From<ParsedContents> for Record {
 
         let mut actions = Vec::new();
         let mut skip_our_accusations = false;
-        let mut known = vec![false; events.len()];
+        let mut known = vec![false; contents.events.len()];
 
-        for (index, event) in events.iter().enumerate() {
-            if index == 0 {
+        for event in &contents.events {
+            if event.topological_index() == 0 {
                 // Skip the initial event
                 assert!(event.is_initial());
                 assert_eq!(*event.creator(), contents.our_id);
                 continue;
             }
 
-            if index == 1 {
+            if event.topological_index() == 1 {
                 // Skip the genesis event
-                assert!(extract_genesis_group(&event).is_some());
+                assert!(extract_genesis_group(&*event).is_some());
                 assert_eq!(*event.creator(), contents.our_id);
                 continue;
             }
@@ -92,7 +90,7 @@ impl From<ParsedContents> for Record {
                             continue;
                         } else {
                             // Accusations by us must follow our sync event.
-                            panic!("Unexpected accusation {:?}", event);
+                            panic!("Unexpected accusation {:?}", *event);
                         }
                     }
 
@@ -105,21 +103,22 @@ impl From<ParsedContents> for Record {
                             .other_parent()
                             .and_then(|hash| contents.events.get(hash)),
                         "Sync event without other-parent: {:?}",
-                        event
+                        *event
                     );
 
                     let src = other_parent.creator().clone();
 
-                    let mut events_to_gossip: Vec<_> = contents
-                        .events
-                        .ancestors(other_parent)
-                        .filter(|event| !known[event.topological_index()])
-                        .collect();
-                    events_to_gossip.reverse();
+                    let mut events_to_gossip = Vec::new();
+                    for event in contents.events.ancestors(other_parent) {
+                        if known[event.topological_index()] {
+                            continue;
+                        } else {
+                            known[event.topological_index()] = true;
+                        }
 
-                    for event in &events_to_gossip {
-                        known[event.topological_index()] = true;
+                        events_to_gossip.push(event.inner());
                     }
+                    events_to_gossip.reverse();
 
                     if event.is_request() {
                         actions.push(Action::Request(src, Request::new(events_to_gossip)))
@@ -131,7 +130,7 @@ impl From<ParsedContents> for Record {
                     // created during replay.
                     skip_our_accusations = true;
                 } else {
-                    panic!("Unexpected event {:?}", event);
+                    panic!("Unexpected event {:?}", *event);
                 }
             } else {
                 skip_our_accusations = false;
@@ -178,7 +177,7 @@ fn extract_genesis_group(event: &Event<Transaction, PeerId>) -> Option<&BTreeSet
 #[cfg(test)]
 mod tests {
     use super::*;
-    use parsec::assert_graphs_equal;
+    use parsec::assert_same_events;
 
     #[test]
     fn smoke() {
@@ -191,6 +190,6 @@ mod tests {
         let replay = Record::from(contents);
         let actual = replay.play();
 
-        assert_graphs_equal(&actual, &expected);
+        assert_same_events(&actual, &expected);
     }
 }

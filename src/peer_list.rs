@@ -9,7 +9,7 @@
 use error::Error;
 #[cfg(any(test, feature = "testing"))]
 use gossip::Graph;
-use gossip::{Event, EventHash};
+use gossip::{Event, EventIndex, IndexedEventRef};
 use hash::Hash;
 use id::{PublicId, SecretId};
 #[cfg(any(test, feature = "testing"))]
@@ -258,58 +258,66 @@ impl<S: SecretId> PeerList<S> {
     }
 
     /// Returns the hash of the last event created by this peer. Returns `None` if cannot find.
-    pub fn last_event(&self, peer_id: &S::PublicId) -> Option<&EventHash> {
+    pub fn last_event(&self, peer_id: &S::PublicId) -> Option<EventIndex> {
         self.peers
             .get(peer_id)
             .and_then(|peer| peer.events().rev().next())
     }
 
     /// Returns the hashes of the indexed event.
-    pub fn events_by_index(
-        &self,
+    pub fn events_by_index<'a>(
+        &'a self,
         peer_id: &S::PublicId,
         index: u64,
-    ) -> impl Iterator<Item = &EventHash> {
+    ) -> impl Iterator<Item = EventIndex> + 'a {
         self.peers
             .get(peer_id)
             .into_iter()
             .flat_map(move |peer| peer.events_by_index(index))
     }
 
-    /// Adds event created by the peer. Returns an error if the creator is not known, or if we
-    /// already held an event from this peer with this index, but that event's hash is different to
-    /// the one being added (in which case `peers` is left unmodified).
-    pub fn add_event<T: NetworkEvent>(
-        &mut self,
+    pub fn confirm_can_add_event<T: NetworkEvent>(
+        &self,
         event: &Event<T, S::PublicId>,
     ) -> Result<(), Error> {
-        if let Some(peer) = self.peers.get_mut(event.creator()) {
-            if *event.creator() != *self.our_id.public_id() && !peer.state.can_send() {
-                return Err(Error::InvalidPeerState {
+        if let Some(peer) = self.peers.get(event.creator()) {
+            if *event.creator() == *self.our_id.public_id() || peer.state.can_send() {
+                Ok(())
+            } else {
+                Err(Error::InvalidPeerState {
                     required: PeerState::SEND,
                     actual: peer.state,
-                });
+                })
             }
-            peer.add_event(event.index_by_creator(), *event.hash());
-            Ok(())
         } else {
             Err(Error::UnknownPeer)
         }
     }
 
-    /// Removes the event from its creator.
-    #[cfg(test)]
-    pub fn remove_event<T: NetworkEvent>(&mut self, event: &Event<T, S::PublicId>) {
+    /// Adds event created by the peer. Returns an error if the creator is not known, or if we
+    /// already held an event from this peer with this index, but that event's hash is different to
+    /// the one being added (in which case `peers` is left unmodified).
+    pub fn add_event<T: NetworkEvent>(&mut self, event: IndexedEventRef<T, S::PublicId>) {
         if let Some(peer) = self.peers.get_mut(event.creator()) {
-            peer.remove_event(event.index_by_creator(), *event.hash());
+            peer.add_event(event.index_by_creator(), event.event_index())
+        }
+    }
+
+    /// Removes last event from its creator.
+    #[cfg(test)]
+    pub fn remove_last_event(&mut self, creator: &S::PublicId) -> Option<EventIndex> {
+        if let Some(peer) = self.peers.get_mut(creator) {
+            peer.remove_last_event()
+        } else {
+            None
         }
     }
 
     /// Hashes of events of the given creator, in insertion order.
-    pub fn peer_events(
-        &self,
+    pub fn peer_events<'a>(
+        &'a self,
         peer_id: &S::PublicId,
-    ) -> impl DoubleEndedIterator<Item = &EventHash> {
+    ) -> impl DoubleEndedIterator<Item = EventIndex> + 'a {
         self.peers
             .get(peer_id)
             .into_iter()
@@ -318,7 +326,7 @@ impl<S: SecretId> PeerList<S> {
 
     /// Hashes of our events in insertion order.
     #[cfg(any(test, feature = "malice-detection"))]
-    pub fn our_events(&self) -> impl DoubleEndedIterator<Item = &EventHash> {
+    pub fn our_events<'a>(&'a self) -> impl DoubleEndedIterator<Item = EventIndex> + 'a {
         self.peer_events(self.our_id.public_id())
     }
 
@@ -375,13 +383,13 @@ impl PeerList<PeerId> {
 
         for (peer_id, (state, membership_list)) in peer_data {
             let mut events = BTreeSet::new();
-            for event in graph.events() {
+            for event in graph {
                 if *event.creator() == peer_id {
-                    let _ = events.insert((event.index_by_creator(), *event.hash()));
+                    let _ = events.insert((event.index_by_creator(), event.event_index()));
                 } else if !peer_ids.contains(event.creator()) {
                     debug!(
                         "peer_data list doesn't contain the creator of event {:?}",
-                        event
+                        *event
                     );
                 }
             }
@@ -497,7 +505,7 @@ impl Debug for PeerState {
 pub struct Peer<P: PublicId> {
     id_hash: Hash,
     state: PeerState,
-    events: BTreeSet<(u64, EventHash)>,
+    events: BTreeSet<(u64, EventIndex)>,
     membership_list: BTreeSet<P>,
     membership_list_changes: Vec<(u64, MembershipListChange<P>)>,
 }
@@ -517,30 +525,39 @@ impl<P: PublicId> Peer<P> {
         self.state
     }
 
-    pub fn events(&self) -> impl DoubleEndedIterator<Item = &EventHash> {
-        self.events.iter().map(|&(_, ref hash)| hash)
+    pub fn events<'a>(&'a self) -> impl DoubleEndedIterator<Item = EventIndex> + 'a {
+        self.events.iter().map(|&(_, index)| index)
     }
 
     #[cfg(test)]
-    pub fn indexed_events(&self) -> impl DoubleEndedIterator<Item = (u64, &EventHash)> {
-        self.events.iter().map(|&(index, ref hash)| (index, hash))
+    pub fn indexed_events<'a>(&'a self) -> impl DoubleEndedIterator<Item = (u64, EventIndex)> + 'a {
+        self.events
+            .iter()
+            .map(|&(index_by_creator, event_index)| (index_by_creator, event_index))
     }
 
-    pub fn events_by_index(&self, index: u64) -> impl Iterator<Item = &EventHash> {
+    pub fn events_by_index<'a>(&'a self, index: u64) -> impl Iterator<Item = EventIndex> + 'a {
         self.events
             .range((
-                Bound::Included((index, EventHash::ZERO)),
-                Bound::Excluded((index + 1, EventHash::ZERO)),
-            )).map(|&(_, ref hash)| hash)
+                Bound::Included((index, EventIndex::MIN)),
+                Bound::Excluded((index + 1, EventIndex::MIN)),
+            )).map(|&(_, index)| index)
     }
 
-    fn add_event(&mut self, index: u64, hash: EventHash) {
-        let _ = self.events.insert((index, hash));
+    fn add_event(&mut self, index_by_creator: u64, event_index: EventIndex) {
+        let _ = self.events.insert((index_by_creator, event_index));
     }
 
     #[cfg(test)]
-    fn remove_event(&mut self, index: u64, hash: EventHash) {
-        let _ = self.events.remove(&(index, hash));
+    fn remove_last_event(&mut self) -> Option<EventIndex> {
+        let last = self
+            .events
+            .iter()
+            .rev()
+            .next()
+            .map(|(index_by_creator, event_index)| (*index_by_creator, *event_index))?;
+        let _ = self.events.remove(&last);
+        Some(last.1)
     }
 
     fn change_membership_list(&mut self, change: MembershipListChange<P>) {

@@ -6,8 +6,14 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+#[cfg(test)]
+use super::graph::IndexedEventRef;
 use super::{
-    cause::Cause, content::Content, event_hash::EventHash, graph::Graph, packed_event::PackedEvent,
+    cause::Cause,
+    content::Content,
+    event_hash::EventHash,
+    graph::{EventIndex, Graph},
+    packed_event::PackedEvent,
 };
 use error::Error;
 use hash::Hash;
@@ -107,13 +113,12 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         peer_list: &PeerList<S>,
         forking_peers: &BTreeSet<P>,
     ) -> Result<Option<Self>, Error> {
-        let cache = if let Some(cache) =
-            Cache::from_packed_event(&packed_event, graph, peer_list, forking_peers)?
-        {
-            cache
-        } else {
-            return Ok(None);
-        };
+        let cache =
+            if let Some(cache) = Cache::unpack(&packed_event, graph, peer_list, forking_peers)? {
+                cache
+            } else {
+                return Ok(None);
+            };
 
         Ok(Some(Self {
             content: packed_event.content,
@@ -132,18 +137,20 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
 
     // Returns whether this event is descendant of `other`, i.e. whether there's a directed path
     // from `other` to `self`.
-    pub fn is_descendant_of(&self, other: &Event<T, P>) -> bool {
+    pub fn is_descendant_of<E: AsRef<Event<T, P>>>(&self, other: E) -> bool {
         self.cache
             .last_ancestors
-            .get(other.creator())
-            .map_or(false, |last_index| *last_index >= other.index_by_creator())
+            .get(other.as_ref().creator())
+            .map_or(false, |last_index| {
+                *last_index >= other.as_ref().index_by_creator()
+            })
     }
 
     // Returns whether this event can see `other`, i.e. whether there's a directed path from `other`
     // to `self` in the graph, and no two events created by `other`'s creator are ancestors to
     // `self` (fork).
-    pub fn sees(&self, other: &Event<T, P>) -> bool {
-        !self.cache.forking_peers.contains(other.creator()) && self.is_descendant_of(other)
+    pub fn sees<E: AsRef<Event<T, P>>>(&self, other: E) -> bool {
+        !self.cache.forking_peers.contains(other.as_ref().creator()) && self.is_descendant_of(other)
     }
 
     /// Returns `Some(vote)` if the event is for a vote of network event, otherwise returns `None`.
@@ -159,21 +166,16 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         &self.content.creator
     }
 
-    pub fn self_parent(&self) -> Option<&EventHash> {
-        self.content.self_parent()
+    pub fn self_parent(&self) -> Option<EventIndex> {
+        self.cache.self_parent
     }
 
-    pub fn other_parent(&self) -> Option<&EventHash> {
-        self.content.other_parent()
+    pub fn other_parent(&self) -> Option<EventIndex> {
+        self.cache.other_parent
     }
 
     pub fn hash(&self) -> &EventHash {
         &self.cache.hash
-    }
-
-    // Index of this event relative to all events in the graph, when sorted topologically.
-    pub fn topological_index(&self) -> usize {
-        self.cache.topological_index
     }
 
     // Index of this event relative to other events by the same creator.
@@ -234,7 +236,7 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             cause,
         };
 
-        let (cache, signature) = Cache::from_content(&content, graph, peer_list, forking_peers);
+        let (cache, signature) = Cache::our(&content, graph, peer_list, forking_peers);
 
         Self {
             content,
@@ -286,21 +288,31 @@ impl<T: NetworkEvent, P: PublicId> Debug for Event<T, P> {
     }
 }
 
+impl<T: NetworkEvent, P: PublicId> AsRef<Self> for Event<T, P> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+
 #[cfg(any(test, feature = "testing"))]
 impl Event<Transaction, PeerId> {
     // Creates a new event using the input parameters directly.
     pub(crate) fn new_from_dot_input(
         creator: &PeerId,
         cause: CauseInput,
-        self_parent: Option<EventHash>,
-        other_parent: Option<EventHash>,
-        topological_index: usize,
+        self_parent: Option<(EventIndex, EventHash)>,
+        other_parent: Option<(EventIndex, EventHash)>,
         index_by_creator: u64,
         last_ancestors: BTreeMap<PeerId, u64>,
     ) -> Self {
         let content = Content {
             creator: creator.clone(),
-            cause: Cause::new_from_dot_input(cause, creator, self_parent, other_parent),
+            cause: Cause::new_from_dot_input(
+                cause,
+                creator,
+                self_parent.map(|p| p.1),
+                other_parent.map(|p| p.1),
+            ),
         };
 
         let serialised_content = serialise(&content);
@@ -308,7 +320,8 @@ impl Event<Transaction, PeerId> {
 
         let cache = Cache {
             hash: EventHash(Hash::from(serialised_content.as_slice())),
-            topological_index,
+            self_parent: self_parent.map(|p| p.0),
+            other_parent: other_parent.map(|p| p.0),
             index_by_creator,
             last_ancestors,
             forking_peers: BTreeSet::new(),
@@ -337,8 +350,10 @@ pub(crate) enum CauseInput {
 struct Cache<P: PublicId> {
     // Hash of `Event`s `Content`.
     hash: EventHash,
-    // Index of this event relative to all events in the graph, when sorted topologically.
-    topological_index: usize,
+    // Index of self-parent
+    self_parent: Option<EventIndex>,
+    // Index of other-parent
+    other_parent: Option<EventIndex>,
     // Index of this event relative to other events by the same creator.
     index_by_creator: u64,
     // Index of each peer's latest event that is an ancestor of this event.
@@ -348,46 +363,16 @@ struct Cache<P: PublicId> {
 }
 
 impl<P: PublicId> Cache<P> {
-    fn from_content<T: NetworkEvent, S: SecretId<PublicId = P>>(
-        content: &Content<T, P>,
-        graph: &Graph<T, P>,
-        peer_list: &PeerList<S>,
-        forking_peers: &BTreeSet<P>,
-    ) -> (Self, P::Signature) {
-        let serialised_content = serialise(&content);
-
-        let (index_by_creator, last_ancestors) =
-            match index_by_creator_and_last_ancestors(&content, graph, peer_list) {
-                Ok(result) => result,
-                Err(error) => {
-                    log_or_panic!(
-                        "{:?} constructed an invalid event: {:?}.",
-                        peer_list.our_id().public_id(),
-                        error
-                    );
-                    (0, BTreeMap::new())
-                }
-            };
-
-        let forking_peers = join_forking_peers(&content, graph, forking_peers);
-        let signature = peer_list.our_id().sign_detached(&serialised_content);
-        let cache = Self {
-            hash: EventHash(Hash::from(serialised_content.as_slice())),
-            topological_index: graph.len(),
-            index_by_creator,
-            last_ancestors,
-            forking_peers,
-        };
-
-        (cache, signature)
-    }
-
-    fn from_packed_event<T: NetworkEvent, S: SecretId<PublicId = P>>(
+    fn unpack<T, S>(
         packed_event: &PackedEvent<T, P>,
         graph: &Graph<T, P>,
         peer_list: &PeerList<S>,
         forking_peers: &BTreeSet<P>,
-    ) -> Result<Option<Self>, Error> {
+    ) -> Result<Option<Cache<P>>, Error>
+    where
+        T: NetworkEvent,
+        S: SecretId<PublicId = P>,
+    {
         let serialised_content = serialise(&packed_event.content);
         let hash = if packed_event
             .content
@@ -399,119 +384,201 @@ impl<P: PublicId> Cache<P> {
             return Err(Error::SignatureFailure);
         };
 
-        if graph.contains(&hash) {
+        if graph.get_index(&hash).is_some() {
             return Ok(None);
         }
 
-        let forking_peers = join_forking_peers(&packed_event.content, graph, forking_peers);
-        let (index_by_creator, last_ancestors) =
-            index_by_creator_and_last_ancestors(&packed_event.content, graph, peer_list)?;
+        let (self_parent_index, other_parent_index) =
+            get_parents(&packed_event.content, graph, peer_list)?;
+        let self_parent = self_parent_index
+            .and_then(|index| graph.get(index))
+            .map(|e| e.inner());
+        let other_parent = other_parent_index
+            .and_then(|index| graph.get(index))
+            .map(|e| e.inner());
+
+        let (index_by_creator, last_ancestors) = index_by_creator_and_last_ancestors(
+            &packed_event.content.creator,
+            self_parent,
+            other_parent,
+            peer_list,
+        );
+        let forking_peers = join_forking_peers(self_parent, other_parent, forking_peers);
 
         Ok(Some(Self {
             hash,
-            topological_index: graph.len(),
+            self_parent: self_parent_index,
+            other_parent: other_parent_index,
             index_by_creator,
             last_ancestors,
             forking_peers,
         }))
     }
+
+    fn our<T: NetworkEvent, S: SecretId<PublicId = P>>(
+        content: &Content<T, P>,
+        graph: &Graph<T, P>,
+        peer_list: &PeerList<S>,
+        forking_peers: &BTreeSet<P>,
+    ) -> (Self, P::Signature) {
+        let serialised_content = serialise(&content);
+
+        let (self_parent_index, other_parent_index) = get_parents(content, graph, peer_list)
+            .unwrap_or_else(|error| {
+                log_or_panic!(
+                    "{:?} constructed an invalid event: {:?}.",
+                    peer_list.our_pub_id(),
+                    error
+                );
+                (None, None)
+            });
+
+        let self_parent = self_parent_index
+            .and_then(|index| graph.get(index))
+            .map(|e| e.inner());
+        let other_parent = other_parent_index
+            .and_then(|index| graph.get(index))
+            .map(|e| e.inner());
+
+        let (index_by_creator, last_ancestors) = index_by_creator_and_last_ancestors(
+            &content.creator,
+            self_parent,
+            other_parent,
+            peer_list,
+        );
+        let forking_peers = join_forking_peers(self_parent, other_parent, forking_peers);
+        let signature = peer_list.our_id().sign_detached(&serialised_content);
+
+        let cache = Self {
+            hash: EventHash(Hash::from(serialised_content.as_slice())),
+            self_parent: self_parent_index,
+            other_parent: other_parent_index,
+            index_by_creator,
+            last_ancestors,
+            forking_peers,
+        };
+
+        (cache, signature)
+    }
 }
 
-fn index_by_creator_and_last_ancestors<T: NetworkEvent, S: SecretId>(
+fn get_parents<T: NetworkEvent, S: SecretId>(
     content: &Content<T, S::PublicId>,
     graph: &Graph<T, S::PublicId>,
     peer_list: &PeerList<S>,
-) -> Result<(u64, BTreeMap<S::PublicId, u64>), Error> {
-    let self_parent = if let Some(self_parent_hash) = content.self_parent() {
-        if let Some(event) = graph.get(&self_parent_hash) {
-            event
-        } else {
+) -> Result<(Option<EventIndex>, Option<EventIndex>), Error> {
+    let self_parent = if let Some(hash) = content.self_parent() {
+        Some(graph.get_index(hash).ok_or_else(|| {
             debug!(
                 "{:?} missing self parent for {:?}",
-                peer_list.our_id().public_id(),
+                peer_list.our_pub_id(),
                 content
             );
-            return Err(Error::UnknownParent);
-        }
+
+            Error::UnknownParent
+        })?)
     } else {
-        // This must be an initial event, i.e. having index 0.
-        let mut last_ancestors = BTreeMap::new();
-        let _ = last_ancestors.insert(content.creator.clone(), 0);
-        return Ok((0, last_ancestors));
+        None
     };
 
-    let index_by_creator = self_parent.index_by_creator() + 1;
-    let mut last_ancestors = self_parent.last_ancestors().clone();
-
-    if let Some(other_parent_hash) = content.other_parent() {
-        if let Some(other_parent) = graph.get(&other_parent_hash) {
-            for (peer_id, _) in peer_list.iter() {
-                if let Some(other_index) = other_parent.last_ancestors().get(peer_id) {
-                    let existing_index = last_ancestors
-                        .entry(peer_id.clone())
-                        .or_insert(*other_index);
-                    *existing_index = cmp::max(*existing_index, *other_index);
-                }
-            }
-        } else {
+    let other_parent = if let Some(hash) = content.other_parent() {
+        Some(graph.get_index(hash).ok_or_else(|| {
             debug!(
                 "{:?} missing other parent for {:?}",
-                peer_list.our_id().public_id(),
+                peer_list.our_pub_id(),
                 content
             );
-            return Err(Error::UnknownParent);
+
+            Error::UnknownParent
+        })?)
+    } else {
+        None
+    };
+
+    Ok((self_parent, other_parent))
+}
+
+fn index_by_creator_and_last_ancestors<T: NetworkEvent, S: SecretId>(
+    creator: &S::PublicId,
+    self_parent: Option<&Event<T, S::PublicId>>,
+    other_parent: Option<&Event<T, S::PublicId>>,
+    peer_list: &PeerList<S>,
+) -> (u64, BTreeMap<S::PublicId, u64>) {
+    let (index_by_creator, mut last_ancestors) = if let Some(self_parent) = self_parent {
+        (
+            self_parent.index_by_creator() + 1,
+            self_parent.last_ancestors().clone(),
+        )
+    } else {
+        // Initial event
+        (0, BTreeMap::new())
+    };
+
+    if let Some(other_parent) = other_parent {
+        for (peer_id, _) in peer_list.iter() {
+            if let Some(other_index) = other_parent.last_ancestors().get(peer_id) {
+                let existing_index = last_ancestors
+                    .entry(peer_id.clone())
+                    .or_insert(*other_index);
+                *existing_index = cmp::max(*existing_index, *other_index);
+            }
         }
     }
-    let _ = last_ancestors.insert(content.creator.clone(), index_by_creator);
-    Ok((index_by_creator, last_ancestors))
+
+    let _ = last_ancestors.insert(creator.clone(), index_by_creator);
+
+    (index_by_creator, last_ancestors)
 }
 
 // An event's forking_peers list is a union inherited from its self_parent and other_parent.
 // The event shall only put forking peer into the list when have direct path to both sides of
 // the fork.
 fn join_forking_peers<T: NetworkEvent, P: PublicId>(
-    content: &Content<T, P>,
-    graph: &Graph<T, P>,
+    self_parent: Option<&Event<T, P>>,
+    other_parent: Option<&Event<T, P>>,
     prev_forking_peers: &BTreeSet<P>,
 ) -> BTreeSet<P> {
-    let mut forking_peers = content
-        .self_parent()
-        .and_then(|self_parent| graph.get(self_parent))
-        .map_or_else(BTreeSet::new, |self_parent| {
-            self_parent.cache.forking_peers.clone()
-        });
-    forking_peers.append(
-        &mut content
-            .other_parent()
-            .and_then(|other_parent| graph.get(other_parent))
-            .map_or_else(BTreeSet::new, |other_parent| {
-                other_parent.cache.forking_peers.clone()
-            }),
+    let mut forking_peers = BTreeSet::new();
+    forking_peers.extend(
+        self_parent
+            .into_iter()
+            .flat_map(|parent| parent.cache.forking_peers.iter().cloned()),
     );
-    forking_peers.append(&mut prev_forking_peers.clone());
+    forking_peers.extend(
+        other_parent
+            .into_iter()
+            .flat_map(|parent| parent.cache.forking_peers.iter().cloned()),
+    );
+    forking_peers.extend(prev_forking_peers.iter().cloned());
     forking_peers
 }
 
 /// Finds the first event which has the `short_name` provided.
 #[cfg(test)]
 pub(crate) fn find_event_by_short_name<'a, I, T, P>(
-    event_itr: I,
+    events: I,
     short_name: &str,
-) -> Option<&'a Event<T, P>>
+) -> Option<IndexedEventRef<'a, T, P>>
 where
-    I: IntoIterator<Item = &'a Event<T, P>>,
+    I: IntoIterator<Item = IndexedEventRef<'a, T, P>>,
     T: NetworkEvent,
     P: PublicId,
 {
-    event_itr
+    let short_name = short_name.to_uppercase();
+    events
         .into_iter()
-        .find(|event| event.short_name().to_uppercase() == short_name.to_uppercase())
+        .find(|event| event.short_name().to_uppercase() == short_name)
 }
 
 #[cfg(test)]
 mod tests {
     use error::Error;
-    use gossip::{cause::Cause, event::Event, event_hash::EventHash, graph::Graph};
+    use gossip::{
+        cause::Cause,
+        event::Event,
+        event_hash::EventHash,
+        graph::{EventIndex, Graph},
+    };
     use id::SecretId;
     use mock::{PeerId, Transaction};
     use observation::Observation;
@@ -546,9 +613,10 @@ mod tests {
     fn insert_into_gossip_graph(
         initial_event: Event<Transaction, PeerId>,
         graph: &mut Graph<Transaction, PeerId>,
-    ) -> EventHash {
-        assert!(!graph.contains(initial_event.hash()));
-        graph.insert(initial_event)
+    ) -> (EventIndex, EventHash) {
+        let hash = *initial_event.hash();
+        assert!(!graph.contains(&hash));
+        (graph.insert(initial_event).event_index(), hash)
     }
 
     fn create_two_events(id0: &str, id1: &str) -> (PeerListAndEvent, PeerListAndEvent) {
@@ -572,11 +640,17 @@ mod tests {
     fn create_gossip_graph_with_two_events(
         alice_initial: Event<Transaction, PeerId>,
         bob_initial: Event<Transaction, PeerId>,
-    ) -> (EventHash, EventHash, Graph<Transaction, PeerId>) {
+    ) -> (
+        EventIndex,
+        EventHash,
+        EventIndex,
+        EventHash,
+        Graph<Transaction, PeerId>,
+    ) {
         let mut graph = Graph::new();
-        let alice_initial_hash = insert_into_gossip_graph(alice_initial, &mut graph);
-        let bob_initial_hash = insert_into_gossip_graph(bob_initial, &mut graph);
-        (alice_initial_hash, bob_initial_hash, graph)
+        let (alice_index, alice_hash) = insert_into_gossip_graph(alice_initial, &mut graph);
+        let (bob_index, bob_hash) = insert_into_gossip_graph(bob_initial, &mut graph);
+        (alice_index, alice_hash, bob_index, bob_hash, graph)
     }
 
     #[test]
@@ -593,7 +667,8 @@ mod tests {
     fn event_construction_from_observation() {
         let alice = create_event_with_single_peer("Alice");
         let mut graph = Graph::new();
-        let initial_event_hash = insert_into_gossip_graph(alice.event, &mut graph);
+        let (initial_event_index, initial_event_hash) =
+            insert_into_gossip_graph(alice.event, &mut graph);
 
         // Our observation
         let net_event = Observation::OpaquePayload(Transaction::new("event_observed_by_alice"));
@@ -624,7 +699,7 @@ mod tests {
         assert!(!event_from_observation.is_response());
         assert_eq!(
             event_from_observation.self_parent(),
-            Some(&initial_event_hash)
+            Some(initial_event_index)
         );
         assert!(event_from_observation.other_parent().is_none());
     }
@@ -632,13 +707,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "Alice constructed an invalid event")]
     #[cfg(feature = "testing")]
-    fn event_construction_from_observation_with_phony_hash() {
+    fn event_construction_from_observation_with_phony_self_parent() {
         let alice = create_event_with_single_peer("Alice");
-        let hash = EventHash::phony(vec![42].as_slice());
+        let self_parent_hash = EventHash::ZERO;
         let events = Graph::new();
         let net_event = Observation::OpaquePayload(Transaction::new("event_observed_by_alice"));
         let _ = Event::<Transaction, PeerId>::new_from_observation(
-            hash,
+            self_parent_hash,
             net_event.clone(),
             &events,
             &alice.peer_list,
@@ -648,7 +723,7 @@ mod tests {
     #[test]
     fn event_construction_from_request() {
         let (alice, bob) = create_two_events("Alice", "Bob");
-        let (alice_initial_hash, bob_initial_hash, events) =
+        let (alice_initial_index, alice_initial_hash, bob_initial_index, bob_initial_hash, events) =
             create_gossip_graph_with_two_events(alice.event, bob.event);
 
         // Alice receives request from Bob
@@ -667,8 +742,8 @@ mod tests {
         assert_eq!(event_from_request.index_by_creator(), 1);
         assert!(!event_from_request.is_initial());
         assert!(!event_from_request.is_response());
-        assert_eq!(event_from_request.self_parent(), Some(&alice_initial_hash));
-        assert_eq!(event_from_request.other_parent(), Some(&bob_initial_hash));
+        assert_eq!(event_from_request.self_parent(), Some(alice_initial_index));
+        assert_eq!(event_from_request.other_parent(), Some(bob_initial_index));
     }
 
     #[test]
@@ -678,7 +753,7 @@ mod tests {
         let (alice, bob) = create_two_events("Alice", "Bob");
         let mut events = Graph::new();
         let alice_initial_hash = *alice.event.hash();
-        let bob_initial_hash = insert_into_gossip_graph(bob.event, &mut events);
+        let (_, bob_initial_hash) = insert_into_gossip_graph(bob.event, &mut events);
         let _ = Event::<Transaction, PeerId>::new_from_request(
             alice_initial_hash,
             bob_initial_hash,
@@ -694,7 +769,7 @@ mod tests {
     fn event_construction_from_request_without_other_parent_event_in_graph() {
         let (alice, bob) = create_two_events("Alice", "Bob");
         let mut events = Graph::new();
-        let alice_initial_hash = insert_into_gossip_graph(alice.event, &mut events);
+        let (_, alice_initial_hash) = insert_into_gossip_graph(alice.event, &mut events);
         let bob_initial_hash = *bob.event.hash();
         let _ = Event::<Transaction, PeerId>::new_from_request(
             alice_initial_hash,
@@ -708,7 +783,7 @@ mod tests {
     #[test]
     fn event_construction_from_response() {
         let (alice, bob) = create_two_events("Alice", "Bob");
-        let (alice_initial_hash, bob_initial_hash, events) =
+        let (alice_initial_index, alice_initial_hash, bob_initial_index, bob_initial_hash, events) =
             create_gossip_graph_with_two_events(alice.event, bob.event);
 
         let event_from_response = Event::<Transaction, PeerId>::new_from_response(
@@ -726,15 +801,15 @@ mod tests {
         assert_eq!(event_from_response.index_by_creator(), 1);
         assert!(!event_from_response.is_initial());
         assert!(event_from_response.is_response());
-        assert_eq!(event_from_response.self_parent(), Some(&alice_initial_hash));
-        assert_eq!(event_from_response.other_parent(), Some(&bob_initial_hash));
+        assert_eq!(event_from_response.self_parent(), Some(alice_initial_index));
+        assert_eq!(event_from_response.other_parent(), Some(bob_initial_index));
     }
 
     #[test]
     fn event_construction_unpack() {
         let alice = create_event_with_single_peer("Alice");
         let mut graph = Graph::new();
-        let initial_event_hash = insert_into_gossip_graph(alice.event, &mut graph);
+        let (_, initial_event_hash) = insert_into_gossip_graph(alice.event, &mut graph);
 
         // Our observation
         let net_event = Observation::OpaquePayload(Transaction::new("event_observed_by_alice"));
@@ -747,7 +822,7 @@ mod tests {
         );
 
         let packed_event = event_from_observation.pack();
-        let unpacked_event = unwrap!(unwrap!(Event::<Transaction, PeerId>::unpack(
+        let unpacked_event = unwrap!(unwrap!(Event::unpack(
             packed_event.clone(),
             &graph,
             &alice.peer_list,
@@ -755,12 +830,12 @@ mod tests {
         )));
 
         assert_eq!(event_from_observation, unpacked_event);
-        assert!(!graph.contains(unpacked_event.hash()));
+        assert!(graph.get_index(unpacked_event.hash()).is_none());
 
         let _ = graph.insert(unpacked_event);
 
         assert!(
-            unwrap!(Event::<Transaction, PeerId>::unpack(
+            unwrap!(Event::unpack(
                 packed_event,
                 &graph,
                 &alice.peer_list,
@@ -773,7 +848,7 @@ mod tests {
     fn event_construction_unpack_fail_with_wrong_signature() {
         let alice = create_event_with_single_peer("Alice");
         let mut graph = Graph::new();
-        let initial_event_hash = insert_into_gossip_graph(alice.event, &mut graph);
+        let (_, initial_event_hash) = insert_into_gossip_graph(alice.event, &mut graph);
 
         // Our observation
         let net_event = Observation::OpaquePayload(Transaction::new("event_observed_by_alice"));
@@ -817,8 +892,8 @@ mod tests {
             &peer_list,
         );
         let a_1_0_hash = *a_1_0.hash();
-        let _ = graph.insert(a_1_0);
-        let a_1_0 = unwrap!(graph.get(&a_1_0_hash));
+        let a_1_0_index = graph.insert(a_1_0).event_index();
+        let a_1_0 = unwrap!(graph.get(a_1_0_index));
 
         let a_1_1 = Event::new_from_observation(
             a_0_hash,

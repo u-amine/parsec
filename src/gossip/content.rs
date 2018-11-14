@@ -23,10 +23,13 @@ pub(super) struct Content<T: NetworkEvent, P: PublicId> {
 impl<T: NetworkEvent, P: PublicId> Content<T, P> {
     // Hash of sender's latest event if the `cause` is a request or response; otherwise `None`.
     pub fn other_parent(&self) -> Option<&EventHash> {
-        match &self.cause {
-            Cause::Request { other_parent, .. } | Cause::Response { other_parent, .. } => {
-                Some(other_parent)
+        match self.cause {
+            Cause::Request {
+                ref other_parent, ..
             }
+            | Cause::Response {
+                ref other_parent, ..
+            } => Some(other_parent),
             Cause::Observation { .. } | Cause::Initial => None,
         }
     }
@@ -34,10 +37,16 @@ impl<T: NetworkEvent, P: PublicId> Content<T, P> {
     // Hash of our latest event if the `cause` is a request, response or observation; otherwise
     // `None`.
     pub fn self_parent(&self) -> Option<&EventHash> {
-        match &self.cause {
-            Cause::Request { self_parent, .. }
-            | Cause::Response { self_parent, .. }
-            | Cause::Observation { self_parent, .. } => Some(self_parent),
+        match self.cause {
+            Cause::Request {
+                ref self_parent, ..
+            }
+            | Cause::Response {
+                ref self_parent, ..
+            }
+            | Cause::Observation {
+                ref self_parent, ..
+            } => Some(self_parent),
             Cause::Initial => None,
         }
     }

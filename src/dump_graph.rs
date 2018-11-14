@@ -60,7 +60,7 @@ pub use self::detail::DIR;
 
 #[cfg(feature = "dump-graphs")]
 mod detail {
-    use gossip::{Event, EventHash, Graph};
+    use gossip::{Event, EventHash, EventIndex, Graph};
     use id::{PublicId, SecretId};
     use meta_voting::{MetaElections, MetaEvent, MetaVotes};
     use network_event::NetworkEvent;
@@ -329,8 +329,8 @@ mod detail {
             self.indent -= 2;
         }
 
-        fn hash_to_short_name(&self, hash: &EventHash) -> Option<String> {
-            self.gossip_graph.get(hash).map(|event| event.short_name())
+        fn index_to_short_name(&self, index: EventIndex) -> Option<String> {
+            self.gossip_graph.get(index).map(|event| event.short_name())
         }
 
         fn writeln(&mut self, args: fmt::Arguments) -> io::Result<()> {
@@ -392,24 +392,36 @@ mod detail {
         fn calculate_positions(&self) -> BTreeMap<EventHash, u64> {
             let mut positions = BTreeMap::new();
             while positions.len() < self.gossip_graph.len() {
-                for (hash, event) in self.gossip_graph.iter() {
-                    if !positions.contains_key(hash) {
-                        let self_parent_pos = if let Some(position) =
-                            parent_pos(event.index_by_creator(), event.self_parent(), &positions)
-                        {
+                for event in self.gossip_graph {
+                    if !positions.contains_key(event.hash()) {
+                        let self_parent_pos = if let Some(position) = parent_pos(
+                            event.index_by_creator(),
+                            event
+                                .self_parent()
+                                .and_then(|index| self.gossip_graph.get(index))
+                                .map(|event| event.inner().hash()),
+                            &positions,
+                        ) {
                             position
                         } else {
                             continue;
                         };
-                        let other_parent_pos = if let Some(position) =
-                            parent_pos(event.index_by_creator(), event.other_parent(), &positions)
-                        {
+                        let other_parent_pos = if let Some(position) = parent_pos(
+                            event.index_by_creator(),
+                            event
+                                .other_parent()
+                                .and_then(|index| self.gossip_graph.get(index))
+                                .map(|event| event.inner().hash()),
+                            &positions,
+                        ) {
                             position
                         } else {
                             continue;
                         };
-                        let _ = positions
-                            .insert(*hash, cmp::max(self_parent_pos, other_parent_pos) + 1);
+                        let _ = positions.insert(
+                            *event.hash(),
+                            cmp::max(self_parent_pos, other_parent_pos) + 1,
+                        );
                         break;
                     }
                 }
@@ -441,11 +453,14 @@ mod detail {
                 .peer_events(peer_id)
                 .filter_map(|hash| self.gossip_graph.get(hash))
             {
-                let (before_arrow, suffix) = match event.self_parent() {
+                let (before_arrow, suffix) = match event
+                    .self_parent()
+                    .and_then(|index| self.gossip_graph.get(index))
+                {
                     None => (format!("\"{:?}\"", peer_id), "[style=invis]".to_string()),
-                    Some(parent_hash) => {
+                    Some(parent) => {
                         let event_pos = *positions.get(event.hash()).unwrap_or(&0);
-                        let parent_pos = *positions.get(parent_hash).unwrap_or(&0);
+                        let parent_pos = *positions.get(parent.hash()).unwrap_or(&0);
                         let minlen = if event_pos > parent_pos {
                             event_pos - parent_pos
                         } else {
@@ -454,7 +469,7 @@ mod detail {
                         (
                             format!(
                                 "\"{}\"",
-                                self.hash_to_short_name(parent_hash)
+                                self.index_to_short_name(parent.event_index())
                                     .unwrap_or_else(|| "???".to_string())
                             ),
                             format!("[minlen={}]", minlen),
@@ -521,11 +536,11 @@ mod detail {
 
         fn write_event_details(&mut self, peer_id: &S::PublicId) -> io::Result<()> {
             let current_meta_events = self.meta_elections.current_meta_events();
-            for event_hash in self.peer_list.peer_events(peer_id) {
-                if let Some(event) = self.gossip_graph.get(event_hash) {
+            for event_index in self.peer_list.peer_events(peer_id) {
+                if let Some(event) = self.gossip_graph.get(event_index) {
                     let attr = EventAttributes::new(
-                        event,
-                        current_meta_events.get(event_hash),
+                        event.inner(),
+                        current_meta_events.get(&event_index),
                         &self.observations,
                     );
                     self.writeln(format_args!(
@@ -617,7 +632,7 @@ mod detail {
                 for (peer, events) in &election.interesting_events {
                     let event_names: Vec<String> = events
                         .iter()
-                        .filter_map(|hash| self.hash_to_short_name(hash))
+                        .filter_map(|index| self.index_to_short_name(*index))
                         .collect();
                     lines.push(format!(
                         "{}{}{:?} -> {:?}",
@@ -677,9 +692,10 @@ mod detail {
                 let meta_events = election
                     .meta_events
                     .iter()
-                    .filter_map(|(hash, mev)| {
-                        self.gossip_graph.get(hash).map(|event| {
-                            let creator_and_index = (event.creator(), event.index_by_creator());
+                    .filter_map(|(index, mev)| {
+                        self.gossip_graph.get(*index).map(|event| {
+                            let creator_and_index =
+                                (event.inner().creator(), event.index_by_creator());
                             let short_name_and_mev = (event.short_name(), mev);
                             (creator_and_index, short_name_and_mev)
                         })

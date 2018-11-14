@@ -8,7 +8,7 @@
 
 use super::meta_elections::MetaElectionHandle;
 use super::meta_vote::{MetaVote, MetaVotes};
-use gossip::Event;
+use gossip::IndexedEventRef;
 use id::PublicId;
 use network_event::NetworkEvent;
 use observation::ObservationHash;
@@ -28,7 +28,7 @@ pub(crate) struct MetaEvent<P: PublicId> {
 impl<P: PublicId> MetaEvent<P> {
     pub fn build<T: NetworkEvent>(
         election: MetaElectionHandle,
-        event: &Event<T, P>,
+        event: IndexedEventRef<T, P>,
     ) -> MetaEventBuilder<T, P> {
         MetaEventBuilder {
             election,
@@ -44,7 +44,7 @@ impl<P: PublicId> MetaEvent<P> {
 
 pub(crate) struct MetaEventBuilder<'a, T: NetworkEvent + 'a, P: PublicId + 'a> {
     election: MetaElectionHandle,
-    event: &'a Event<T, P>,
+    event: IndexedEventRef<'a, T, P>,
     meta_event: MetaEvent<P>,
 }
 
@@ -53,7 +53,7 @@ impl<'a, T: NetworkEvent + 'a, P: PublicId + 'a> MetaEventBuilder<'a, T, P> {
         self.election
     }
 
-    pub fn event(&self) -> &Event<T, P> {
+    pub fn event(&self) -> IndexedEventRef<'a, T, P> {
         self.event
     }
 

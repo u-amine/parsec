@@ -21,9 +21,4 @@ impl Debug for EventHash {
 
 impl EventHash {
     pub(crate) const ZERO: Self = EventHash(Hash::ZERO);
-
-    #[cfg(any(test, feature = "testing"))]
-    pub(crate) fn phony(src: &[u8]) -> Self {
-        EventHash(Hash::from(src))
-    }
 }

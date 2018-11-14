@@ -11,7 +11,9 @@ use block::Block;
 use dev_utils::ParsedContents;
 use dump_graph;
 use error::{Error, Result};
-use gossip::{Event, EventHash, Graph, PackedEvent, Request, Response};
+use gossip::{
+    Event, EventHash, EventIndex, Graph, IndexedEventRef, PackedEvent, Request, Response,
+};
 use hash::Hash;
 use id::{PublicId, SecretId};
 use meta_voting::{MetaElectionHandle, MetaElections, MetaEvent, MetaEventBuilder, MetaVote, Step};
@@ -259,8 +261,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             peer_id
         );
 
-        let events = self.events.sorted_events_from(0);
-        Ok(Request::new(events))
+        Ok(Request::new(
+            self.events.iter().map(|e| e.inner()).collect(),
+        ))
     }
 
     /// Handles a received `Request` from `src` peer.  Returns a `Response` to be sent back to `src`
@@ -316,7 +319,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     /// Checks if the given `observation` has already been voted for by us.
     pub fn have_voted_for(&self, observation: &Observation<T, S::PublicId>) -> bool {
         // TODO: optimize by iterating only `peer_list.our_events`.
-        self.events.events().any(|event| {
+        self.events.iter().any(|event| {
             event.creator() == self.our_pub_id() && event
                 .vote()
                 .map_or(false, |voted| voted.payload() == observation)
@@ -363,12 +366,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     /// Must only be used for events which have already been added to our graph.
-    fn get_known_event(&self, event_hash: &EventHash) -> Result<&Event<T, S::PublicId>> {
-        self.events.get(event_hash).ok_or_else(|| {
+    fn get_known_event(&self, event_index: EventIndex) -> Result<IndexedEventRef<T, S::PublicId>> {
+        self.events.get(event_index).ok_or_else(|| {
             log_or_panic!(
                 "{:?} doesn't have event {:?}",
                 self.our_pub_id(),
-                event_hash
+                event_index
             );
             Error::Logic
         })
@@ -410,30 +413,18 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn our_last_event_hash(&self) -> EventHash {
-        if let Some(hash) = self.peer_list.last_event(self.our_pub_id()) {
-            *hash
-        } else {
-            log_or_panic!(
-                "{:?} has no last event hash.\n{:?}\n",
-                self.our_pub_id(),
-                self.peer_list
-            );
-            EventHash::ZERO
-        }
-    }
-
-    fn self_parent<'a>(
-        &'a self,
-        event: &Event<T, S::PublicId>,
-    ) -> Option<&'a Event<T, S::PublicId>> {
-        event.self_parent().and_then(|hash| self.events.get(hash))
-    }
-
-    fn other_parent<'a>(
-        &'a self,
-        event: &Event<T, S::PublicId>,
-    ) -> Option<&'a Event<T, S::PublicId>> {
-        event.other_parent().and_then(|hash| self.events.get(hash))
+        self.peer_list
+            .last_event(self.our_pub_id())
+            .and_then(|index| self.get_known_event(index).ok())
+            .map(|event| *event.hash())
+            .unwrap_or_else(|| {
+                log_or_panic!(
+                    "{:?} has no last event hash.\n{:?}\n",
+                    self.our_pub_id(),
+                    self.peer_list
+                );
+                EventHash::ZERO
+            })
     }
 
     fn is_observer(&self, builder: &MetaEventBuilder<T, S::PublicId>) -> bool {
@@ -445,14 +436,20 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             return false;
         }
 
-        let self_parent = if let Some(self_parent) = self.self_parent(builder.event()) {
-            self_parent
+        let self_parent_index = if let Some(index) = builder.event().self_parent() {
+            index
         } else {
             log_or_panic!(
                 "{:?} has event {:?} with observations, but not self-parent",
                 self.our_pub_id(),
-                builder.event()
+                *builder.event()
             );
+            return false;
+        };
+
+        let self_parent = if let Ok(event) = self.get_known_event(self_parent_index) {
+            event
+        } else {
             return false;
         };
 
@@ -470,14 +467,14 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         if let Some(meta_parent) = self
             .meta_elections
-            .meta_event(builder.election(), self_parent.hash())
+            .meta_event(builder.election(), self_parent_index)
         {
             !is_more_than_two_thirds(meta_parent.observees.len(), voter_count)
         } else {
             log_or_panic!(
                 "{:?} doesn't have meta-event for event {:?} (self-parent of {:?}) in meta-election {:?}",
                 self.our_pub_id(),
-                self_parent,
+                *self_parent,
                 builder.event().hash(),
                 builder.election(),
             );
@@ -528,8 +525,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             self.detect_malice_before_process(&event)?;
         }
 
-        self.peer_list.add_event(&event)?;
-        let is_initial = event.is_initial();
+        self.peer_list.confirm_can_add_event(&event)?;
 
         if let Some((payload_hash, new_info)) = ObservationInfo::create(&event) {
             let info = self.observations.entry(payload_hash).or_insert(new_info);
@@ -538,36 +534,41 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             }
         }
 
-        let event_hash = self.events.insert(event);
+        let is_initial = event.is_initial();
+        let event_index = {
+            let event = self.events.insert(event);
+            self.peer_list.add_event(event);
+            event.event_index()
+        };
 
         if is_initial {
             return Ok(());
         }
 
-        self.initialise_membership_list(&event_hash);
-        self.process_event(&event_hash)?;
+        self.initialise_membership_list(event_index);
+        self.process_event(event_index)?;
 
         if !our {
             #[cfg(feature = "malice-detection")]
-            self.detect_malice_after_process(&event_hash);
+            self.detect_malice_after_process(event_index);
         }
 
         Ok(())
     }
 
-    fn process_event(&mut self, event_hash: &EventHash) -> Result<()> {
+    fn process_event(&mut self, event_index: EventIndex) -> Result<()> {
         if self.peer_list.our_state() == PeerState::inactive() {
             return Ok(());
         }
 
         let elections: Vec<_> = self.meta_elections.all().collect();
         for election in elections {
-            self.create_meta_event(election, event_hash)?;
+            self.create_meta_event(election, event_index)?;
         }
 
-        let creator = self.get_known_event(event_hash)?.creator().clone();
+        let creator = self.get_known_event(event_index)?.creator().clone();
 
-        if let Some(payload_hash) = self.compute_consensus(MetaElectionHandle::CURRENT, event_hash)
+        if let Some(payload_hash) = self.compute_consensus(MetaElectionHandle::CURRENT, event_index)
         {
             self.output_consensus_info(&payload_hash);
             self.mark_observation_as_consensused(&payload_hash);
@@ -591,13 +592,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             let block = self.create_block(&payload_hash)?;
             self.consensused_blocks.push_back(block);
 
-            let current_index = self.get_known_event(event_hash)?.topological_index();
-
+            let current_index = self.get_known_event(event_index)?.topological_index();
             self.restart_consensus(start_index, current_index)?;
         } else if creator != *self.our_pub_id() {
             let undecided: Vec<_> = self.meta_elections.undecided_by(&creator).collect();
             for election in undecided {
-                if let Some(payload_hash) = self.compute_consensus(election, event_hash) {
+                if let Some(payload_hash) = self.compute_consensus(election, event_index) {
                     self.meta_elections.mark_as_decided(election, &creator);
                     self.handle_peer_consensus(&creator, &payload_hash);
                 }
@@ -755,18 +755,18 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn create_meta_event(
         &mut self,
         election: MetaElectionHandle,
-        event_hash: &EventHash,
+        event_index: EventIndex,
     ) -> Result<()> {
         if self
             .meta_elections
-            .meta_event(election, event_hash)
+            .meta_event(election, event_index)
             .is_some()
         {
             return Ok(());
         }
 
         let (meta_event, creator) = {
-            let event = self.get_known_event(event_hash)?;
+            let event = self.get_known_event(event_index)?;
             let mut builder = MetaEvent::build(election, event);
 
             self.set_interesting_content(&mut builder);
@@ -777,7 +777,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         };
 
         self.meta_elections
-            .add_meta_event(election, *event_hash, creator, meta_event);
+            .add_meta_event(election, event_index, creator, meta_event);
 
         Ok(())
     }
@@ -804,8 +804,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         let mut payloads_set: BTreeSet<_> = self
             .events
-            .events()
-            .filter(|event| event.topological_index() >= start_index)
+            .iter_from(start_index)
             .filter_map(|event| {
                 event
                     .vote()
@@ -856,7 +855,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn previous_interesting_content(
         &self,
         election: MetaElectionHandle,
-        event: &Event<T, S::PublicId>,
+        event: IndexedEventRef<T, S::PublicId>,
     ) -> Option<Vec<ObservationHash>> {
         let prev_election = self.meta_elections.preceding(election)?;
 
@@ -869,7 +868,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         let prev_meta_event = self
             .meta_elections
-            .meta_event(prev_election, event.hash())?;
+            .meta_event(prev_election, event.event_index())?;
         let payloads = prev_meta_event
             .interesting_content
             .iter()
@@ -899,8 +898,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .filter(|that_event| that_event.creator() != builder.event().creator())
             .any(|that_event| {
                 self.meta_elections
-                    .meta_event(builder.election(), that_event.hash())
-                    .map(|mev| mev.interesting_content.contains(payload_hash))
+                    .meta_event(builder.election(), that_event.event_index())
+                    .map(|meta_event| meta_event.interesting_content.contains(payload_hash))
                     .unwrap_or(false)
             })
     }
@@ -916,7 +915,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     ) -> bool {
         let peers_that_did_vote = self.ancestors_carrying_payload(
             &valid_voters,
-            builder.event(),
+            &*builder.event(),
             payload_hash,
             start_index,
         );
@@ -960,9 +959,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let observees = self
             .meta_elections
             .interesting_events(builder.election())
-            .filter_map(|(peer, hashes)| {
-                let old_hash = hashes.front()?;
-                let old_event = self.get_known_event(old_hash).ok()?;
+            .filter_map(|(peer, indices)| {
+                let old_index = indices.front()?;
+                let old_event = self.get_known_event(*old_index).ok()?;
                 if self.strongly_sees(builder.election(), builder.event(), old_event) {
                     Some(peer)
                 } else {
@@ -1000,7 +999,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                         builder.election(),
                         &voters,
                         &peer_id,
-                        builder.event(),
+                        &*builder.event(),
                     );
                     let coin_tosses = self.toss_coins(
                         builder.election(),
@@ -1026,7 +1025,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     builder.election(),
                     &voters,
                     peer_id,
-                    builder.event(),
+                    &*builder.event(),
                 );
                 let initial_estimate = builder.has_observee(peer_id);
 
@@ -1040,7 +1039,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         trace!(
             "{:?} has set the meta votes for {:?}",
             self.our_pub_id(),
-            builder.event()
+            *builder.event()
         );
 
         Ok(())
@@ -1052,7 +1051,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         voters: &BTreeSet<S::PublicId>,
         peer_id: &S::PublicId,
         parent_votes: &[MetaVote],
-        event: &Event<T, S::PublicId>,
+        event: IndexedEventRef<T, S::PublicId>,
     ) -> Result<BTreeMap<usize, bool>> {
         let mut coin_tosses = BTreeMap::new();
         for parent_vote in parent_votes {
@@ -1069,7 +1068,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         voters: &BTreeSet<S::PublicId>,
         peer_id: &S::PublicId,
         parent_vote: &MetaVote,
-        event: &Event<T, S::PublicId>,
+        event: IndexedEventRef<T, S::PublicId>,
     ) -> Result<Option<bool>> {
         // Get the round hash.
         let round = if parent_vote.estimates.is_empty() {
@@ -1158,34 +1157,34 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         &self,
         election: MetaElectionHandle,
         round: usize,
-        event: &Event<T, S::PublicId>,
+        event: IndexedEventRef<T, S::PublicId>,
     ) -> bool {
-        let mut event_hash = Some(event.hash());
+        let mut event_index = Some(event.event_index());
         let mut response_count = 0;
         let responsiveness_threshold = self.responsiveness_threshold(election);
 
         loop {
-            if let Some(event) = event_hash.and_then(|hash| self.get_known_event(hash).ok()) {
+            if let Some(event) = event_index.and_then(|index| self.get_known_event(index).ok()) {
                 if event.is_response() {
                     response_count += 1;
                     if response_count == responsiveness_threshold {
                         break;
                     }
                 }
-                event_hash = event.self_parent();
+                event_index = event.self_parent();
             } else {
                 return false;
             }
         }
-        let hash = match event_hash {
-            Some(hash) => hash,
+        let event_index = match event_index {
+            Some(index) => index,
             None => {
-                log_or_panic!("{:?} event_hash was None.", self.our_pub_id());
+                log_or_panic!("{:?} event_index was None.", self.our_pub_id());
                 return false;
             }
         };
         self.meta_elections
-            .meta_votes(election, &hash)
+            .meta_votes(election, event_index)
             .and_then(|meta_votes| meta_votes.get(event.creator()))
             .map_or(false, |event_votes| {
                 event_votes
@@ -1265,9 +1264,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     // Initialise the membership list of the creator of the given event to the same membership list
     // the creator of the other-parent had at the time of the other-parent's creation. Do nothing if
     // the event is not request or response or if the membership list is already initialised.
-    fn initialise_membership_list(&mut self, event_hash: &EventHash) {
+    fn initialise_membership_list(&mut self, event_index: EventIndex) {
         let (creator, changes) = {
-            let event = if let Ok(event) = self.get_known_event(event_hash) {
+            let event = if let Ok(event) = self.get_known_event(event_index) {
                 event
             } else {
                 return;
@@ -1284,8 +1283,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 return;
             }
 
-            let other_parent_creator = if let Some(other_parent) = self.other_parent(event) {
-                other_parent.creator()
+            let other_parent_creator = if let Some(other_parent) = self.events.other_parent(event) {
+                other_parent.inner().creator()
             } else {
                 return;
             };
@@ -1329,9 +1328,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn compute_consensus(
         &self,
         election: MetaElectionHandle,
-        event_hash: &EventHash,
+        event_index: EventIndex,
     ) -> Option<ObservationHash> {
-        let last_meta_votes = self.meta_elections.meta_votes(election, event_hash)?;
+        let last_meta_votes = self.meta_elections.meta_votes(election, event_index)?;
 
         let decided_meta_votes = last_meta_votes.iter().filter_map(|(id, event_votes)| {
             event_votes.last().and_then(|v| v.decision).map(|v| (id, v))
@@ -1391,7 +1390,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .ok_or_else(|| Error::Logic)?;
         let votes = self
             .events
-            .events()
+            .iter()
             .filter_map(|event| {
                 event.vote().and_then(|vote| {
                     if *vote.payload() == payload {
@@ -1415,20 +1414,20 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         // This makes sure that we only reprocess events between start_index and current_index,
         // inclusive.
-        // `collect()` needed because the iterator returned by `topologically_sorted_events_from()`
-        // borrows `self` immutably, which conflicts with `process_event`.
-        let hashes: Vec<_> = self
+        // `collect()` needed because the iterator returned by `iter_from()` borrows `self`
+        // immutably, which conflicts with `process_event`.
+        let indices: Vec<_> = self
             .events
-            .sorted_hashes_from(start_index)
-            .into_iter()
+            .iter_from(start_index)
             .take(current_index - start_index + 1)
+            .map(|event| event.event_index())
             .collect();
-        for hash in hashes {
+        for index in indices {
             // This will reprocess events relevant to the new meta-election, but in the context of
             // all active meta-elections. This is sometimes necessary, as restart_consensus can be
             // called while events are being reprocessed and in such cases we could miss some
             // events when creating meta-events.
-            self.process_event(&hash)?;
+            self.process_event(index)?;
         }
 
         Ok(())
@@ -1438,12 +1437,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // Find the topological index of the first event that carries unconsensused payload.
         let previous = self.meta_elections.start_index(MetaElectionHandle::CURRENT);
         self.events
-            .sorted_events_from(previous)
-            .into_iter()
+            .iter_from(previous)
             .filter(|event| {
                 event
                     .vote()
-                    .and_then(|vote| self.hash_from_payload(vote.payload()))
+                    .map(Vote::payload)
+                    .and_then(|payload| self.hash_from_payload(payload))
                     .and_then(|payload_hash| self.observations.get(&payload_hash))
                     .map(|info| !info.consensused)
                     .unwrap_or(false)
@@ -1475,14 +1474,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     // Returns whether event X can strongly see the event Y during the evaluation of the given election.
-    fn strongly_sees(
-        &self,
-        election: MetaElectionHandle,
-        x: &Event<T, S::PublicId>,
-        y: &Event<T, S::PublicId>,
-    ) -> bool {
+    fn strongly_sees<A, B>(&self, election: MetaElectionHandle, x: A, y: B) -> bool
+    where
+        A: AsRef<Event<T, S::PublicId>>,
+        B: AsRef<Event<T, S::PublicId>>,
+    {
         is_more_than_two_thirds(
-            self.num_peers_created_events_seen_by_x_that_can_see_y(x, y),
+            self.num_peers_created_events_seen_by_x_that_can_see_y(x.as_ref(), y.as_ref()),
             self.voter_count(election),
         )
     }
@@ -1495,17 +1493,26 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         is_request: bool,
         forking_peers: &BTreeSet<S::PublicId>,
     ) -> Result<()> {
-        let self_parent = *self
+        let self_parent = self
             .peer_list
             .last_event(self.our_pub_id())
+            .and_then(|index| self.get_known_event(index).ok())
+            .map(|event| *event.hash())
             .ok_or_else(|| {
                 log_or_panic!("{:?} missing our own last event hash.", self.our_pub_id());
                 Error::Logic
             })?;
-        let other_parent = *self.peer_list.last_event(src).ok_or_else(|| {
-            log_or_panic!("{:?} missing {:?} last event hash.", self.our_pub_id(), src);
-            Error::Logic
-        })?;
+
+        let other_parent = self
+            .peer_list
+            .last_event(src)
+            .and_then(|index| self.get_known_event(index).ok())
+            .map(|event| *event.hash())
+            .ok_or_else(|| {
+                log_or_panic!("{:?} missing {:?} last event hash.", self.our_pub_id(), src);
+                Error::Logic
+            })?;
+
         let sync_event = if is_request {
             Event::new_from_request(
                 self_parent,
@@ -1523,6 +1530,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 forking_peers,
             )
         };
+
         self.add_event(sync_event)
     }
 
@@ -1533,8 +1541,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         &self,
         peer_id: &S::PublicId,
     ) -> Result<Vec<&Event<T, S::PublicId>>> {
-        let last_event = if let Some(event_hash) = self.peer_list.last_event(peer_id) {
-            self.get_known_event(event_hash)?
+        let last_event = if let Some(event_index) = self.peer_list.last_event(peer_id) {
+            self.get_known_event(event_index)?
         } else {
             log_or_panic!("{:?} doesn't have peer {:?}", self.our_pub_id(), peer_id);
             return Err(Error::Logic);
@@ -1549,13 +1557,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             inclusion_list[event.topological_index()] = false;
         }
 
-        let mut events: Vec<_> = self
+        Ok(self
             .events
-            .events()
+            .iter()
             .filter(|event| inclusion_list[event.topological_index()])
-            .collect();
-        events.sort_by_key(|event| event.topological_index());
-        Ok(events)
+            .map(|event| event.inner())
+            .collect())
     }
 
     // Get the responsiveness threshold based on the current number of peers.
@@ -1584,8 +1591,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     #[cfg(feature = "malice-detection")]
-    fn detect_malice_after_process(&mut self, event_hash: &EventHash) {
-        self.detect_invalid_gossip_creator(event_hash);
+    fn detect_malice_after_process(&mut self, event_index: EventIndex) {
+        self.detect_invalid_gossip_creator(event_index);
     }
 
     fn create_accusation_event(
@@ -1634,7 +1641,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
     // Detect if the event's other_parent has the same creator as this event.
     fn detect_other_parent_by_same_creator(&mut self, event: &Event<T, S::PublicId>) -> Result<()> {
-        if let Some(other_parent) = self.other_parent(event) {
+        if let Some(other_parent) = self.events.other_parent(event) {
             if other_parent.creator() != event.creator() {
                 return Ok(());
             }
@@ -1656,7 +1663,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         &mut self,
         event: &Event<T, S::PublicId>,
     ) -> Result<()> {
-        if let Some(self_parent) = self.self_parent(event) {
+        if let Some(self_parent) = self.events.self_parent(event) {
             if self_parent.creator() == event.creator() {
                 return Ok(());
             }
@@ -1690,6 +1697,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         // - the creator is not member of the genesis group, or
         // - the self-parent of the event is not initial event
         if !genesis_group.contains(event.creator()) || self
+            .events
             .self_parent(event)
             .map_or(true, |self_parent| !self_parent.is_initial())
         {
@@ -1732,12 +1740,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .peer_list
                 .peer_events(event.creator())
                 .rev()
-                .filter(|hash| {
-                    self.get_known_event(hash)
-                        .ok()
-                        .and_then(|event| event.vote())
-                        .map_or(false, |vote| vote.payload() == payload)
-                }).take(2);
+                .filter_map(|index| self.get_known_event(index).ok())
+                .filter(|event| event.vote().map_or(false, |vote| vote.payload() == payload))
+                .map(|event| *event.hash())
+                .take(2);
 
             let hash = if let Some(hash) = duplicates.next() {
                 // One duplicate found - raise the accusation.
@@ -1753,7 +1759,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 return;
             }
 
-            *hash
+            hash
         };
 
         self.accuse(
@@ -1765,7 +1771,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     // Detect if the event's other_parent older than first ancestor of self_parent.
     fn detect_stale_other_parent(&mut self, event: &Event<T, S::PublicId>) {
         let (other_parent_index, other_parent_creator) =
-            if let Some(other_parent) = self.other_parent(event) {
+            if let Some(other_parent) = self.events.other_parent(event) {
                 (
                     other_parent.index_by_creator(),
                     other_parent.creator().clone(),
@@ -1773,10 +1779,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             } else {
                 return;
             };
-        let self_parent_ancestor_index = if let Some(index) = self
-            .self_parent(event)
-            .and_then(|self_parent| self_parent.last_ancestors().get(&other_parent_creator))
-        {
+        let self_parent_ancestor_index = if let Some(index) =
+            self.events.self_parent(event).and_then(|self_parent| {
+                self_parent
+                    .inner()
+                    .last_ancestors()
+                    .get(&other_parent_creator)
+            }) {
             *index
         } else {
             return;
@@ -1792,8 +1801,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     // Detect whether the event incurs a fork.
     fn detect_fork(&mut self, event: &Event<T, S::PublicId>) {
         if self.peer_list.last_event(event.creator()) != event.self_parent() {
-            if let Some(self_parent_hash) = event.self_parent() {
-                self.accuse(event.creator().clone(), Malice::Fork(*self_parent_hash));
+            if let Some(self_parent_hash) =
+                self.events.self_parent(event).map(|event| *event.hash())
+            {
+                self.accuse(event.creator().clone(), Malice::Fork(self_parent_hash));
             }
         }
     }
@@ -1830,7 +1841,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 if let Some(&Observation::Accusation {
                     ref offender,
                     ref malice,
-                }) = event.vote().map(Vote::payload)
+                }) = event.inner().vote().map(Vote::payload)
                 {
                     Some((offender, malice))
                 } else {
@@ -1848,15 +1859,15 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         )
     }
 
-    fn detect_invalid_gossip_creator(&mut self, event_hash: &EventHash) {
-        let offender = {
-            let event = if let Ok(event) = self.get_known_event(event_hash) {
+    fn detect_invalid_gossip_creator(&mut self, event_index: EventIndex) {
+        let accusation = {
+            let event = if let Ok(event) = self.get_known_event(event_index) {
                 event
             } else {
                 return;
             };
 
-            let other_parent = if let Some(parent) = self.other_parent(event) {
+            let other_parent = if let Some(parent) = self.events.other_parent(event) {
                 parent
             } else {
                 return;
@@ -1877,20 +1888,22 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             if membership_list.contains(other_parent.creator()) {
                 None
             } else {
-                Some(event.creator().clone())
+                Some((event.creator().clone(), *event.hash()))
             }
         };
 
-        if let Some(offender) = offender {
-            self.accuse(offender, Malice::InvalidGossipCreator(*event_hash))
+        if let Some((offender, event_hash)) = accusation {
+            self.accuse(offender, Malice::InvalidGossipCreator(event_hash))
         }
     }
 
     fn genesis_group(&self) -> BTreeSet<&S::PublicId> {
         self.events
-            .events()
+            .iter()
             .filter_map(|event| {
-                if let Some(&Observation::Genesis(ref gen)) = event.vote().map(Vote::payload) {
+                if let Some(&Observation::Genesis(ref gen)) =
+                    event.inner().vote().map(Vote::payload)
+                {
                     Some(gen.iter().collect())
                 } else {
                     None
@@ -1943,8 +1956,8 @@ impl Parsec<Transaction, PeerId> {
 
         // ..and also the payloads carried by events.
         let our_pub_id = parsec.our_pub_id().clone();
-        for event in parsed_contents.events.events() {
-            if let Some((payload_hash, new_info)) = ObservationInfo::create(event) {
+        for event in &parsed_contents.events {
+            if let Some((payload_hash, new_info)) = ObservationInfo::create(&*event) {
                 let info = parsec.observations.entry(payload_hash).or_insert(new_info);
                 if *event.creator() == our_pub_id {
                     info.created_by_us = true;
@@ -1993,12 +2006,17 @@ impl<T: NetworkEvent, P: PublicId> ObservationInfo<T, P> {
     }
 }
 
+/// Assert that the two parsec instances have the same events modulo their insertion order.
 #[cfg(all(test, feature = "testing"))]
-pub(crate) fn assert_graphs_equal<T: NetworkEvent, S: SecretId>(
-    a: &Parsec<T, S>,
-    b: &Parsec<T, S>,
-) {
-    assert_eq!(a.events, b.events);
+pub(crate) fn assert_same_events<T: NetworkEvent, S: SecretId>(a: &Parsec<T, S>, b: &Parsec<T, S>) {
+    assert_eq!(a.events.len(), b.events.len());
+
+    for a_event in &a.events {
+        let b_index = unwrap!(b.events.get_index(a_event.hash()));
+        let b_event = unwrap!(b.events.get(b_index));
+
+        assert_eq!(a_event.inner(), b_event.inner());
+    }
 }
 
 #[cfg(test)]
@@ -2013,7 +2031,7 @@ mod functional_tests {
 
     #[derive(Debug, PartialEq, Eq)]
     struct Snapshot {
-        peer_list: BTreeMap<PeerId, (PeerState, BTreeMap<u64, EventHash>)>,
+        peer_list: BTreeMap<PeerId, (PeerState, BTreeMap<u64, EventIndex>)>,
         events: BTreeSet<EventHash>,
         consensused_blocks: VecDeque<Block<Transaction, PeerId>>,
         meta_elections: MetaElections<PeerId>,
@@ -2027,18 +2045,13 @@ mod functional_tests {
                 .map(|(peer_id, peer)| {
                     (
                         peer_id.clone(),
-                        (
-                            peer.state(),
-                            peer.indexed_events()
-                                .map(|(index, hash)| (index, *hash))
-                                .collect(),
-                        ),
+                        (peer.state(), peer.indexed_events().collect()),
                     )
                 }).collect();
 
             Snapshot {
                 peer_list,
-                events: parsec.events.hashes().cloned().collect(),
+                events: parsec.events.iter().map(|event| *event.hash()).collect(),
                 consensused_blocks: parsec.consensused_blocks.clone(),
                 meta_elections: parsec.meta_elections.clone(),
             }
@@ -2059,7 +2072,7 @@ mod functional_tests {
     }
 
     fn nth_event<T: NetworkEvent, P: PublicId>(graph: &Graph<T, P>, n: usize) -> &Event<T, P> {
-        unwrap!(graph.events().find(|event| event.topological_index() == n))
+        unwrap!(graph.iter_from(n).next()).inner()
     }
 
     #[test]
@@ -2080,7 +2093,7 @@ mod functional_tests {
 
         // Only the initial event should be in the gossip graph.
         assert_eq!(parsec.events.len(), 1);
-        let event = unwrap!(parsec.events.events().next());
+        let event = nth_event(&parsec.events, 0);
         assert_eq!(*event.creator(), our_id);
         assert!(event.is_initial());
     }
@@ -2390,7 +2403,8 @@ mod functional_tests {
         let mut alice = Parsec::from_genesis(alice_id.clone(), &genesis_group, is_supermajority);
 
         // Alice creates couple of valid events.
-        let a_1_hash = *unwrap!(alice.peer_list.our_events().next());
+        let a_1_index = unwrap!(alice.peer_list.our_events().next());
+        let a_1_hash = *unwrap!(alice.events.get(a_1_index)).hash();
 
         let a_2 = Event::new_from_observation(
             a_1_hash,
@@ -2418,9 +2432,9 @@ mod functional_tests {
         unwrap!(alice.handle_response(&bob_id, res));
 
         // Now Bob has a_0, a_1, a_2 and a_3 and Alice knows it.
-        assert!(bob.events.contains(&a_1_hash));
-        assert!(bob.events.contains(&a_2_hash));
-        assert!(bob.events.contains(&a_3_hash));
+        assert!(bob.events.get_index(&a_1_hash).is_some());
+        assert!(bob.events.get_index(&a_2_hash).is_some());
+        assert!(bob.events.get_index(&a_3_hash).is_some());
 
         // Alice creates a fork.
         let a_2_fork = Event::new_from_observation(
@@ -2437,7 +2451,7 @@ mod functional_tests {
         let _ = unwrap!(bob.handle_request(&alice_id, req));
 
         // Verify that Bob now has the forked event.
-        assert!(bob.events.contains(&a_2_fork_hash));
+        assert!(bob.events.get_index(&a_2_fork_hash).is_some());
     }
 
     #[cfg(feature = "malice-detection")]
@@ -2455,8 +2469,8 @@ mod functional_tests {
             parsec
                 .peer_list
                 .our_events()
-                .filter_map(move |hash| parsec.events.get(hash))
-                .filter_map(|event| event.vote())
+                .filter_map(move |index| parsec.events.get(index))
+                .filter_map(|event| event.inner().vote())
                 .map(|vote| vote.payload())
         }
 
@@ -2754,7 +2768,7 @@ mod functional_tests {
             // still added to the graph.
             let mut alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
             let carols_valid_vote_hash =
-                *unwrap!(find_event_by_short_name(alice.events.events(), "C_4")).hash();
+                *unwrap!(find_event_by_short_name(&alice.events, "C_4")).hash();
             unwrap!(alice.add_event(first_duplicate_clone));
             let expected_accusations = vec![(
                 carol.our_pub_id().clone(),
@@ -2778,8 +2792,8 @@ mod functional_tests {
             // Carol will create event C_4 with other-parent as B_1, despite having C_3 with other-
             // parent as B_2.
             let carol = Parsec::from_parsed_contents(parse_test_dot_file("carol.dot"));
-            let c_3_hash = *unwrap!(find_event_by_short_name(carol.events.events(), "C_3")).hash();
-            let b_1_hash = *unwrap!(find_event_by_short_name(carol.events.events(), "B_1")).hash();
+            let c_3_hash = *unwrap!(find_event_by_short_name(&carol.events, "C_3")).hash();
+            let b_1_hash = *unwrap!(find_event_by_short_name(&carol.events, "B_1")).hash();
 
             let c_4 = Event::new_from_request(
                 c_3_hash,
@@ -2808,14 +2822,8 @@ mod functional_tests {
             // Generated with RNG seed: [935566334, 935694090, 88607029, 861330491].
             let mut alice_contents = parse_test_dot_file("alice.dot");
 
-            let a_4_hash = *unwrap!(find_event_by_short_name(
-                alice_contents.events.events(),
-                "A_4"
-            )).hash();
-            let d_1_hash = *unwrap!(find_event_by_short_name(
-                alice_contents.events.events(),
-                "D_1"
-            )).hash();
+            let a_4_hash = *unwrap!(find_event_by_short_name(&alice_contents.events, "A_4")).hash();
+            let d_1_hash = *unwrap!(find_event_by_short_name(&alice_contents.events, "D_1")).hash();
 
             // Create an invalid accusation from Alice
             let a_5 = Event::<Transaction, _>::new_from_observation(
@@ -2885,26 +2893,46 @@ mod functional_tests {
             // Read the dot file again so we have a set of events we can manually add to Bob instead of
             // sending gossip.
             let alice_parsed_contents = parse_test_dot_file("alice.dot");
-            let mut alice_events: BTreeMap<_, _> = alice_parsed_contents.events.into();
+
+            let c_0_index = unwrap!(find_event_by_short_name(
+                &alice_parsed_contents.events,
+                "C_0"
+            )).event_index();
+
+            let (a_2_index, a_2_hash) = {
+                let ie = unwrap!(find_event_by_short_name(
+                    &alice_parsed_contents.events,
+                    "A_2"
+                ));
+                (ie.event_index(), *ie.hash())
+            };
+
+            let b_2_index = unwrap!(find_event_by_short_name(
+                &alice_parsed_contents.events,
+                "B_2"
+            )).event_index();
 
             // Carol is marked as active peer so that Bob's peer_list will accept C_0, but Carol is not
             // part of the membership_list
             let carol_id = PeerId::new("Carol");
             bob.peer_list.add_peer(carol_id, PeerState::active());
-            let c_0_hash = *unwrap!(find_event_by_short_name(alice_events.values(), "C_0")).hash();
-            let c_0 = unwrap!(alice_events.remove(&c_0_hash));
-            unwrap!(bob.peer_list.add_event(&c_0));
+            {
+                let c_0 = unwrap!(alice_parsed_contents.events.get(c_0_index));
+                unwrap!(bob.peer_list.confirm_can_add_event(&*c_0));
+                bob.peer_list.add_event(c_0);
+            }
+
+            let mut alice_events: BTreeMap<_, _> =
+                alice_parsed_contents.events.into_iter().collect();
 
             // This malice is setup in two events.
             // A_2 has C_0 from Carol as other parent as Carol has gossiped to Alice. Carol is however
             // not part of the section and Alice should not have accepted it.
-            let a_2_hash = *unwrap!(find_event_by_short_name(alice_events.values(), "A_2")).hash();
-            let a_2 = unwrap!(alice_events.remove(&a_2_hash));
+            let a_2 = unwrap!(alice_events.remove(&a_2_index));
             unwrap!(bob.add_event(a_2));
 
             // B_2 is the sync event created by Bob when he receives A_2 from Alice.
-            let b_2_hash = *unwrap!(find_event_by_short_name(alice_events.values(), "B_2")).hash();
-            let b_2 = unwrap!(alice_events.remove(&b_2_hash));
+            let b_2 = unwrap!(alice_events.remove(&b_2_index));
             unwrap!(bob.add_event(b_2));
 
             // Bob should now have seen that Alice in A_2 incorrectly reported gossip from Carol. Check
@@ -2924,14 +2952,9 @@ mod functional_tests {
                 "parsec_functional_tests_handle_malice_accomplice",
             );
 
-            let a_10_hash = *unwrap!(find_event_by_short_name(
-                alice_contents.events.events(),
-                "A_10"
-            )).hash();
-            let d_1_hash = *unwrap!(find_event_by_short_name(
-                alice_contents.events.events(),
-                "D_1"
-            )).hash();
+            let a_10_hash =
+                *unwrap!(find_event_by_short_name(&alice_contents.events, "A_10")).hash();
+            let d_1_hash = *unwrap!(find_event_by_short_name(&alice_contents.events, "D_1")).hash();
 
             // Create an invalid accusation from Alice
             let a_11 = Event::<Transaction, _>::new_from_observation(
@@ -3103,20 +3126,13 @@ mod functional_tests {
             // sides of the fork and should raise an accusation.
             let bob_contents = parse_test_dot_file("bob.dot");
             let dave_contents = parse_test_dot_file("dave.dot");
-            let a_3_hash = *unwrap!(find_event_by_short_name(
-                bob_contents.events.events(),
-                "A_3"
-            )).hash();
+            let a_3_hash = *unwrap!(find_event_by_short_name(&bob_contents.events, "A_3")).hash();
             // Bob and Dave have different notions of which event is the fourth one by Alice - here we
             // save the hashes of these two events that could be considered A_4
-            let a_4_bob_hash = *unwrap!(find_event_by_short_name(
-                bob_contents.events.events(),
-                "A_4"
-            )).hash();
-            let a_4_dave_hash = *unwrap!(find_event_by_short_name(
-                dave_contents.events.events(),
-                "A_4"
-            )).hash();
+            let a_4_bob_hash =
+                *unwrap!(find_event_by_short_name(&bob_contents.events, "A_4")).hash();
+            let a_4_dave_hash =
+                *unwrap!(find_event_by_short_name(&dave_contents.events, "A_4")).hash();
 
             let bob = Parsec::from_parsed_contents(bob_contents);
             let mut dave = Parsec::from_parsed_contents(dave_contents);
