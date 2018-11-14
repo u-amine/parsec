@@ -763,6 +763,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
 
         let (meta_event, creator) = {
             let event = self.get_known_event(event_index)?;
+            trace!(
+                "{:?} creating a meta-event in meta-election {:?} for event {:?}",
+                self.our_pub_id(),
+                election,
+                event
+            );
             let mut builder = MetaEvent::build(election, event);
 
             self.set_interesting_content(&mut builder);
@@ -1025,9 +1031,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         };
 
         trace!(
-            "{:?} has set the meta votes for {:?}",
+            "{:?} has set the meta votes for {:?} in meta-election {:?}",
             self.our_pub_id(),
-            *builder.event()
+            *builder.event(),
+            builder.election(),
         );
 
         Ok(())
