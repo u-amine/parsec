@@ -590,7 +590,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             let block = self.create_block(payload)?;
             self.consensused_blocks.push_back(block);
 
-            self.restart_consensus(start_index)?;
+            let current_index = self.get_known_event(event_hash)?.topological_index();
+
+            self.restart_consensus(start_index, current_index)?;
         } else if creator != *self.our_pub_id() {
             let undecided: Vec<_> = self.meta_elections.undecided_by(&creator).collect();
             for election in undecided {
@@ -1353,12 +1355,27 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Block::new(payload, &votes)
     }
 
-    fn restart_consensus(&mut self, start_index: usize) -> Result<()> {
+    fn restart_consensus(&mut self, start_index: usize, current_index: usize) -> Result<()> {
         self.meta_elections
             .initialise_current_election(self.peer_list.all_ids());
 
-        let hashes: Vec<_> = self.topologically_sorted_events_from(start_index).collect();
+        if current_index < start_index {
+            return Ok(());
+        }
+
+        // This makes sure that we only reprocess events between start_index and current_index,
+        // inclusive.
+        // `collect()` needed because the iterator returned by `topologically_sorted_events_from()`
+        // borrows `self` immutably, which conflicts with `process_event`.
+        let hashes: Vec<_> = self
+            .topologically_sorted_events_from(start_index)
+            .take(current_index - start_index + 1)
+            .collect();
         for hash in hashes {
+            // This will reprocess events relevant to the new meta-election, but in the context of
+            // all active meta-elections. This is sometimes necessary, as restart_consensus can be
+            // called while events are being reprocessed and in such cases we could miss some
+            // events when creating meta-events.
             self.process_event(&hash)?;
         }
 
@@ -2472,7 +2489,8 @@ mod functional_tests {
             let mut alice = Parsec::from_parsed_contents(alice_contents);
 
             // This is needed so the AddPeer(Eric) is consensused.
-            unwrap!(alice.restart_consensus(0));
+            // 1000 is just a large number that will make restart_consensus reprocess everything
+            unwrap!(alice.restart_consensus(0, 1000));
 
             // Simulate Eric creating unexpected genesis.
             let eric_id = PeerId::new("Eric");
