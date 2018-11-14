@@ -607,18 +607,16 @@ impl Environment {
             let receiver_id = self.peers[receiver_index].id.clone();
             let sender_id = self.peers[sender_index].id.clone();
 
-            // println!("Sending request from {:?} to {:?}", sender_id, receiver_id);
-
-            let response = unwrap!(
-                self.peers[receiver_index]
-                    .parsec
-                    .handle_request(&sender_id, request)
-            );
-            unwrap!(
-                self.peers[sender_index]
-                    .parsec
-                    .handle_response(&receiver_id, response)
-            );
+            if let Ok(response) = self.peers[receiver_index]
+                .parsec
+                .handle_request(&sender_id, request)
+            {
+                unwrap!(
+                    self.peers[sender_index]
+                        .parsec
+                        .handle_response(&receiver_id, response)
+                );
+            }
 
             let peer = &mut self.peers[sender_index];
             if peer.observations.len() < self.params.total_observations()
