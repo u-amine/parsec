@@ -590,7 +590,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             let block = self.create_block(payload)?;
             self.consensused_blocks.push_back(block);
 
-            self.restart_consensus(start_index)?;
+            let current_index = self.get_known_event(event_hash)?.topological_index();
+
+            self.restart_consensus(start_index, current_index)?;
         } else if creator != *self.our_pub_id() {
             let undecided: Vec<_> = self.meta_elections.undecided_by(&creator).collect();
             for election in undecided {
@@ -774,50 +776,47 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let peers_that_can_vote = self.voters(builder.election());
         let start_index = self.meta_elections.start_index(builder.election());
 
-        let indexed_payloads_map: BTreeMap<_, _> = self
-            .events
-            .values()
-            .filter(|event| event.topological_index() >= start_index)
-            .filter_map(|event| event.vote().map(|vote| vote.payload()))
-            .filter(|&this_payload| {
+        let mut payloads_set: BTreeSet<_> = self
+            .peer_list
+            .iter()
+            .flat_map(|(_peer_id, peer)| {
+                peer.events().filter_map(|hash| {
+                    self.events
+                        .get(hash)
+                        .and_then(|event| event.vote().map(|vote| vote.payload()))
+                })
+            }).filter(|&this_payload| {
                 self.meta_elections.is_interesting_content_candidate(
                     builder.election(),
                     builder.event().creator(),
                     this_payload,
                 )
-            }).filter_map(|this_payload| {
-                let peers_that_did_vote = self.ancestors_carrying_payload(
+            }).filter(|&this_payload| {
+                self.has_interesting_ancestor(builder, this_payload) || self.is_interesting_payload(
+                    builder,
                     &peers_that_can_vote,
-                    builder.event(),
                     this_payload,
                     start_index,
-                );
-                if (self.is_interesting_event)(
-                    &peers_that_did_vote.keys().cloned().collect(),
-                    &peers_that_can_vote,
-                ) {
-                    Some((
-                        this_payload.clone(),
-                        peers_that_did_vote
-                            .get(builder.event().creator())
-                            .cloned()
-                            // Sometimes the interesting event's creator won't have voted for the
-                            // payload that became interesting - in such a case we would like it
-                            // sorted at the end of the "queue"
-                            .unwrap_or(u64::MAX),
-                    ))
-                } else {
-                    None
-                }
-            }).collect();
-
-        let mut indexed_payloads: Vec<_> = indexed_payloads_map.into_iter().collect();
-        indexed_payloads.sort_by_key(|&(_, index)| index);
-
-        let payloads = indexed_payloads
-            .into_iter()
-            .map(|(payload, _index)| payload)
+                )
+            }).cloned()
             .collect();
+
+        // The code above created a set of payloads that are interesting at this event.
+        // We will now sort the payloads in the order in which the creator voted for them.
+        let mut payloads = vec![];
+        for observation in self
+            .peer_list
+            .peer_events(builder.event().creator())
+            .filter_map(|hash| self.get_known_event(hash).ok())
+            .filter_map(|event| event.vote().map(|vote| vote.payload()))
+        {
+            if payloads_set.remove(observation) {
+                payloads.push(observation.clone());
+            }
+        }
+        // If any payloads are left in the set, it means that the creator hasn't voted for them -
+        // we will just append them at the end.
+        payloads.extend(payloads_set);
 
         builder.set_interesting_content(payloads);
     }
@@ -856,25 +855,59 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Some(payloads)
     }
 
+    // Returns true if `builder.event()` has an ancestor by a different creator that has `payload`
+    // in interesting content
+    fn has_interesting_ancestor(
+        &self,
+        builder: &MetaEventBuilder<T, S::PublicId>,
+        payload: &Observation<T, S::PublicId>,
+    ) -> bool {
+        graph::ancestors(&self.events, builder.event())
+            .filter(|that_event| that_event.creator() != builder.event().creator())
+            .any(|that_event| {
+                self.meta_elections
+                    .meta_event(builder.election(), that_event.hash())
+                    .map(|mev| mev.interesting_content.contains(payload))
+                    .unwrap_or(false)
+            })
+    }
+
+    // Returns true if enough of `valid_voters` have voted for `payload` from the perspective of
+    // `builder.event()`
+    fn is_interesting_payload(
+        &self,
+        builder: &MetaEventBuilder<T, S::PublicId>,
+        valid_voters: &BTreeSet<S::PublicId>,
+        payload: &Observation<T, S::PublicId>,
+        start_index: usize,
+    ) -> bool {
+        let peers_that_did_vote =
+            self.ancestors_carrying_payload(&valid_voters, builder.event(), payload, start_index);
+        if let Observation::OpaquePayload(_) = *payload {
+            (self.is_interesting_event)(&peers_that_did_vote, &valid_voters)
+        } else {
+            is_supermajority(&peers_that_did_vote, &valid_voters)
+        }
+    }
+
     fn ancestors_carrying_payload(
         &self,
         voters: &BTreeSet<S::PublicId>,
         event: &Event<T, S::PublicId>,
         payload: &Observation<T, S::PublicId>,
         start_index: usize,
-    ) -> BTreeMap<S::PublicId, u64> {
+    ) -> BTreeSet<S::PublicId> {
         self.peer_list
             .iter()
             .filter(|(peer_id, _)| voters.contains(peer_id))
             .filter_map(|(peer_id, peer)| {
-                peer.indexed_events()
-                    .filter_map(|(index, hash)| {
-                        self.get_known_event(hash).ok().map(|event| (index, event))
-                    }).filter(|(_, event)| event.topological_index() >= start_index)
-                    .find(|(_, that_event)| {
+                peer.events()
+                    .filter_map(|hash| self.get_known_event(hash).ok())
+                    .filter(|event| event.topological_index() >= start_index)
+                    .find(|that_event| {
                         Some(payload) == that_event.vote().map(Vote::payload)
                             && event.sees(that_event)
-                    }).map(|(index, _)| (peer_id.clone(), index))
+                    }).map(|_| peer_id.clone())
             }).collect()
     }
 
@@ -1322,12 +1355,27 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Block::new(payload, &votes)
     }
 
-    fn restart_consensus(&mut self, start_index: usize) -> Result<()> {
+    fn restart_consensus(&mut self, start_index: usize, current_index: usize) -> Result<()> {
         self.meta_elections
             .initialise_current_election(self.peer_list.all_ids());
 
-        let hashes: Vec<_> = self.topologically_sorted_events_from(start_index).collect();
+        if current_index < start_index {
+            return Ok(());
+        }
+
+        // This makes sure that we only reprocess events between start_index and current_index,
+        // inclusive.
+        // `collect()` needed because the iterator returned by `topologically_sorted_events_from()`
+        // borrows `self` immutably, which conflicts with `process_event`.
+        let hashes: Vec<_> = self
+            .topologically_sorted_events_from(start_index)
+            .take(current_index - start_index + 1)
+            .collect();
         for hash in hashes {
+            // This will reprocess events relevant to the new meta-election, but in the context of
+            // all active meta-elections. This is sometimes necessary, as restart_consensus can be
+            // called while events are being reprocessed and in such cases we could miss some
+            // events when creating meta-events.
             self.process_event(&hash)?;
         }
 
@@ -2441,7 +2489,8 @@ mod functional_tests {
             let mut alice = Parsec::from_parsed_contents(alice_contents);
 
             // This is needed so the AddPeer(Eric) is consensused.
-            unwrap!(alice.restart_consensus(0));
+            // 1000 is just a large number that will make restart_consensus reprocess everything
+            unwrap!(alice.restart_consensus(0, 1000));
 
             // Simulate Eric creating unexpected genesis.
             let eric_id = PeerId::new("Eric");

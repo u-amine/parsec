@@ -358,7 +358,6 @@ fn fail_add_remove() {
 }
 
 #[test]
-#[ignore]
 fn custom_is_interesting_event_that_requires_only_one_vote() {
     fn at_least_one(did_vote: &BTreeSet<PeerId>, can_vote: &BTreeSet<PeerId>) -> bool {
         did_vote.intersection(can_vote).next().is_some()

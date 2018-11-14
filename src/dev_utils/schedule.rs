@@ -368,13 +368,13 @@ impl ObservationSchedule {
             }
             if added_peers < options.peers_to_add && rng.gen::<f64>() < options.prob_add {
                 let next_id = PeerId::new(names_iter.next().unwrap());
-                peers.add_peer(next_id.clone());
+                peers.add_peer(next_id.clone(), step);
                 schedule.push((step, ObservationEvent::AddPeer(next_id)));
                 num_observations += 1;
                 added_peers += 1;
             }
             if removed_peers < options.peers_to_remove && rng.gen::<f64>() < options.prob_remove {
-                if let Some(id) = peers.remove_random_peer(rng, options.min_peers) {
+                if let Some(id) = peers.remove_random_peer(rng, options.min_peers, step) {
                     schedule.push((step, ObservationEvent::RemovePeer(id)));
                     num_observations += 1;
                     removed_peers += 1;
@@ -383,7 +383,7 @@ impl ObservationSchedule {
 
             // generate a random failure
             if rng.gen::<f64>() < options.prob_failure {
-                if let Some(id) = peers.fail_random_peer(rng, options.min_peers) {
+                if let Some(id) = peers.fail_random_peer(rng, options.min_peers, step) {
                     schedule.push((step, ObservationEvent::Fail(id)));
                 }
             }
@@ -395,7 +395,7 @@ impl ObservationSchedule {
                 .unwrap_or(0);
 
             for _ in 0..num_deterministic_fails {
-                if let Some(id) = peers.fail_random_peer(rng, options.min_peers) {
+                if let Some(id) = peers.fail_random_peer(rng, options.min_peers, step) {
                     schedule.push((step, ObservationEvent::Fail(id)));
                 }
             }
@@ -558,7 +558,7 @@ impl Schedule {
                             related_info: vec![],
                         };
 
-                        peers.add_peer(new_peer.clone());
+                        peers.add_peer(new_peer.clone(), step);
                         pending.peers_make_observation(
                             &mut env.rng,
                             peers.active_peers(),
