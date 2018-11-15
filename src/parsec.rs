@@ -794,16 +794,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         let start_index = self.meta_elections.start_index(builder.election());
 
         let mut payloads_set: BTreeSet<_> = self
-            .peer_list
-            .iter()
-            .flat_map(|(_peer_id, peer)| {
-                peer.events().filter_map(|hash| {
-                    self.events.get(hash).and_then(|event| {
-                        event
-                            .vote()
-                            .and_then(|vote| self.hash_from_payload(vote.payload()))
-                    })
-                })
+            .events
+            .values()
+            .filter(|event| event.topological_index() >= start_index)
+            .filter_map(|event| {
+                event
+                    .vote()
+                    .and_then(|vote| self.hash_from_payload(vote.payload()))
             }).filter(|this_payload_hash| {
                 self.meta_elections.is_interesting_content_candidate(
                     builder.election(),
