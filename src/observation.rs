@@ -61,6 +61,11 @@ impl<T: NetworkEvent, P: PublicId> Debug for Observation<T, P> {
             Observation::Accusation { offender, malice } => {
                 write!(formatter, "Accusation {{ {:?}, {:?} }}", offender, malice)
             }
+            #[cfg(not(feature = "dump-graphs"))]
+            Observation::OpaquePayload(payload) => {
+                write!(formatter, "OpaquePayload({:?})", payload)
+            }
+            #[cfg(feature = "dump-graphs")]
             Observation::OpaquePayload(payload) => {
                 let max_length = 16;
                 let mut payload_str = format!("{:?}", payload);
