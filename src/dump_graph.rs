@@ -181,10 +181,10 @@ mod detail {
     }
 
     fn parent_pos(
-        index: u64,
+        index: usize,
         parent_hash: Option<&EventHash>,
-        positions: &BTreeMap<EventHash, u64>,
-    ) -> Option<u64> {
+        positions: &BTreeMap<EventHash, usize>,
+    ) -> Option<usize> {
         if let Some(parent_hash) = parent_hash {
             if let Some(parent_pos) = positions.get(parent_hash) {
                 Some(*parent_pos)
@@ -394,7 +394,7 @@ mod detail {
             self.writeln(format_args!("{}{}}}", Self::COMMENT, indent))
         }
 
-        fn calculate_positions(&self) -> BTreeMap<EventHash, u64> {
+        fn calculate_positions(&self) -> BTreeMap<EventHash, usize> {
             let mut positions = BTreeMap::new();
             while positions.len() < self.gossip_graph.len() {
                 for event in self.gossip_graph {
@@ -437,7 +437,7 @@ mod detail {
         fn write_subgraph(
             &mut self,
             peer_id: &S::PublicId,
-            positions: &BTreeMap<EventHash, u64>,
+            positions: &BTreeMap<EventHash, usize>,
         ) -> io::Result<()> {
             self.writeln(format_args!("  style=invis"))?;
             self.writeln(format_args!("  subgraph cluster_{:?} {{", peer_id))?;
@@ -450,7 +450,7 @@ mod detail {
         fn write_self_parents(
             &mut self,
             peer_id: &S::PublicId,
-            positions: &BTreeMap<EventHash, u64>,
+            positions: &BTreeMap<EventHash, usize>,
         ) -> io::Result<()> {
             let mut lines = vec![];
             for event in self

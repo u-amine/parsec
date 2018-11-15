@@ -177,11 +177,11 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     }
 
     // Index of this event relative to other events by the same creator.
-    pub fn index_by_creator(&self) -> u64 {
+    pub fn index_by_creator(&self) -> usize {
         self.cache.index_by_creator
     }
 
-    pub fn last_ancestors(&self) -> &BTreeMap<P, u64> {
+    pub fn last_ancestors(&self) -> &BTreeMap<P, usize> {
         &self.cache.last_ancestors
     }
 
@@ -300,8 +300,8 @@ impl Event<Transaction, PeerId> {
         cause: CauseInput,
         self_parent: Option<(EventIndex, EventHash)>,
         other_parent: Option<(EventIndex, EventHash)>,
-        index_by_creator: u64,
-        last_ancestors: BTreeMap<PeerId, u64>,
+        index_by_creator: usize,
+        last_ancestors: BTreeMap<PeerId, usize>,
     ) -> Self {
         let content = Content {
             creator: creator.clone(),
@@ -351,9 +351,9 @@ struct Cache<P: PublicId> {
     // Index of other-parent
     other_parent: Option<EventIndex>,
     // Index of this event relative to other events by the same creator.
-    index_by_creator: u64,
+    index_by_creator: usize,
     // Index of each peer's latest event that is an ancestor of this event.
-    last_ancestors: BTreeMap<P, u64>,
+    last_ancestors: BTreeMap<P, usize>,
     // Peers with a fork having both sides seen by this event.
     forking_peers: BTreeSet<P>,
 }
@@ -499,7 +499,7 @@ fn index_by_creator_and_last_ancestors<T: NetworkEvent, S: SecretId>(
     self_parent: Option<&Event<T, S::PublicId>>,
     other_parent: Option<&Event<T, S::PublicId>>,
     peer_list: &PeerList<S>,
-) -> (u64, BTreeMap<S::PublicId, u64>) {
+) -> (usize, BTreeMap<S::PublicId, usize>) {
     let (index_by_creator, mut last_ancestors) = if let Some(self_parent) = self_parent {
         (
             self_parent.index_by_creator() + 1,

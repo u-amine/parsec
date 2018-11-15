@@ -24,7 +24,7 @@ use observation::{Malice, Observation, ObservationHash};
 use peer_list::{PeerList, PeerState};
 use serialise;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::{mem, u64, usize};
+use std::{mem, usize};
 use vote::Vote;
 
 pub type IsInterestingEventFn<P> =
@@ -1135,7 +1135,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         &self,
         election: MetaElectionHandle,
         creator: &S::PublicId,
-        creator_event_index: u64,
+        creator_event_index: usize,
         peer_id: &S::PublicId,
         round: usize,
     ) -> Option<bool> {
@@ -1199,7 +1199,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         &self,
         election: MetaElectionHandle,
         creator: &S::PublicId,
-        creator_event_index: u64,
+        creator_event_index: usize,
         peer_id: &S::PublicId,
         round: usize,
         step: &Step,
@@ -1446,7 +1446,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     .and_then(|payload_hash| self.observations.get(&payload_hash))
                     .map(|info| !info.consensused)
                     .unwrap_or(false)
-            }).map(|event| event.topological_index())
+            }).map(|indexed_event| indexed_event.topological_index())
             .next()
             .unwrap_or_else(|| self.events.len())
     }

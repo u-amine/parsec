@@ -22,7 +22,7 @@ use std::collections::btree_map::{self, BTreeMap, Entry};
 use std::collections::BTreeSet;
 use std::fmt::{self, Debug, Formatter};
 use std::iter;
-use std::ops::{BitOr, BitOrAssign, Bound};
+use std::ops::{BitOr, BitOrAssign};
 
 pub(crate) struct PeerList<S: SecretId> {
     our_id: S,
@@ -230,7 +230,7 @@ impl<S: SecretId> PeerList<S> {
     pub fn peer_membership_list_snapshot_excluding_last_remove(
         &self,
         peer_id: &S::PublicId,
-        event_index: u64,
+        event_index: usize,
     ) -> Option<BTreeSet<S::PublicId>> {
         let (mut list, changes) = self.peer_membership_list_and_changes(peer_id)?;
 
@@ -251,7 +251,7 @@ impl<S: SecretId> PeerList<S> {
     pub fn peer_membership_list_changes(
         &self,
         peer_id: &S::PublicId,
-    ) -> &[(u64, MembershipListChange<S::PublicId>)] {
+    ) -> &[(usize, MembershipListChange<S::PublicId>)] {
         if let Some(peer) = self.peers.get(peer_id) {
             &peer.membership_list_changes
         } else {
@@ -270,7 +270,7 @@ impl<S: SecretId> PeerList<S> {
     pub fn events_by_index<'a>(
         &'a self,
         peer_id: &S::PublicId,
-        index: u64,
+        index: usize,
     ) -> impl Iterator<Item = EventIndex> + 'a {
         self.peers
             .get(peer_id)
@@ -384,10 +384,10 @@ impl PeerList<PeerId> {
         let peer_ids: BTreeSet<_> = peer_data.keys().cloned().collect();
 
         for (peer_id, (state, membership_list)) in peer_data {
-            let mut events = BTreeSet::new();
+            let mut events = Events::new();
             for event in graph {
                 if *event.creator() == peer_id {
-                    let _ = events.insert((event.index_by_creator(), event.event_index()));
+                    events.add(event.index_by_creator(), event.event_index());
                 } else if !peer_ids.contains(event.creator()) {
                     debug!(
                         "peer_data list doesn't contain the creator of event {:?}",
@@ -507,9 +507,9 @@ impl Debug for PeerState {
 pub struct Peer<P: PublicId> {
     id_hash: Hash,
     state: PeerState,
-    events: BTreeSet<(u64, EventIndex)>,
+    events: Events,
     membership_list: BTreeSet<P>,
-    membership_list_changes: Vec<(u64, MembershipListChange<P>)>,
+    membership_list_changes: Vec<(usize, MembershipListChange<P>)>,
 }
 
 impl<P: PublicId> Peer<P> {
@@ -517,7 +517,7 @@ impl<P: PublicId> Peer<P> {
         Self {
             id_hash: Hash::from(serialise(id).as_slice()),
             state,
-            events: BTreeSet::new(),
+            events: Events::new(),
             membership_list: BTreeSet::new(),
             membership_list_changes: Vec::new(),
         }
@@ -528,38 +528,27 @@ impl<P: PublicId> Peer<P> {
     }
 
     pub fn events<'a>(&'a self) -> impl DoubleEndedIterator<Item = EventIndex> + 'a {
-        self.events.iter().map(|&(_, index)| index)
+        self.events.iter()
     }
 
     #[cfg(test)]
-    pub fn indexed_events<'a>(&'a self) -> impl DoubleEndedIterator<Item = (u64, EventIndex)> + 'a {
-        self.events
-            .iter()
-            .map(|&(index_by_creator, event_index)| (index_by_creator, event_index))
+    pub fn indexed_events<'a>(
+        &'a self,
+    ) -> impl DoubleEndedIterator<Item = (usize, EventIndex)> + 'a {
+        self.events.indexed()
     }
 
-    pub fn events_by_index<'a>(&'a self, index: u64) -> impl Iterator<Item = EventIndex> + 'a {
-        self.events
-            .range((
-                Bound::Included((index, EventIndex::MIN)),
-                Bound::Excluded((index + 1, EventIndex::MIN)),
-            )).map(|&(_, index)| index)
+    pub fn events_by_index<'a>(&'a self, index: usize) -> impl Iterator<Item = EventIndex> + 'a {
+        self.events.by_index(index)
     }
 
-    fn add_event(&mut self, index_by_creator: u64, event_index: EventIndex) {
-        let _ = self.events.insert((index_by_creator, event_index));
+    fn add_event(&mut self, index_by_creator: usize, event_index: EventIndex) {
+        self.events.add(index_by_creator, event_index);
     }
 
     #[cfg(test)]
     fn remove_last_event(&mut self) -> Option<EventIndex> {
-        let last = self
-            .events
-            .iter()
-            .rev()
-            .next()
-            .map(|(index_by_creator, event_index)| (*index_by_creator, *event_index))?;
-        let _ = self.events.remove(&last);
-        Some(last.1)
+        self.events.remove_last()
     }
 
     fn change_membership_list(&mut self, change: MembershipListChange<P>) {
@@ -571,10 +560,10 @@ impl<P: PublicId> Peer<P> {
     fn record_membership_list_change(&mut self, change: MembershipListChange<P>) {
         let index = self
             .events
-            .iter()
+            .indexed()
             .rev()
             .next()
-            .map(|(index, _)| *index)
+            .map(|(index, _)| index)
             .unwrap_or(0);
         self.membership_list_changes.push((index, change));
     }
@@ -617,7 +606,86 @@ impl<P: Clone + Ord> MembershipListChange<P> {
 }
 
 #[cfg(feature = "malice-detection")]
-type MembershipListWithChanges<'a, P> = (BTreeSet<P>, &'a [(u64, MembershipListChange<P>)]);
+type MembershipListWithChanges<'a, P> = (BTreeSet<P>, &'a [(usize, MembershipListChange<P>)]);
+
+#[derive(Debug)]
+struct Events(Vec<Slot>);
+
+impl Events {
+    fn new() -> Self {
+        Events(Vec::new())
+    }
+
+    fn add(&mut self, index_by_creator: usize, event_index: EventIndex) {
+        if let Some(slot) = self.0.get_mut(index_by_creator) {
+            slot.add(event_index);
+            return;
+        }
+
+        if index_by_creator != self.0.len() {
+            log_or_panic!("Peer events must be added sequentially");
+        }
+
+        self.0.push(Slot::new(event_index))
+    }
+
+    #[cfg(test)]
+    fn remove_last(&mut self) -> Option<EventIndex> {
+        if let Some(slot) = self.0.last_mut() {
+            if let Some(index) = slot.rest.pop() {
+                return Some(index);
+            }
+        } else {
+            return None;
+        }
+
+        self.0.pop().map(|slot| slot.first)
+    }
+
+    fn iter<'a>(&'a self) -> impl DoubleEndedIterator<Item = EventIndex> + 'a {
+        self.0.iter().flat_map(|slot| slot.iter())
+    }
+
+    fn indexed<'a>(&'a self) -> impl DoubleEndedIterator<Item = (usize, EventIndex)> + 'a {
+        self.0
+            .iter()
+            .enumerate()
+            .flat_map(|(index_by_creator, slot)| {
+                slot.iter()
+                    .map(move |event_index| (index_by_creator, event_index))
+            })
+    }
+
+    fn by_index<'a>(&'a self, index_by_creator: usize) -> impl Iterator<Item = EventIndex> + 'a {
+        self.0
+            .get(index_by_creator)
+            .into_iter()
+            .flat_map(|slot| slot.iter())
+    }
+}
+
+#[derive(Debug)]
+struct Slot {
+    first: EventIndex,
+    rest: Vec<EventIndex>,
+}
+
+impl Slot {
+    fn new(event_index: EventIndex) -> Self {
+        Self {
+            first: event_index,
+            rest: Vec::new(),
+        }
+    }
+
+    fn add(&mut self, event_index: EventIndex) {
+        self.rest.push(event_index)
+    }
+
+    fn iter<'a>(&'a self) -> impl DoubleEndedIterator<Item = EventIndex> + 'a {
+        iter::once(self.first).chain(self.rest.iter().cloned())
+    }
+}
 
 #[cfg(test)]
 pub(crate) mod snapshot {
@@ -626,7 +694,7 @@ pub(crate) mod snapshot {
 
     #[derive(Eq, PartialEq, Debug)]
     pub(crate) struct PeerListSnapshot<P: PublicId>(
-        BTreeMap<P, (PeerState, BTreeSet<(u64, EventHash)>)>,
+        BTreeMap<P, (PeerState, BTreeSet<(usize, EventHash)>)>,
     );
 
     impl<P: PublicId> PeerListSnapshot<P> {

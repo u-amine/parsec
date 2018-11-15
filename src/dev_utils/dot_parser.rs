@@ -259,7 +259,7 @@ fn parse_event_details() -> Parser<u8, BTreeMap<String, EventDetails>> {
 #[derive(Debug)]
 struct EventDetails {
     cause: CauseInput,
-    last_ancestors: BTreeMap<PeerId, u64>,
+    last_ancestors: BTreeMap<PeerId, usize>,
 }
 
 fn skip_brackets() -> Parser<u8, ()> {
@@ -292,12 +292,12 @@ fn parse_cause() -> Parser<u8, CauseInput> {
     prefix * (initial | request | response | observation) - newline()
 }
 
-fn parse_last_ancestors() -> Parser<u8, BTreeMap<PeerId, u64>> {
+fn parse_last_ancestors() -> Parser<u8, BTreeMap<PeerId, usize>> {
     (comment_prefix() * seq(b"last_ancestors: {") * list(
         parse_peer_id() - seq(b": ") + is_a(digit)
             .repeat(1..)
             .convert(String::from_utf8)
-            .convert(|s| u64::from_str(&s)),
+            .convert(|s| usize::from_str(&s)),
         seq(b", "),
     ) - next_line()).map(|v| v.into_iter().collect())
 }
@@ -864,7 +864,7 @@ fn create_events(
 
             let index_by_creator = self_parent
                 .map(|ie| ie.index_by_creator() + 1)
-                .unwrap_or(0u64);
+                .unwrap_or(0usize);
 
             (
                 self_parent.map(|e| (e.event_index(), *e.hash())),

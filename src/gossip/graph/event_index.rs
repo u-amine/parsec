@@ -12,8 +12,6 @@ use std::usize;
 pub(crate) struct EventIndex(pub(super) usize);
 
 impl EventIndex {
-    pub const MIN: Self = EventIndex(0);
-
     #[cfg(any(test, feature = "testing"))]
     pub fn phony(index: usize) -> Self {
         EventIndex(index)
