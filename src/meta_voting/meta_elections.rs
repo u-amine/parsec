@@ -10,8 +10,7 @@ use super::meta_event::MetaEvent;
 use super::meta_vote::MetaVote;
 use hash::Hash;
 use id::PublicId;
-use network_event::NetworkEvent;
-use observation::Observation;
+use observation::ObservationHash;
 use round_hash::RoundHash;
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet, VecDeque};
 use std::fmt::{self, Debug};
@@ -42,8 +41,8 @@ impl Debug for MetaElectionHandle {
 
 #[serde(bound = "")]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct MetaElection<T: NetworkEvent, P: PublicId> {
-    pub(crate) meta_events: BTreeMap<Hash, MetaEvent<T, P>>,
+pub(crate) struct MetaElection<P: PublicId> {
+    pub(crate) meta_events: BTreeMap<Hash, MetaEvent<P>>,
     // The "round hash" for each set of meta votes.  They are held in sequence in the `Vec`, i.e.
     // the one for round `x` is held at index `x`.
     pub(crate) round_hashes: BTreeMap<P, Vec<RoundHash>>,
@@ -56,13 +55,13 @@ pub(crate) struct MetaElection<T: NetworkEvent, P: PublicId> {
     pub(crate) interesting_events: BTreeMap<P, VecDeque<Hash>>,
     // Length of `MetaElections::consensus_history` at the time this meta-election was created.
     pub(crate) consensus_len: usize,
-    // Payload decided by this meta-election.
-    pub(crate) payload: Option<Observation<T, P>>,
+    // Payload hash decided by this meta-election.
+    pub(crate) payload_hash: Option<ObservationHash>,
     // Topological index of the first event processed in this meta-election.
     pub(crate) start_index: usize,
 }
 
-impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
+impl<P: PublicId> MetaElection<P> {
     fn new(voters: BTreeSet<P>, consensus_len: usize, start_index: usize) -> Self {
         MetaElection {
             meta_events: BTreeMap::new(),
@@ -71,12 +70,12 @@ impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
             undecided_voters: voters,
             interesting_events: BTreeMap::new(),
             consensus_len,
-            payload: None,
+            payload_hash: None,
             start_index,
         }
     }
 
-    fn initialise<'a, I>(&mut self, peer_ids: I, initial_hash: Hash)
+    fn initialise<'a, I>(&mut self, peer_ids: I, initial_hash: ObservationHash)
     where
         I: IntoIterator<Item = &'a P>,
         P: 'a,
@@ -94,13 +93,13 @@ impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
         self.interesting_events.clear();
     }
 
-    fn is_already_interesting_content(&self, creator: &P, payload: &Observation<T, P>) -> bool {
+    fn is_already_interesting_content(&self, creator: &P, payload_hash: &ObservationHash) -> bool {
         self.interesting_events
             .get(creator)
             .map_or(false, |hashes| {
                 hashes.iter().any(|hash| {
                     if let Some(meta_event) = self.meta_events.get(hash) {
-                        meta_event.interesting_content.contains(payload)
+                        meta_event.interesting_content.contains(payload_hash)
                     } else {
                         false
                     }
@@ -111,18 +110,18 @@ impl<T: NetworkEvent, P: PublicId> MetaElection<T, P> {
 
 #[serde(bound = "")]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct MetaElections<T: NetworkEvent, P: PublicId> {
+pub(crate) struct MetaElections<P: PublicId> {
     // Index of next decided meta-election
     next_index: usize,
     // Current ongoing meta-election.
-    current_election: MetaElection<T, P>,
+    current_election: MetaElection<P>,
     // Meta-elections that are already decided by us, but not by all the other peers.
-    previous_elections: BTreeMap<MetaElectionHandle, MetaElection<T, P>>,
-    // Hashes of the consensused blocks in the order they were consensused.
-    consensus_history: Vec<Hash>,
+    previous_elections: BTreeMap<MetaElectionHandle, MetaElection<P>>,
+    // Hashes of the consensused blocks' payloads in the order they were consensused.
+    consensus_history: Vec<ObservationHash>,
 }
 
-impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
+impl<P: PublicId> MetaElections<P> {
     pub fn new(voters: BTreeSet<P>) -> Self {
         MetaElections {
             next_index: 0,
@@ -134,15 +133,15 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
 
     #[cfg(any(test, feature = "testing"))]
     pub fn from_map_and_history(
-        mut elections_map: BTreeMap<MetaElectionHandle, MetaElection<T, P>>,
-        history: Vec<Hash>,
+        mut elections_map: BTreeMap<MetaElectionHandle, MetaElection<P>>,
+        consensus_history: Vec<ObservationHash>,
     ) -> Self {
         let current_election = unwrap!(elections_map.remove(&MetaElectionHandle::CURRENT));
         MetaElections {
-            next_index: history.len(),
+            next_index: consensus_history.len(),
             current_election,
             previous_elections: elections_map,
-            consensus_history: history,
+            consensus_history,
         }
     }
 
@@ -178,7 +177,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         handle: MetaElectionHandle,
         event_hash: Hash,
         creator: P,
-        meta_event: MetaEvent<T, P>,
+        meta_event: MetaEvent<P>,
     ) {
         let election = if let Some(election) = self.get_mut(handle) {
             election
@@ -219,7 +218,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         &self,
         handle: MetaElectionHandle,
         event_hash: &Hash,
-    ) -> Option<&MetaEvent<T, P>> {
+    ) -> Option<&MetaEvent<P>> {
         self.get(handle)
             .and_then(|election| election.meta_events.get(event_hash))
     }
@@ -239,9 +238,9 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
     }
 
     /// Payload decided by the given meta-election, if any.
-    pub fn decided_payload(&self, handle: MetaElectionHandle) -> Option<&Observation<T, P>> {
+    pub fn decided_payload_hash(&self, handle: MetaElectionHandle) -> Option<&ObservationHash> {
         self.get(handle)
-            .and_then(|election| election.payload.as_ref())
+            .and_then(|election| election.payload_hash.as_ref())
     }
 
     /// List of voters participating in the given meta-election.
@@ -256,7 +255,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
             .unwrap_or(0)
     }
 
-    pub fn consensus_history(&self) -> &[Hash] {
+    pub fn consensus_history(&self) -> &[ObservationHash] {
         &self.consensus_history
     }
 
@@ -273,7 +272,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         &self,
         handle: MetaElectionHandle,
         creator: &P,
-    ) -> Option<&Observation<T, P>> {
+    ) -> Option<&ObservationHash> {
         let election = self.get(handle)?;
         let event_hash = election
             .interesting_events
@@ -290,7 +289,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         &self,
         handle: MetaElectionHandle,
         creator: &P,
-        payload: &Observation<T, P>,
+        payload_hash: &ObservationHash,
     ) -> bool {
         let election = if let Some(election) = self.get(handle) {
             election
@@ -299,13 +298,12 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         };
 
         // Already interesting?
-        if election.is_already_interesting_content(creator, payload) {
+        if election.is_already_interesting_content(creator, payload_hash) {
             return false;
         }
 
         // Already consensused?
-        let hash = payload.create_hash();
-        !self.consensus_history()[..election.consensus_len].contains(&hash)
+        !self.consensus_history()[..election.consensus_len].contains(payload_hash)
     }
 
     pub fn start_index(&self, handle: MetaElectionHandle) -> usize {
@@ -315,17 +313,16 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
     /// Creates new election and returns handle of the previous election.
     pub fn new_election(
         &mut self,
-        payload: Observation<T, P>,
+        payload_hash: ObservationHash,
         voters: BTreeSet<P>,
         start_index: usize,
     ) -> MetaElectionHandle {
-        let hash = payload.create_hash();
-        self.consensus_history.push(hash);
+        self.consensus_history.push(payload_hash);
 
         let new = MetaElection::new(voters, self.consensus_history.len(), start_index);
 
         let mut previous = mem::replace(&mut self.current_election, new);
-        previous.payload = Some(payload);
+        previous.payload_hash = Some(payload_hash);
 
         let handle = self.next_handle();
         let _ = self.previous_elections.insert(handle, previous);
@@ -366,16 +363,20 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         I: IntoIterator<Item = &'a P>,
         P: 'a,
     {
-        let hash = self.consensus_history.last().cloned().unwrap_or(Hash::ZERO);
+        let hash = self
+            .consensus_history
+            .last()
+            .cloned()
+            .unwrap_or(ObservationHash(Hash::ZERO));
         self.current_election.initialise(peer_ids, hash);
     }
 
     #[cfg(any(test, feature = "dump-graphs"))]
-    pub fn current_meta_events(&self) -> &BTreeMap<Hash, MetaEvent<T, P>> {
+    pub fn current_meta_events(&self) -> &BTreeMap<Hash, MetaEvent<P>> {
         &self.current_election.meta_events
     }
 
-    pub(crate) fn get(&self, handle: MetaElectionHandle) -> Option<&MetaElection<T, P>> {
+    pub(crate) fn get(&self, handle: MetaElectionHandle) -> Option<&MetaElection<P>> {
         if handle == MetaElectionHandle::CURRENT {
             Some(&self.current_election)
         } else if let Some(election) = self.previous_elections.get(&handle) {
@@ -386,7 +387,7 @@ impl<T: NetworkEvent, P: PublicId> MetaElections<T, P> {
         }
     }
 
-    fn get_mut(&mut self, handle: MetaElectionHandle) -> Option<&mut MetaElection<T, P>> {
+    fn get_mut(&mut self, handle: MetaElectionHandle) -> Option<&mut MetaElection<P>> {
         if handle == MetaElectionHandle::CURRENT {
             Some(&mut self.current_election)
         } else if let Some(election) = self.previous_elections.get_mut(&handle) {

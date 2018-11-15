@@ -11,6 +11,7 @@ use hash::Hash;
 use id::SecretId;
 use meta_voting::MetaElections;
 use network_event::NetworkEvent;
+use observation::{Observation, ObservationHash};
 use peer_list::PeerList;
 use std::collections::BTreeMap;
 
@@ -33,17 +34,25 @@ pub(crate) fn init() {
 pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
     owner_id: &S::PublicId,
     gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
-    meta_elections: &MetaElections<T, S::PublicId>,
+    meta_elections: &MetaElections<S::PublicId>,
     peer_list: &PeerList<S>,
+    observations: BTreeMap<&ObservationHash, &Observation<T, S::PublicId>>,
 ) {
-    detail::to_file(owner_id, gossip_graph, meta_elections, peer_list)
+    detail::to_file(
+        owner_id,
+        gossip_graph,
+        meta_elections,
+        peer_list,
+        observations,
+    )
 }
 #[cfg(not(feature = "dump-graphs"))]
 pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
     _: &S::PublicId,
     _: &BTreeMap<Hash, Event<T, S::PublicId>>,
-    _: &MetaElections<T, S::PublicId>,
+    _: &MetaElections<S::PublicId>,
     _: &PeerList<S>,
+    _: BTreeMap<&ObservationHash, &Observation<T, S::PublicId>>,
 ) {
 }
 
@@ -57,6 +66,7 @@ mod detail {
     use id::{PublicId, SecretId};
     use meta_voting::{MetaElections, MetaEvent, MetaVotes};
     use network_event::NetworkEvent;
+    use observation::{Observation, ObservationHash};
     use peer_list::PeerList;
     use rand::{self, Rng};
     use serialise;
@@ -109,7 +119,7 @@ mod detail {
     fn catch_dump<T: NetworkEvent, P: PublicId>(
         mut file_path: PathBuf,
         gossip_graph: &BTreeMap<Hash, Event<T, P>>,
-        meta_elections: &MetaElections<T, P>,
+        meta_elections: &MetaElections<P>,
     ) {
         if let Some("dev_utils::dot_parser::tests::dot_parser") = thread::current().name() {
             let dumped_info = serialise(&(gossip_graph, meta_elections));
@@ -126,8 +136,9 @@ mod detail {
     pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
         owner_id: &S::PublicId,
         gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
-        meta_elections: &MetaElections<T, S::PublicId>,
+        meta_elections: &MetaElections<S::PublicId>,
         peer_list: &PeerList<S>,
+        observations: BTreeMap<&ObservationHash, &Observation<T, S::PublicId>>,
     ) {
         let id = format!("{:?}", owner_id);
         let call_count = DUMP_COUNTS.with(|counts| {
@@ -139,7 +150,13 @@ mod detail {
         let file_path = DIR.with(|dir| dir.join(format!("{}-{:03}.dot", id, call_count)));
         catch_dump(file_path.clone(), gossip_graph, meta_elections);
 
-        match DotWriter::new(&file_path, gossip_graph, meta_elections, peer_list) {
+        match DotWriter::new(
+            &file_path,
+            gossip_graph,
+            meta_elections,
+            peer_list,
+            observations,
+        ) {
             Ok(mut dot_writer) => {
                 if let Err(error) = dot_writer.write() {
                     println!("Error writing to {:?}: {:?}", file_path, error);
@@ -276,8 +293,9 @@ mod detail {
     struct DotWriter<'a, T: NetworkEvent + 'a, S: SecretId + 'a> {
         file: BufWriter<File>,
         gossip_graph: &'a BTreeMap<Hash, Event<T, S::PublicId>>,
-        meta_elections: &'a MetaElections<T, S::PublicId>,
+        meta_elections: &'a MetaElections<S::PublicId>,
         peer_list: &'a PeerList<S>,
+        observations: BTreeMap<&'a ObservationHash, &'a Observation<T, S::PublicId>>,
         indent: usize,
     }
 
@@ -287,14 +305,16 @@ mod detail {
         fn new(
             file_path: &Path,
             gossip_graph: &'a BTreeMap<Hash, Event<T, S::PublicId>>,
-            meta_elections: &'a MetaElections<T, S::PublicId>,
+            meta_elections: &'a MetaElections<S::PublicId>,
             peer_list: &'a PeerList<S>,
+            observations: BTreeMap<&'a ObservationHash, &'a Observation<T, S::PublicId>>,
         ) -> io::Result<Self> {
             File::create(&file_path).map(|file| DotWriter {
                 file: BufWriter::new(file),
                 gossip_graph,
                 meta_elections,
                 peer_list,
+                observations,
                 indent: 0,
             })
         }
@@ -505,7 +525,11 @@ mod detail {
             let current_meta_events = self.meta_elections.current_meta_events();
             for event_hash in self.peer_list.peer_events(peer_id) {
                 if let Some(event) = self.gossip_graph.get(event_hash) {
-                    let attr = EventAttributes::new(event, current_meta_events.get(event_hash));
+                    let attr = EventAttributes::new(
+                        event,
+                        current_meta_events.get(event_hash),
+                        &self.observations,
+                    );
                     self.writeln(format_args!(
                         "  \"{}\" {}",
                         event.short_name(),
@@ -536,7 +560,7 @@ mod detail {
                     "{}{}{}",
                     Self::COMMENT,
                     self.indentation(),
-                    hash.as_full_string()
+                    hash.0.as_full_string()
                 ));
             }
             for handle in self.meta_elections.all() {
@@ -576,7 +600,7 @@ mod detail {
                             Self::COMMENT,
                             self.indentation(),
                             hash.round(),
-                            hash.latest_block_hash().as_full_string(),
+                            hash.latest_block_hash().0.as_full_string(),
                         ));
                     }
                     self.dedent();
@@ -625,13 +649,15 @@ mod detail {
                 ));
 
                 // write payload
-                if let Some(ref payload) = election.payload {
-                    lines.push(format!(
-                        "{}{}payload: {:?}",
-                        Self::COMMENT,
-                        self.indentation(),
-                        payload
-                    ));
+                if let Some(ref payload_hash) = election.payload_hash {
+                    if let Some(payload) = self.observations.get(payload_hash) {
+                        lines.push(format!(
+                            "{}{}payload: {:?}",
+                            Self::COMMENT,
+                            self.indentation(),
+                            payload
+                        ));
+                    }
                 }
 
                 // write start index
@@ -675,11 +701,17 @@ mod detail {
                         self.indentation(),
                         mev.observees
                     ));
+                    let interesting_content = mev
+                        .interesting_content
+                        .iter()
+                        .map(|obs_hash| unwrap!(self.observations.get(obs_hash)))
+                        .cloned()
+                        .collect::<Vec<_>>();
                     lines.push(format!(
                         "{}{}interesting_content: {:?}",
                         Self::COMMENT,
                         self.indentation(),
-                        mev.interesting_content
+                        interesting_content
                     ));
 
                     if !mev.meta_votes.is_empty() {
@@ -718,7 +750,8 @@ mod detail {
     impl EventAttributes {
         fn new<T: NetworkEvent, P: PublicId>(
             event: &Event<T, P>,
-            opt_meta_event: Option<&MetaEvent<T, P>>,
+            opt_meta_event: Option<&MetaEvent<P>>,
+            observations_map: &BTreeMap<&ObservationHash, &Observation<T, P>>,
         ) -> Self {
             let mut attr = EventAttributes {
                 fillcolor: "fillcolor=white",
@@ -744,9 +777,14 @@ mod detail {
 
             if let Some(meta_event) = opt_meta_event {
                 if !meta_event.interesting_content.is_empty() {
+                    let interesting_content = meta_event
+                        .interesting_content
+                        .iter()
+                        .map(|obs_hash| unwrap!(observations_map.get(obs_hash)))
+                        .collect::<Vec<_>>();
                     attr.label = format!(
                         "{}<tr><td colspan=\"6\">{:?}</td></tr>",
-                        attr.label, meta_event.interesting_content
+                        attr.label, interesting_content
                     );
                     attr.fillcolor = "style=filled, fillcolor=crimson";
                     attr.is_rectangle = true;

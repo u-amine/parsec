@@ -8,19 +8,20 @@
 
 use hash::Hash;
 use id::PublicId;
+use observation::ObservationHash;
 use serialise;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Debug)]
 pub(crate) struct RoundHash {
     public_id_hash: Hash,
-    latest_block_hash: Hash,
+    latest_block_hash: ObservationHash,
     round: usize,
     final_hash: Hash,
 }
 
 impl RoundHash {
     // Constructs a new `RoundHash` with the given `public_id` and `latest_block_hash` for round 0.
-    pub fn new<P: PublicId>(public_id: &P, latest_block_hash: Hash) -> Self {
+    pub fn new<P: PublicId>(public_id: &P, latest_block_hash: ObservationHash) -> Self {
         Self::new_with_round(public_id, latest_block_hash, 0)
     }
 
@@ -28,7 +29,7 @@ impl RoundHash {
     // round
     pub fn new_with_round<P: PublicId>(
         public_id: &P,
-        latest_block_hash: Hash,
+        latest_block_hash: ObservationHash,
         round: usize,
     ) -> Self {
         let public_id_hash = Hash::from(serialise(&public_id).as_slice());
@@ -61,7 +62,7 @@ impl RoundHash {
     }
 
     #[cfg(feature = "dump-graphs")]
-    pub fn latest_block_hash(&self) -> &Hash {
+    pub fn latest_block_hash(&self) -> &ObservationHash {
         &self.latest_block_hash
     }
 
@@ -70,7 +71,11 @@ impl RoundHash {
         &self.final_hash
     }
 
-    fn final_hash(public_id_hash: &Hash, latest_block_hash: &Hash, round: usize) -> Hash {
+    fn final_hash(
+        public_id_hash: &Hash,
+        latest_block_hash: &ObservationHash,
+        round: usize,
+    ) -> Hash {
         let round_hash = Hash::from(serialise(&round).as_slice());
         Hash::from(serialise(&(public_id_hash, latest_block_hash, round_hash)).as_slice())
     }

@@ -185,7 +185,7 @@ impl<S: SecretId> PeerList<S> {
         }
     }
 
-    /// Initialise the membership list of `peer_id` with the given `other_peer_ids`.
+    /// Initialise the membership list of `peer_id`.
     pub fn initialise_peer_membership_list<I>(&mut self, peer_id: &S::PublicId, membership_list: I)
     where
         I: IntoIterator<Item = S::PublicId>,
@@ -220,27 +220,9 @@ impl<S: SecretId> PeerList<S> {
             .map_or(false, |peer| !peer.membership_list.is_empty())
     }
 
-    /// Returns the historic snapshot of the membership list at the time the event at `index` was
-    /// the last event of the given peer.
-    pub fn peer_membership_list_snapshot(
-        &self,
-        peer_id: &S::PublicId,
-        event_index: u64,
-    ) -> Option<BTreeSet<S::PublicId>> {
-        let (mut list, changes) = self.peer_membership_list_and_changes(peer_id)?;
-
-        for (index, change) in changes.iter().rev() {
-            if *index <= event_index {
-                break;
-            }
-            let _ = change.unapply(&mut list);
-        }
-
-        Some(list)
-    }
-
     /// Same as `peer_membership_list_shapshot` except if there is a `Remove` at `event_index`,
     /// then that `Remove` won't be applied to the resulting list.
+    #[cfg(feature = "malice-detection")]
     pub fn peer_membership_list_snapshot_excluding_last_remove(
         &self,
         peer_id: &S::PublicId,
@@ -330,6 +312,7 @@ impl<S: SecretId> PeerList<S> {
     }
 
     /// Hashes of our events in insertion order.
+    #[cfg(any(test, feature = "malice-detection"))]
     pub fn our_events(&self) -> impl DoubleEndedIterator<Item = &Hash> {
         self.peer_events(self.our_id.public_id())
     }
@@ -340,6 +323,7 @@ impl<S: SecretId> PeerList<S> {
         }
     }
 
+    #[cfg(feature = "malice-detection")]
     fn peer_membership_list_and_changes(
         &self,
         peer_id: &S::PublicId,
@@ -532,6 +516,7 @@ impl<P: PublicId> Peer<P> {
         self.events.iter().map(|&(_, ref hash)| hash)
     }
 
+    #[cfg(test)]
     pub fn indexed_events(&self) -> impl DoubleEndedIterator<Item = (u64, &Hash)> {
         self.events.iter().map(|&(index, ref hash)| (index, hash))
     }
@@ -590,6 +575,7 @@ impl<P: Clone + Ord> MembershipListChange<P> {
         }
     }
 
+    #[cfg(feature = "malice-detection")]
     fn unapply(&self, peers: &mut BTreeSet<P>) -> bool {
         match *self {
             MembershipListChange::Add(ref peer_id) => peers.remove(peer_id),
@@ -597,6 +583,7 @@ impl<P: Clone + Ord> MembershipListChange<P> {
         }
     }
 
+    #[cfg(feature = "malice-detection")]
     fn is_remove(&self) -> bool {
         match *self {
             MembershipListChange::Remove(_) => true,
@@ -605,4 +592,5 @@ impl<P: Clone + Ord> MembershipListChange<P> {
     }
 }
 
+#[cfg(feature = "malice-detection")]
 type MembershipListWithChanges<'a, P> = (BTreeSet<P>, &'a [(u64, MembershipListChange<P>)]);
