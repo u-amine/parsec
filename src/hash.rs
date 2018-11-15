@@ -7,12 +7,11 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use std::cmp::Ordering;
+use std::fmt::Display;
 use std::fmt::{self, Debug, Formatter};
 use tiny_keccak;
 
 pub const HASH_LEN: usize = 32;
-#[cfg(any(test, feature = "testing", feature = "dump-graphs"))]
-pub const HEX_DIGITS_PER_BYTE: usize = 2;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Hash([u8; HASH_LEN]);
@@ -39,11 +38,7 @@ impl Hash {
 
     #[cfg(feature = "dump-graphs")]
     pub fn as_full_string(&self) -> String {
-        let mut result = String::with_capacity(HEX_DIGITS_PER_BYTE * HASH_LEN);
-        for i in 0..HASH_LEN {
-            result.push_str(&format!("{:02x}", self.0[i]));
-        }
-        result
+        format!("{}", HashDisplay(self))
     }
 }
 
@@ -54,11 +49,28 @@ impl<'a> From<&'a [u8]> for Hash {
 }
 
 impl Debug for Hash {
+    #[cfg(feature = "dump-graphs")]
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         write!(
             formatter,
             "{:02x}{:02x}{:02x}{:02x}{:02x}..",
             self.0[0], self.0[1], self.0[2], self.0[3], self.0[4]
         )
+    }
+
+    #[cfg(not(feature = "dump-graphs"))]
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        write!(formatter, "{}", HashDisplay(self))
+    }
+}
+
+struct HashDisplay<'a>(&'a Hash);
+
+impl<'a> Display for HashDisplay<'a> {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        for byte in &(self.0).0 {
+            write!(formatter, "{:02x}", byte)?;
+        }
+        Ok(())
     }
 }
