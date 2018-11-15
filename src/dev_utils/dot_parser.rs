@@ -8,7 +8,7 @@
 
 use gossip::{CauseInput, Event};
 use hash::Hash;
-use hash::{HASH_LEN, HEX_DIGITS_PER_BYTE};
+use hash::HASH_LEN;
 use meta_voting::{
     BoolSet, MetaElection, MetaElectionHandle, MetaElections, MetaEvent, MetaVote, Step,
 };
@@ -25,6 +25,8 @@ use std::fs::File;
 use std::io::{self, Read};
 use std::path::Path;
 use std::str::FromStr;
+
+pub const HEX_DIGITS_PER_BYTE: usize = 2;
 
 fn newline() -> Parser<u8, ()> {
     (seq(b"\n") | seq(b"\r\n")).discard()
