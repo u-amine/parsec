@@ -31,8 +31,6 @@ use std::fmt::{self, Debug, Formatter};
 use std::io::{self, Write};
 use vote::Vote;
 
-#[serde(bound = "")]
-#[derive(Serialize, Deserialize)]
 pub(crate) struct Event<T: NetworkEvent, P: PublicId> {
     content: Content<T, P>,
     // Creator's signature of `content`.
@@ -345,8 +343,6 @@ pub(crate) enum CauseInput {
 }
 
 // Properties of `Event` that can be computed from its `Content`.
-#[serde(bound = "")]
-#[derive(Serialize, Deserialize)]
 struct Cache<P: PublicId> {
     // Hash of `Event`s `Content`.
     hash: EventHash,

@@ -24,7 +24,7 @@ use observation::{Malice, Observation, ObservationHash};
 use peer_list::{PeerList, PeerState};
 use serialise;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::{mem, u64};
+use std::{mem, u64, usize};
 use vote::Vote;
 
 pub type IsInterestingEventFn<P> =
@@ -2009,51 +2009,40 @@ impl<T: NetworkEvent, P: PublicId> ObservationInfo<T, P> {
 /// Assert that the two parsec instances have the same events modulo their insertion order.
 #[cfg(all(test, feature = "testing"))]
 pub(crate) fn assert_same_events<T: NetworkEvent, S: SecretId>(a: &Parsec<T, S>, b: &Parsec<T, S>) {
-    assert_eq!(a.events.len(), b.events.len());
+    use gossip::GraphSnapshot;
 
-    for a_event in &a.events {
-        let b_index = unwrap!(b.events.get_index(a_event.hash()));
-        let b_event = unwrap!(b.events.get(b_index));
+    let a = GraphSnapshot::new(&a.events);
+    let b = GraphSnapshot::new(&b.events);
 
-        assert_eq!(a_event.inner(), b_event.inner());
-    }
+    assert_eq!(a, b)
 }
 
 #[cfg(test)]
 mod functional_tests {
     use super::*;
     use dev_utils::parse_test_dot_file;
-    use gossip::Event;
+    use gossip::{Event, GraphSnapshot};
     use id::PublicId;
+    use meta_voting::MetaElectionsSnapshot;
     use mock::{self, Transaction};
+    use peer_list::PeerListSnapshot;
     use peer_list::PeerState;
-    use std::collections::BTreeMap;
 
     #[derive(Debug, PartialEq, Eq)]
     struct Snapshot {
-        peer_list: BTreeMap<PeerId, (PeerState, BTreeMap<u64, EventIndex>)>,
-        events: BTreeSet<EventHash>,
+        peer_list: PeerListSnapshot<PeerId>,
+        events: GraphSnapshot,
+        meta_elections: MetaElectionsSnapshot<PeerId>,
         consensused_blocks: VecDeque<Block<Transaction, PeerId>>,
-        meta_elections: MetaElections<PeerId>,
     }
 
     impl Snapshot {
         fn new(parsec: &Parsec<Transaction, PeerId>) -> Self {
-            let peer_list = parsec
-                .peer_list
-                .iter()
-                .map(|(peer_id, peer)| {
-                    (
-                        peer_id.clone(),
-                        (peer.state(), peer.indexed_events().collect()),
-                    )
-                }).collect();
-
             Snapshot {
-                peer_list,
-                events: parsec.events.iter().map(|event| *event.hash()).collect(),
+                peer_list: PeerListSnapshot::new(&parsec.peer_list, &parsec.events),
+                events: GraphSnapshot::new(&parsec.events),
+                meta_elections: MetaElectionsSnapshot::new(&parsec.meta_elections, &parsec.events),
                 consensused_blocks: parsec.consensused_blocks.clone(),
-                meta_elections: parsec.meta_elections.clone(),
             }
         }
     }
@@ -2560,8 +2549,9 @@ mod functional_tests {
             let mut alice = Parsec::from_parsed_contents(alice_contents);
 
             // This is needed so the AddPeer(Eric) is consensused.
-            // 1000 is just a large number that will make restart_consensus reprocess everything
-            unwrap!(alice.restart_consensus(0, 1000));
+            // `usize::MAX - 1` is somehow arbitrary upper bound that will make `restart_consensus`
+            // reprocess everything (`-1` is there to avoid panic due to arithmetic overflow).
+            unwrap!(alice.restart_consensus(0, usize::MAX - 1));
 
             // Simulate Eric creating unexpected genesis.
             let eric_id = PeerId::new("Eric");

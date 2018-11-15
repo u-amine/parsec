@@ -8,7 +8,7 @@
 
 use std::usize;
 
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub(crate) struct EventIndex(pub(super) usize);
 
 impl EventIndex {

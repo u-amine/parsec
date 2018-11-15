@@ -21,8 +21,7 @@ use std::collections::btree_map::{BTreeMap, Entry};
 use std::collections::BTreeSet;
 
 /// The gossip graph.
-#[serde(bound = "")]
-#[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug)]
 pub(crate) struct Graph<T: NetworkEvent, P: PublicId> {
     events: Vec<Event<T, P>>,
     indices: BTreeMap<EventHash, EventIndex>,
@@ -194,6 +193,22 @@ impl<'a, T: NetworkEvent, P: PublicId> Iterator for Iter<'a, T, P> {
         };
         self.index += 1;
         Some(item)
+    }
+}
+
+#[cfg(any(test, feature = "dump-graphs"))]
+pub(crate) mod snapshot {
+    use super::*;
+
+    /// Snapshot of the graph. Two snapshots compare as equal if the graphs had the same events
+    /// modulo their insertion order.
+    #[derive(Eq, PartialEq, Debug, Serialize, Deserialize)]
+    pub(crate) struct GraphSnapshot(BTreeSet<EventHash>);
+
+    impl GraphSnapshot {
+        pub fn new<T: NetworkEvent, P: PublicId>(graph: &Graph<T, P>) -> Self {
+            GraphSnapshot(graph.iter().map(|event| *event.hash()).collect())
+        }
     }
 }
 

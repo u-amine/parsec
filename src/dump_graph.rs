@@ -60,9 +60,9 @@ pub use self::detail::DIR;
 
 #[cfg(feature = "dump-graphs")]
 mod detail {
-    use gossip::{Event, EventHash, EventIndex, Graph};
+    use gossip::{Event, EventHash, EventIndex, Graph, GraphSnapshot};
     use id::{PublicId, SecretId};
-    use meta_voting::{MetaElections, MetaEvent, MetaVotes};
+    use meta_voting::{MetaElections, MetaElectionsSnapshot, MetaEvent, MetaVotes};
     use network_event::NetworkEvent;
     use observation::{Observation, ObservationHash};
     use peer_list::PeerList;
@@ -120,10 +120,15 @@ mod detail {
         meta_elections: &MetaElections<P>,
     ) {
         if let Some("dev_utils::dot_parser::tests::dot_parser") = thread::current().name() {
-            let dumped_info = serialise(&(gossip_graph, meta_elections));
+            let snapshot = (
+                GraphSnapshot::new(gossip_graph),
+                MetaElectionsSnapshot::new(meta_elections, gossip_graph),
+            );
+            let snapshot = serialise(&snapshot);
+
             assert!(file_path.set_extension("core"));
             let mut file = unwrap!(File::create(&file_path));
-            unwrap!(file.write_all(&dumped_info));
+            unwrap!(file.write_all(&snapshot));
         }
     }
 

@@ -14,6 +14,8 @@ mod meta_vote_counts;
 
 #[cfg(any(test, feature = "testing"))]
 pub(crate) use self::bool_set::BoolSet;
+#[cfg(any(test, feature = "dump-graphs"))]
+pub(crate) use self::meta_elections::snapshot::MetaElectionsSnapshot;
 #[cfg(any(test, feature = "testing"))]
 pub(crate) use self::meta_elections::MetaElection;
 pub(crate) use self::meta_elections::{MetaElectionHandle, MetaElections};

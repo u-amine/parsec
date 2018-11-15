@@ -917,15 +917,13 @@ mod tests {
     use super::*;
     use dev_utils::{Environment, RngChoice, Schedule, ScheduleOptions};
     use dump_graph::DIR;
+    use gossip::GraphSnapshot;
     use maidsafe_utilities::serialisation::deserialise;
-    use meta_voting::MetaElections;
-    use mock::{PeerId, Transaction};
+    use meta_voting::MetaElectionsSnapshot;
+    use mock::PeerId;
     use std::fs;
 
-    type SerialisedGraph = (
-        Graph<Transaction, PeerId>,
-        MetaElections<PeerId>,
-    );
+    type Snapshot = (GraphSnapshot, MetaElectionsSnapshot<PeerId>);
 
     // Alter the seed here to reproduce failures
     static SEED: RngChoice = RngChoice::SeededRandom;
@@ -957,16 +955,17 @@ mod tests {
             let mut core_file = unwrap!(File::open(entry.path()));
             let mut core_info = Vec::new();
             assert_ne!(unwrap!(core_file.read_to_end(&mut core_info)), 0);
-
-            let (mut gossip_graph, meta_elections): SerialisedGraph =
-                unwrap!(deserialise(&core_info));
+            let expected_snapshot: Snapshot = unwrap!(deserialise(&core_info));
 
             let mut dot_file_path = entry.path();
             assert!(dot_file_path.set_extension("dot"));
-            let parsed_result = unwrap!(parse_dot_file(&dot_file_path));
+            let parsed = unwrap!(parse_dot_file(&dot_file_path));
+            let actual_snapshot = (
+                GraphSnapshot::new(&parsed.events),
+                MetaElectionsSnapshot::new(&parsed.meta_elections, &parsed.events),
+            );
 
-            assert_eq!(gossip_graph, parsed_result.events);
-            assert_eq!(meta_elections, parsed_result.meta_elections);
+            assert_eq!(actual_snapshot, expected_snapshot);
         }
         assert_ne!(num_of_files, 0u8);
     }

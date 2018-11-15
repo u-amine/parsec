@@ -6,6 +6,8 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+#[cfg(test)]
+pub(crate) use self::snapshot::PeerListSnapshot;
 use error::Error;
 #[cfg(any(test, feature = "testing"))]
 use gossip::Graph;
@@ -616,3 +618,37 @@ impl<P: Clone + Ord> MembershipListChange<P> {
 
 #[cfg(feature = "malice-detection")]
 type MembershipListWithChanges<'a, P> = (BTreeSet<P>, &'a [(u64, MembershipListChange<P>)]);
+
+#[cfg(test)]
+pub(crate) mod snapshot {
+    use super::*;
+    use gossip::EventHash;
+
+    #[derive(Eq, PartialEq, Debug)]
+    pub(crate) struct PeerListSnapshot<P: PublicId>(
+        BTreeMap<P, (PeerState, BTreeSet<(u64, EventHash)>)>,
+    );
+
+    impl<P: PublicId> PeerListSnapshot<P> {
+        pub fn new<T: NetworkEvent, S: SecretId<PublicId = P>>(
+            peer_list: &PeerList<S>,
+            graph: &Graph<T, P>,
+        ) -> Self {
+            PeerListSnapshot(
+                peer_list
+                    .iter()
+                    .map(|(peer_id, peer)| {
+                        let events = peer
+                            .indexed_events()
+                            .filter_map(|(index_by_creator, event_index)| {
+                                graph
+                                    .get(event_index)
+                                    .map(|event| (index_by_creator, *event.hash()))
+                            }).collect();
+
+                        (peer_id.clone(), (peer.state, events))
+                    }).collect(),
+            )
+        }
+    }
+}
