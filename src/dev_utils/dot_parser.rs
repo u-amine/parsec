@@ -21,7 +21,6 @@ use pom::parser::*;
 use pom::Result as PomResult;
 use pom::{DataInput, Parser};
 use round_hash::RoundHash;
-use serialise;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{self, Read};
@@ -576,12 +575,8 @@ fn parse_interesting_content() -> Parser<u8, ObservationMap> {
         - next_line()).map(|observations| {
         observations
             .into_iter()
-            .map(|payload| {
-                (
-                    ObservationHash(Hash::from(serialise(&payload).as_slice())),
-                    payload,
-                )
-            }).collect()
+            .map(|payload| (ObservationHash::from(&payload), payload))
+            .collect()
     })
 }
 
@@ -836,7 +831,7 @@ fn convert_to_meta_election(
         start_index: meta_election.start_index,
         payload_hash: meta_election
             .payload
-            .map(|payload| ObservationHash(Hash::from(serialise(&payload).as_slice()))),
+            .map(|payload| ObservationHash::from(&payload)),
     }
 }
 

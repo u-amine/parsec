@@ -9,7 +9,6 @@
 use super::meta_event::MetaEvent;
 use super::meta_vote::MetaVote;
 use gossip::EventIndex;
-use hash::Hash;
 use id::PublicId;
 use observation::ObservationHash;
 use round_hash::RoundHash;
@@ -366,7 +365,7 @@ impl<P: PublicId> MetaElections<P> {
             .consensus_history
             .last()
             .cloned()
-            .unwrap_or(ObservationHash(Hash::ZERO));
+            .unwrap_or(ObservationHash::ZERO);
         self.current_election.initialise(peer_ids, hash);
     }
 

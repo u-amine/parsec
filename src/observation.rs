@@ -10,6 +10,7 @@ use gossip::{EventHash, PackedEvent};
 use hash::Hash;
 use id::PublicId;
 use network_event::NetworkEvent;
+use serialise;
 use std::collections::BTreeSet;
 use std::fmt::{self, Debug, Formatter};
 
@@ -45,7 +46,17 @@ pub enum Observation<T: NetworkEvent, P: PublicId> {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub(crate) struct ObservationHash(pub Hash);
+pub(crate) struct ObservationHash(pub(crate) Hash);
+
+impl ObservationHash {
+    pub const ZERO: Self = ObservationHash(Hash::ZERO);
+}
+
+impl<'a, T: NetworkEvent, P: PublicId> From<&'a Observation<T, P>> for ObservationHash {
+    fn from(observation: &'a Observation<T, P>) -> Self {
+        ObservationHash(Hash::from(serialise(observation).as_slice()))
+    }
+}
 
 impl Debug for ObservationHash {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {

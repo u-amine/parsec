@@ -14,7 +14,6 @@ use error::{Error, Result};
 use gossip::{
     Event, EventHash, EventIndex, Graph, IndexedEventRef, PackedEvent, Request, Response,
 };
-use hash::Hash;
 use id::{PublicId, SecretId};
 use meta_voting::{MetaElectionHandle, MetaElections, MetaEvent, MetaEventBuilder, MetaVote, Step};
 #[cfg(test)]
@@ -22,7 +21,6 @@ use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
 use observation::{Malice, Observation, ObservationHash};
 use peer_list::{PeerList, PeerState};
-use serialise;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::{mem, usize};
 use vote::Vote;
@@ -782,13 +780,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         Ok(())
     }
 
-    fn hash_from_payload(&self, payload: &Observation<T, S::PublicId>) -> Option<&ObservationHash> {
-        self.observations
-            .iter()
-            .find(|(_, info)| info.observation == *payload)
-            .map(|(hash, _)| hash)
-    }
-
     // Any payloads which this event sees as "interesting".  If this returns a non-empty set, then
     // this event is classed as an interesting one.
     fn set_interesting_content(&self, builder: &mut MetaEventBuilder<T, S::PublicId>) {
@@ -807,8 +798,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .iter_from(start_index)
             .filter_map(|event| {
                 event
-                    .vote()
-                    .and_then(|vote| self.hash_from_payload(vote.payload()))
+                    .inner()
+                    .payload_hash()
                     .map(|payload_hash| (event, payload_hash))
             }).filter(|(_, this_payload_hash)| {
                 self.meta_elections.is_interesting_content_candidate(
@@ -835,11 +826,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .peer_list
             .peer_events(builder.event().creator())
             .filter_map(|hash| self.get_known_event(hash).ok())
-            .filter_map(|event| {
-                event
-                    .vote()
-                    .and_then(|vote| self.hash_from_payload(vote.payload()))
-            }) {
+            .filter_map(|event| event.inner().payload_hash())
+        {
             if payloads_set.remove(observation_hash) {
                 payloads_hashes.push(*observation_hash);
             }
@@ -1442,9 +1430,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             .iter_from(previous)
             .filter(|event| {
                 event
-                    .vote()
-                    .map(Vote::payload)
-                    .and_then(|payload| self.hash_from_payload(payload))
+                    .payload_hash()
                     .and_then(|payload_hash| self.observations.get(&payload_hash))
                     .map(|info| !info.consensused)
                     .unwrap_or(false)
@@ -1949,8 +1935,11 @@ impl Parsec<Transaction, PeerId> {
         {
             for payload_hash in &meta_event.interesting_content {
                 if let Some(payload) = parsed_contents.observation_map.remove(payload_hash) {
-                    let (p_hash, obs_info) = ObservationInfo::new(payload);
-                    assert_eq!(p_hash, *payload_hash);
+                    let obs_info = ObservationInfo {
+                        observation: payload,
+                        consensused: false,
+                        created_by_us: false,
+                    };
                     let _ = parsec.observations.insert(*payload_hash, obs_info);
                 }
             }
@@ -1989,22 +1978,17 @@ struct ObservationInfo<T: NetworkEvent, P: PublicId> {
 }
 
 impl<T: NetworkEvent, P: PublicId> ObservationInfo<T, P> {
-    fn new(observation: Observation<T, P>) -> (ObservationHash, Self) {
-        (
-            ObservationHash(Hash::from(serialise(&observation).as_slice())),
-            ObservationInfo {
-                observation,
-                consensused: false,
-                created_by_us: false,
-            },
-        )
-    }
-
     fn create(event: &Event<T, P>) -> Option<(ObservationHash, Self)> {
-        event
-            .vote()
-            .map(Vote::payload)
-            .map(|observation| Self::new(observation.clone()))
+        event.payload_with_hash().map(|(observation, hash)| {
+            (
+                *hash,
+                Self {
+                    observation: observation.clone(),
+                    consensused: false,
+                    created_by_us: false,
+                },
+            )
+        })
     }
 }
 

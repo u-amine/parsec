@@ -22,6 +22,7 @@ use id::{PublicId, SecretId};
 use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
 use observation::Observation;
+use observation::ObservationHash;
 use peer_list::PeerList;
 use serialise;
 use std::cmp;
@@ -158,6 +159,19 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         } else {
             None
         }
+    }
+
+    pub fn payload(&self) -> Option<&Observation<T, P>> {
+        self.vote().map(Vote::payload)
+    }
+
+    pub fn payload_hash(&self) -> Option<&ObservationHash> {
+        self.vote().map(|_| &self.cache.payload_hash)
+    }
+
+    pub fn payload_with_hash(&self) -> Option<(&Observation<T, P>, &ObservationHash)> {
+        self.vote()
+            .map(|vote| (vote.payload(), &self.cache.payload_hash))
     }
 
     pub fn creator(&self) -> &P {
@@ -303,6 +317,12 @@ impl Event<Transaction, PeerId> {
         index_by_creator: usize,
         last_ancestors: BTreeMap<PeerId, usize>,
     ) -> Self {
+        let payload_hash = if let CauseInput::Observation(ref observation) = cause {
+            ObservationHash::from(observation)
+        } else {
+            ObservationHash::ZERO
+        };
+
         let content = Content {
             creator: creator.clone(),
             cause: Cause::new_from_dot_input(
@@ -323,6 +343,7 @@ impl Event<Transaction, PeerId> {
             index_by_creator,
             last_ancestors,
             forking_peers: BTreeSet::new(),
+            payload_hash,
         };
 
         Self {
@@ -356,6 +377,8 @@ struct Cache<P: PublicId> {
     last_ancestors: BTreeMap<P, usize>,
     // Peers with a fork having both sides seen by this event.
     forking_peers: BTreeSet<P>,
+    // Hash of the payload
+    payload_hash: ObservationHash,
 }
 
 impl<P: PublicId> Cache<P> {
@@ -400,6 +423,7 @@ impl<P: PublicId> Cache<P> {
             peer_list,
         );
         let forking_peers = join_forking_peers(self_parent, other_parent, forking_peers);
+        let payload_hash = compute_payload_hash(&packed_event.content.cause);
 
         Ok(Some(Self {
             hash,
@@ -408,6 +432,7 @@ impl<P: PublicId> Cache<P> {
             index_by_creator,
             last_ancestors,
             forking_peers,
+            payload_hash,
         }))
     }
 
@@ -444,6 +469,7 @@ impl<P: PublicId> Cache<P> {
         );
         let forking_peers = join_forking_peers(self_parent, other_parent, forking_peers);
         let signature = peer_list.our_id().sign_detached(&serialised_content);
+        let payload_hash = compute_payload_hash(&content.cause);
 
         let cache = Self {
             hash: EventHash(Hash::from(serialised_content.as_slice())),
@@ -452,6 +478,7 @@ impl<P: PublicId> Cache<P> {
             index_by_creator,
             last_ancestors,
             forking_peers,
+            payload_hash,
         };
 
         (cache, signature)
@@ -547,6 +574,14 @@ fn join_forking_peers<T: NetworkEvent, P: PublicId>(
     );
     forking_peers.extend(prev_forking_peers.iter().cloned());
     forking_peers
+}
+
+fn compute_payload_hash<T: NetworkEvent, P: PublicId>(cause: &Cause<T, P>) -> ObservationHash {
+    if let Cause::Observation { ref vote, .. } = cause {
+        ObservationHash::from(vote.payload())
+    } else {
+        ObservationHash::ZERO
+    }
 }
 
 /// Finds the first event which has the `short_name` provided.
