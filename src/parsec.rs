@@ -809,22 +809,22 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 event
                     .vote()
                     .and_then(|vote| self.hash_from_payload(vote.payload()))
-                    .map(|hash| (event, hash))
+                    .map(|payload_hash| (event, payload_hash))
             }).filter(|(_, this_payload_hash)| {
                 self.meta_elections.is_interesting_content_candidate(
                     builder.election(),
                     builder.event().creator(),
                     this_payload_hash,
                 )
-            }).filter(|(ref event, &this_payload_hash)| {
+            }).filter(|(event, this_payload_hash)| {
                 self.is_interesting_payload(
                     builder,
                     &peers_that_can_vote,
-                    &this_payload_hash,
+                    this_payload_hash,
                     start_index,
                 ) || event.sees_fork()
-                    && self.has_interesting_ancestor(builder, &this_payload_hash, start_index)
-            }).map(|(_, hash)| hash)
+                    && self.has_interesting_ancestor(builder, this_payload_hash, start_index)
+            }).map(|(_, this_payload_hash)| this_payload_hash)
             .cloned()
             .collect();
 
@@ -893,8 +893,9 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         payload_hash: &ObservationHash,
         start_index: usize,
     ) -> bool {
-        self.events.ancestors(builder.event())
-            .take_while(|event| event.topological_index() >= start_index)
+        self.events
+            .ancestors(builder.event())
+            .take_while(|that_event| that_event.topological_index() >= start_index)
             .filter(|that_event| that_event.creator() != builder.event().creator())
             .any(|that_event| {
                 self.meta_elections
@@ -945,14 +946,15 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.peer_list
             .iter()
             .filter(|(peer_id, _)| voters.contains(peer_id))
-            .filter_map(|(peer_id, peer)| {
-                peer.events()
-                    .filter_map(|hash| self.get_known_event(hash).ok())
-                    .filter(|event| event.topological_index() >= start_index)
-                    .find(|that_event| {
+            .filter(|(peer_id, _)| {
+                self.events
+                    .iter_from(start_index)
+                    .filter(|that_event| that_event.creator() == *peer_id)
+                    .any(|that_event| {
                         payload == that_event.vote().map(Vote::payload) && event.sees(that_event)
-                    }).map(|_| peer_id.clone())
-            }).collect()
+                    })
+            }).map(|(peer_id, _)| peer_id.clone())
+            .collect()
     }
 
     fn set_observees(&self, builder: &mut MetaEventBuilder<T, S::PublicId>) {
