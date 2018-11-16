@@ -814,7 +814,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     &peers_that_can_vote,
                     &this_payload_hash,
                     start_index,
-                ) || event.sees_fork() && self.has_interesting_ancestor(builder, &this_payload_hash)
+                ) || event.sees_fork()
+                    && self.has_interesting_ancestor(builder, &this_payload_hash, start_index)
             }).map(|(_, hash)| hash)
             .cloned()
             .collect();
@@ -882,8 +883,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         &self,
         builder: &MetaEventBuilder<T, S::PublicId>,
         payload_hash: &ObservationHash,
+        start_index: usize,
     ) -> bool {
         graph::ancestors(&self.events, builder.event())
+            .take_while(|event| event.topological_index() >= start_index)
             .filter(|that_event| that_event.creator() != builder.event().creator())
             .any(|that_event| {
                 self.meta_elections
