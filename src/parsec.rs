@@ -801,21 +801,23 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 event
                     .vote()
                     .and_then(|vote| self.hash_from_payload(vote.payload()))
-            }).filter(|this_payload_hash| {
+                    .map(|hash| (event, hash))
+            }).filter(|(_, this_payload_hash)| {
                 self.meta_elections.is_interesting_content_candidate(
                     builder.election(),
                     builder.event().creator(),
                     this_payload_hash,
                 )
-            }).filter(|&this_payload_hash| {
-                self.has_interesting_ancestor(builder, this_payload_hash) || self
-                    .is_interesting_payload(
-                        builder,
-                        &peers_that_can_vote,
-                        this_payload_hash,
-                        start_index,
-                    )
-            }).cloned()
+            }).filter(|(ref event, &this_payload_hash)| {
+                self.is_interesting_payload(
+                    builder,
+                    &peers_that_can_vote,
+                    &this_payload_hash,
+                    start_index,
+                ) || event.sees_fork()
+                    && self.has_interesting_ancestor(builder, &this_payload_hash, start_index)
+            }).map(|(_, hash)| hash)
+            .cloned()
             .collect();
 
         // The code above created a set of payloads that are interesting at this event.
@@ -881,8 +883,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         &self,
         builder: &MetaEventBuilder<T, S::PublicId>,
         payload_hash: &ObservationHash,
+        start_index: usize,
     ) -> bool {
         graph::ancestors(&self.events, builder.event())
+            .take_while(|event| event.topological_index() >= start_index)
             .filter(|that_event| that_event.creator() != builder.event().creator())
             .any(|that_event| {
                 self.meta_elections

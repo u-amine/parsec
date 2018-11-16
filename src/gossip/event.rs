@@ -215,6 +215,10 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         }
     }
 
+    pub fn sees_fork(&self) -> bool {
+        !self.cache.forking_peers.is_empty()
+    }
+
     /// Returns the first char of the creator's ID, followed by an underscore and the event's index.
     pub fn short_name(&self) -> String {
         format!(
