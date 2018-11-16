@@ -462,6 +462,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             return true;
         }
 
+        // If self-parent is earlier in history than the start of the meta-election, it won't have
+        // a meta-event; but it also means that it wasn't an observer, so this event is
+        if self.meta_elections.start_index(builder.election()) > self_parent.topological_index() {
+            return true;
+        }
+
         if let Some(meta_parent) = self
             .meta_elections
             .meta_event(builder.election(), self_parent.hash())

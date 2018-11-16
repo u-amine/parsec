@@ -366,7 +366,10 @@ impl ObservationSchedule {
                 num_observations += 1;
                 opaque_count += 1;
             }
-            if added_peers < options.peers_to_add && rng.gen::<f64>() < options.prob_add {
+            if added_peers < options.peers_to_add
+                && rng.gen::<f64>() < options.prob_add
+                && peers.can_mutate(step)
+            {
                 let next_id = PeerId::new(names_iter.next().unwrap());
                 peers.add_peer(next_id.clone(), step);
                 schedule.push((step, ObservationEvent::AddPeer(next_id)));

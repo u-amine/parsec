@@ -128,7 +128,7 @@ pub struct PeerStatuses {
     pub wait_between_changes: usize,
 }
 
-const DEFAULT_WAIT_BETWEEN_CHANGES: usize = 400;
+const DEFAULT_WAIT_BETWEEN_CHANGES: usize = 500;
 
 impl PeerStatuses {
     /// Creates a new PeerStatuses struct with the given active peers
@@ -186,6 +186,12 @@ impl PeerStatuses {
         self.peers_by_status(|s| *s == PeerStatus::Failed).count()
     }
 
+    pub fn can_mutate(&self, step: usize) -> bool {
+        self.last_change_step
+            .map(|lstep| step > lstep + self.wait_between_changes)
+            .unwrap_or(true)
+    }
+
     /// Adds an active peer.
     pub fn add_peer(&mut self, p: PeerId, step: usize) {
         self.last_change_step = Some(step);
@@ -201,10 +207,8 @@ impl PeerStatuses {
         min_active: usize,
         step: usize,
     ) -> Option<PeerId> {
-        if let Some(lstep) = self.last_change_step {
-            if step <= lstep + self.wait_between_changes {
-                return None;
-            }
+        if !self.can_mutate(step) {
+            return None;
         }
         let mut active_peers = self.num_active_peers();
         let mut failed_peers = self.num_failed_peers();
@@ -244,10 +248,8 @@ impl PeerStatuses {
         min_active: usize,
         step: usize,
     ) -> Option<PeerId> {
-        if let Some(lstep) = self.last_change_step {
-            if step <= lstep + self.wait_between_changes {
-                return None;
-            }
+        if !self.can_mutate(step) {
+            return None;
         }
         let active_peers = self.num_active_peers() - 1;
         let failed_peers = self.num_failed_peers() + 1;

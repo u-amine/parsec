@@ -357,9 +357,7 @@ fn fail_add_remove() {
     assert!(result.is_ok(), "{:?}", result);
 }
 
-// TODO: find the reason behind intermittent failures, fix it and unignore the test
 #[test]
-#[ignore]
 fn custom_is_interesting_event_that_requires_only_one_vote() {
     fn at_least_one(did_vote: &BTreeSet<PeerId>, can_vote: &BTreeSet<PeerId>) -> bool {
         did_vote.intersection(can_vote).next().is_some()
