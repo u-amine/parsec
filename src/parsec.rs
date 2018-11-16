@@ -604,8 +604,6 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     }
 
     fn output_consensus_info(&self, payload_hash: &ObservationHash) {
-        use log::LogLevel;
-
         dump_graph::to_file(
             self.our_pub_id(),
             &self.graph,
@@ -617,19 +615,17 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                 .collect(),
         );
 
-        if log_enabled!(LogLevel::Info) {
-            let payload = self
-                .observations
-                .get(payload_hash)
-                .map(|info| &info.observation);
-            info!(
-                "{:?} got consensus on block {} with payload {:?} and payload hash {:?}",
-                self.our_pub_id(),
-                self.meta_elections.consensus_history().len() - 1,
-                payload,
-                payload_hash
-            )
-        }
+        let payload = self
+            .observations
+            .get(payload_hash)
+            .map(|info| &info.observation);
+        info!(
+            "{:?} got consensus on block {} with payload {:?} and payload hash {:?}",
+            self.our_pub_id(),
+            self.meta_elections.consensus_history().len() - 1,
+            payload,
+            payload_hash
+        )
     }
 
     fn mark_observation_as_consensused(&mut self, payload_hash: &ObservationHash) {
@@ -2051,6 +2047,16 @@ mod functional_tests {
         };
     }
 
+    macro_rules! btree_set {
+        ($($item:expr),*) => {{
+            let mut set = BTreeSet::new();
+            $(
+                let _ = set.insert($item);
+            )*
+            set
+        }}
+    }
+
     fn nth_event<T: NetworkEvent, P: PublicId>(graph: &Graph<T, P>, n: usize) -> &Event<T, P> {
         unwrap!(graph.iter_from(n).next()).inner()
     }
@@ -2374,11 +2380,12 @@ mod functional_tests {
         let alice_id = PeerId::new("Alice");
         let bob_id = PeerId::new("Bob");
 
-        let mut genesis_group = BTreeSet::new();
-        let _ = genesis_group.insert(alice_id.clone());
-        let _ = genesis_group.insert(bob_id.clone());
-        let _ = genesis_group.insert(PeerId::new("Carol"));
-        let _ = genesis_group.insert(PeerId::new("Dave"));
+        let genesis_group = btree_set![
+            alice_id.clone(),
+            bob_id.clone(),
+            PeerId::new("Carol"),
+            PeerId::new("Dave")
+        ];
 
         let mut alice = Parsec::from_genesis(alice_id.clone(), &genesis_group, is_supermajority);
 
@@ -2466,6 +2473,25 @@ mod functional_tests {
 
                 peer_list.add_peer(peer_id.clone(), PeerState::active());
                 peer_list.initialise_peer_membership_list(peer_id, genesis.iter().cloned());
+            }
+        }
+
+        // To make sure event indices are set correctly, always use this function instead of
+        // `Parsec::add_event`. Especially when adding event extracted from other `Parsec`
+        // instances.
+        fn add_event<T: NetworkEvent, S: SecretId>(
+            parsec: &mut Parsec<T, S>,
+            event: &Event<T, S::PublicId>,
+        ) -> Result<()> {
+            if let Some(event) = Event::unpack(
+                event.pack(),
+                &parsec.graph,
+                &parsec.peer_list,
+                &BTreeSet::new(),
+            )? {
+                parsec.add_event(event)
+            } else {
+                Ok(())
             }
         }
 
@@ -2588,39 +2614,44 @@ mod functional_tests {
             assert_eq!(hash, e_1_hash);
         }
 
-        fn initialise_parsec(
+        fn initialise_parsed_contents(
             id: PeerId,
-            genesis: BTreeSet<PeerId>,
+            genesis: &BTreeSet<PeerId>,
             second_event: Option<Observation<Transaction, PeerId>>,
-        ) -> Parsec<Transaction, PeerId> {
-            let mut peer_contents = ParsedContents::new(id);
-            for peer_id in &genesis {
-                peer_contents
-                    .peer_list
-                    .add_peer(peer_id.clone(), PeerState::active());
-            }
-            add_genesis_group(&mut peer_contents.peer_list, &genesis);
+        ) -> ParsedContents {
+            let mut result = ParsedContents::new(id);
+            add_genesis_group(&mut result.peer_list, genesis);
 
-            let ev_0 = Event::<Transaction, _>::new_initial(&peer_contents.peer_list);
+            let ev_0 = Event::<Transaction, _>::new_initial(&result.peer_list);
             let ev_0_hash = *ev_0.hash();
-            peer_contents.add_event(ev_0);
+            result.add_event(ev_0);
             let ev_1 = if let Some(obs_1) = second_event {
                 Event::<Transaction, _>::new_from_observation(
                     ev_0_hash,
                     obs_1,
-                    &peer_contents.graph,
-                    &peer_contents.peer_list,
+                    &result.graph,
+                    &result.peer_list,
                 )
             } else {
                 Event::<Transaction, _>::new_from_observation(
                     ev_0_hash,
-                    Observation::Genesis(genesis),
-                    &peer_contents.graph,
-                    &peer_contents.peer_list,
+                    Observation::Genesis(genesis.clone()),
+                    &result.graph,
+                    &result.peer_list,
                 )
             };
-            peer_contents.add_event(ev_1);
-            Parsec::from_parsed_contents(peer_contents)
+
+            result.add_event(ev_1);
+            result
+        }
+
+        fn initialise_parsec(
+            id: PeerId,
+            genesis: &BTreeSet<PeerId>,
+            second_event: Option<Observation<Transaction, PeerId>>,
+        ) -> Parsec<Transaction, PeerId> {
+            let contents = initialise_parsed_contents(id, genesis, second_event);
+            Parsec::from_parsed_contents(contents)
         }
 
         #[test]
@@ -2628,21 +2659,19 @@ mod functional_tests {
             let alice_id = PeerId::new("Alice");
             let dave_id = PeerId::new("Dave");
 
-            let mut genesis = BTreeSet::new();
-            let _ = genesis.insert(alice_id.clone());
-            let _ = genesis.insert(dave_id.clone());
+            let genesis = btree_set![alice_id.clone(), dave_id.clone()];
 
             // Create Alice where the first event is not a genesis event (malice)
             let alice = initialise_parsec(
                 alice_id.clone(),
-                genesis.clone(),
+                &genesis,
                 Some(Observation::OpaquePayload(Transaction::new("Foo"))),
             );
             let a_0_hash = *nth_event(&alice.graph, 0).hash();
             let a_1_hash = *nth_event(&alice.graph, 1).hash();
 
             // Create Dave where the first event is a genesis event containing both Alice and Dave.
-            let mut dave = initialise_parsec(dave_id.clone(), genesis, None);
+            let mut dave = initialise_parsec(dave_id.clone(), &genesis, None);
             assert!(!dave.graph.contains(&a_0_hash));
             assert!(!dave.graph.contains(&a_1_hash));
 
@@ -2672,24 +2701,20 @@ mod functional_tests {
             let alice_id = PeerId::new("Alice");
             let dave_id = PeerId::new("Dave");
 
-            let mut genesis = BTreeSet::new();
-            let _ = genesis.insert(alice_id.clone());
-            let _ = genesis.insert(dave_id.clone());
-            let mut false_genesis = BTreeSet::new();
-            let _ = false_genesis.insert(alice_id.clone());
-            let _ = false_genesis.insert(PeerId::new("Derp"));
+            let genesis = btree_set![alice_id.clone(), dave_id.clone()];
+            let false_genesis = btree_set![alice_id.clone(), PeerId::new("Derp")];
 
             // Create Alice where the first event is an incorrect genesis event (malice)
             let alice = initialise_parsec(
                 alice_id.clone(),
-                genesis.clone(),
+                &genesis,
                 Some(Observation::Genesis(false_genesis)),
             );
             let a_0_hash = *nth_event(&alice.graph, 0).hash();
             let a_1_hash = *nth_event(&alice.graph, 1).hash();
 
             // Create Dave where the first event is a genesis event containing both Alice and Dave.
-            let mut dave = initialise_parsec(dave_id.clone(), genesis, None);
+            let mut dave = initialise_parsec(dave_id.clone(), &genesis, None);
             assert!(!dave.graph.contains(&a_0_hash));
             assert!(!dave.graph.contains(&a_1_hash));
 
@@ -2750,7 +2775,7 @@ mod functional_tests {
             let mut alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
             let carols_valid_vote_hash =
                 *unwrap!(find_event_by_short_name(&alice.graph, "C_4")).hash();
-            unwrap!(alice.add_event(first_duplicate_clone));
+            unwrap!(add_event(&mut alice, &first_duplicate_clone));
             let expected_accusations = vec![(
                 carol.our_pub_id().clone(),
                 Malice::DuplicateVote(carols_valid_vote_hash, first_duplicate_hash),
@@ -2761,7 +2786,7 @@ mod functional_tests {
             // Check that the second one doesn't trigger any further accusation, but is also added
             // to the graph.
             let second_duplicate_hash = *second_duplicate.hash();
-            unwrap!(alice.add_event(second_duplicate));
+            unwrap!(add_event(&mut alice, &second_duplicate));
             assert_eq!(alice.pending_accusations, expected_accusations);
             assert!(alice.graph.contains(&second_duplicate_hash));
         }
@@ -2793,7 +2818,7 @@ mod functional_tests {
                 carol.our_pub_id().clone(),
                 Malice::StaleOtherParent(c_4_hash),
             )];
-            unwrap!(alice.add_event(c_4));
+            unwrap!(add_event(&mut alice, &c_4));
             assert_eq!(alice.pending_accusations, expected_accusations);
             assert!(alice.graph.contains(&c_4_hash));
         }
@@ -2897,24 +2922,22 @@ mod functional_tests {
             // not part of the membership_list
             let carol_id = PeerId::new("Carol");
             bob.peer_list.add_peer(carol_id, PeerState::active());
-            {
-                let c_0 = unwrap!(alice_parsed_contents.graph.get(c_0_index));
-                unwrap!(bob.peer_list.confirm_can_add_event(&*c_0));
-                bob.peer_list.add_event(c_0);
-            }
 
             let mut alice_events: BTreeMap<_, _> =
                 alice_parsed_contents.graph.into_iter().collect();
+
+            let c_0 = unwrap!(alice_events.remove(&c_0_index));
+            unwrap!(add_event(&mut bob, &c_0));
 
             // This malice is setup in two events.
             // A_2 has C_0 from Carol as other parent as Carol has gossiped to Alice. Carol is
             // however not part of the section and Alice should not have accepted it.
             let a_2 = unwrap!(alice_events.remove(&a_2_index));
-            unwrap!(bob.add_event(a_2));
+            unwrap!(add_event(&mut bob, &a_2));
 
             // B_2 is the sync event created by Bob when he receives A_2 from Alice.
             let b_2 = unwrap!(alice_events.remove(&b_2_index));
-            unwrap!(bob.add_event(b_2));
+            unwrap!(add_event(&mut bob, &b_2));
 
             // Bob should now have seen that Alice in A_2 incorrectly reported gossip from Carol.
             // Check that this triggers an accusation
@@ -3181,6 +3204,58 @@ mod functional_tests {
 
             assert_eq!(*unwrap!(a_2.vote()).payload(), expected_observation);
             assert!(!alice.graph.contains(&c_4_hash));
+        }
+
+        #[test]
+        fn other_parent_by_same_creator() {
+            let alice_id = PeerId::new("Alice");
+            let bob_id = PeerId::new("Bob");
+            let genesis = btree_set![alice_id.clone(), bob_id.clone()];
+
+            let mut alice = initialise_parsec(alice_id, &genesis, None);
+            let mut bob_contents = initialise_parsed_contents(bob_id.clone(), &genesis, None);
+
+            let b_0_hash = *unwrap!(find_event_by_short_name(&bob_contents.graph, "b_0")).hash();
+            let b_1_hash = *unwrap!(find_event_by_short_name(&bob_contents.graph, "b_1")).hash();
+
+            let b_2 = Event::new_from_request(
+                b_1_hash,
+                b_0_hash,
+                &bob_contents.graph,
+                &bob_contents.peer_list,
+                &BTreeSet::new(),
+            );
+            let b_2_hash = *b_2.hash();
+
+            let b_1 = unwrap!(bob_contents.remove_last_event());
+            assert_eq!(*b_1.hash(), b_1_hash);
+
+            let b_0 = unwrap!(bob_contents.remove_last_event());
+            assert_eq!(*b_0.hash(), b_0_hash);
+
+            unwrap!(add_event(&mut alice, &b_0));
+            unwrap!(add_event(&mut alice, &b_1));
+
+            // This should fail, as B_2 has other-parent by the same creator.
+            assert_err!(Error::InvalidEvent, add_event(&mut alice, &b_2));
+
+            // Alice should raise accusation against Bob
+            let (offender, event) = unwrap!(
+                our_votes(&alice)
+                    .filter_map(|payload| match payload {
+                        Observation::Accusation {
+                            ref offender,
+                            malice: Malice::OtherParentBySameCreator(event),
+                        } => Some((offender, event)),
+                        _ => None,
+                    }).next()
+            );
+
+            assert_eq!(*offender, bob_id);
+            assert_eq!(event.hash(), b_2_hash);
+
+            // B_2 should not have been inserted into Alice's graph
+            assert!(!alice.graph.contains(&b_2_hash));
         }
     }
 }
