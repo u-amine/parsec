@@ -60,7 +60,7 @@ pub use self::detail::DIR;
 
 #[cfg(feature = "dump-graphs")]
 mod detail {
-    use gossip::{Event, EventHash, EventIndex, Graph, GraphSnapshot};
+    use gossip::{Event, EventHash, EventIndex, Graph, GraphSnapshot, IndexedEventRef};
     use id::{PublicId, SecretId};
     use meta_voting::{MetaElections, MetaElectionsSnapshot, MetaEvent, MetaVotes};
     use network_event::NetworkEvent;
@@ -180,12 +180,12 @@ mod detail {
         let _ = force_symlink_dir(&*ROOT_DIR, ROOT_DIR_PREFIX.join("latest"));
     }
 
-    fn parent_pos(
+    fn parent_pos<T: NetworkEvent, P: PublicId>(
         index: usize,
-        parent_hash: Option<&EventHash>,
+        parent: Option<IndexedEventRef<T, P>>,
         positions: &BTreeMap<EventHash, usize>,
     ) -> Option<usize> {
-        if let Some(parent_hash) = parent_hash {
+        if let Some(parent_hash) = parent.map(|e| e.inner().hash()) {
             if let Some(parent_pos) = positions.get(parent_hash) {
                 Some(*parent_pos)
             } else if *parent_hash == EventHash::ZERO {
@@ -401,10 +401,7 @@ mod detail {
                     if !positions.contains_key(event.hash()) {
                         let self_parent_pos = if let Some(position) = parent_pos(
                             event.index_by_creator(),
-                            event
-                                .self_parent()
-                                .and_then(|index| self.gossip_graph.get(index))
-                                .map(|event| event.inner().hash()),
+                            self.gossip_graph.self_parent(event),
                             &positions,
                         ) {
                             position
@@ -413,10 +410,7 @@ mod detail {
                         };
                         let other_parent_pos = if let Some(position) = parent_pos(
                             event.index_by_creator(),
-                            event
-                                .other_parent()
-                                .and_then(|index| self.gossip_graph.get(index))
-                                .map(|event| event.inner().hash()),
+                            self.gossip_graph.other_parent(event),
                             &positions,
                         ) {
                             position

@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use gossip::{CauseInput, Event, EventIndex, Graph};
+use gossip::{CauseInput, Event, EventIndex, Graph, IndexedEventRef};
 use hash::Hash;
 use hash::HASH_LEN;
 use meta_voting::{
@@ -797,11 +797,10 @@ fn convert_to_meta_election(
             .meta_events
             .into_iter()
             .map(|(ev_id, mev)| {
-                let next = event_indices.len();
                 (
                     *event_indices
                         .entry(ev_id.clone())
-                        .or_insert_with(|| EventIndex::phony(next)),
+                        .or_insert_with(|| EventIndex::PHONY),
                     mev,
                 )
             }).collect(),
@@ -849,13 +848,11 @@ fn create_events(
         let (self_parent, other_parent, index_by_creator) = {
             let self_parent = next_parsed_event
                 .self_parent
-                .and_then(|ref id| event_indices.get(id).cloned())
-                .and_then(|index| parsed_contents.events.get(index));
+                .and_then(|ref id| get_event_by_id(&parsed_contents.events, &event_indices, id));
 
             let other_parent = next_parsed_event
                 .other_parent
-                .and_then(|ref id| event_indices.get(id).cloned())
-                .and_then(|index| parsed_contents.events.get(index));
+                .and_then(|ref id| get_event_by_id(&parsed_contents.events, &event_indices, id));
 
             let index_by_creator = self_parent
                 .map(|ie| ie.index_by_creator() + 1)
@@ -882,6 +879,14 @@ fn create_events(
     }
 
     event_indices
+}
+
+fn get_event_by_id<'a>(
+    graph: &'a Graph<Transaction, PeerId>,
+    indices: &BTreeMap<String, EventIndex>,
+    id: &str,
+) -> Option<IndexedEventRef<'a, Transaction, PeerId>> {
+    indices.get(id).cloned().and_then(|index| graph.get(index))
 }
 
 fn next_topological_event(

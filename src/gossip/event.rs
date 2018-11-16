@@ -6,13 +6,11 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-#[cfg(test)]
-use super::graph::IndexedEventRef;
 use super::{
     cause::Cause,
     content::Content,
     event_hash::EventHash,
-    graph::{EventIndex, Graph},
+    graph::{EventIndex, Graph, IndexedEventRef},
     packed_event::PackedEvent,
 };
 use error::Error;
@@ -112,12 +110,25 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         peer_list: &PeerList<S>,
         forking_peers: &BTreeSet<P>,
     ) -> Result<Option<Self>, Error> {
-        let cache =
-            if let Some(cache) = Cache::unpack(&packed_event, graph, peer_list, forking_peers)? {
-                cache
-            } else {
-                return Ok(None);
-            };
+        let hash = compute_event_hash_and_verify_signature(
+            &packed_event.content,
+            &packed_event.signature,
+        )?;
+
+        if graph.contains(&hash) {
+            return Ok(None);
+        }
+
+        let (self_parent, other_parent) =
+            get_parents(&packed_event.content, graph, peer_list.our_pub_id())?;
+        let cache = Cache::new(
+            hash,
+            &packed_event.content,
+            self_parent,
+            other_parent,
+            forking_peers,
+            peer_list,
+        );
 
         Ok(Some(Self {
             content: packed_event.content,
@@ -134,22 +145,20 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         }
     }
 
-    // Returns whether this event is descendant of `other`, i.e. whether there's a directed path
-    // from `other` to `self`.
-    pub fn is_descendant_of<E: AsRef<Event<T, P>>>(&self, other: E) -> bool {
+    // Returns whether this event can see `other`, i.e. whether there's a directed path from `other`
+    // to `self` in the graph, and no two events created by `other`'s creator are ancestors to
+    // `self` (fork).
+    pub fn sees<E: AsRef<Event<T, P>>>(&self, other: E) -> bool {
+        if self.cache.forking_peers.contains(other.as_ref().creator()) {
+            return false;
+        }
+
         self.cache
             .last_ancestors
             .get(other.as_ref().creator())
             .map_or(false, |last_index| {
                 *last_index >= other.as_ref().index_by_creator()
             })
-    }
-
-    // Returns whether this event can see `other`, i.e. whether there's a directed path from `other`
-    // to `self` in the graph, and no two events created by `other`'s creator are ancestors to
-    // `self` (fork).
-    pub fn sees<E: AsRef<Event<T, P>>>(&self, other: E) -> bool {
-        !self.cache.forking_peers.contains(other.as_ref().creator()) && self.is_descendant_of(other)
     }
 
     /// Returns `Some(vote)` if the event is for a vote of network event, otherwise returns `None`.
@@ -166,12 +175,17 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
     }
 
     pub fn payload_hash(&self) -> Option<&ObservationHash> {
-        self.vote().map(|_| &self.cache.payload_hash)
+        self.vote().and_then(|_| self.cache.payload_hash.as_ref())
     }
 
     pub fn payload_with_hash(&self) -> Option<(&Observation<T, P>, &ObservationHash)> {
-        self.vote()
-            .map(|vote| (vote.payload(), &self.cache.payload_hash))
+        self.vote().and_then(|vote| match self.cache.payload_hash {
+            Some(ref hash) => Some((vote.payload(), hash)),
+            None => {
+                log_or_panic!("Event has payload but no payload hash: {:?}", self);
+                None
+            }
+        })
     }
 
     pub fn creator(&self) -> &P {
@@ -248,7 +262,24 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
             cause,
         };
 
-        let (cache, signature) = Cache::our(&content, graph, peer_list, forking_peers);
+        let (hash, signature) = compute_event_hash_and_signature(&content, peer_list.our_id());
+        let (self_parent, other_parent) = get_parents(&content, graph, peer_list.our_pub_id())
+            .unwrap_or_else(|error| {
+                log_or_panic!(
+                    "{:?} constructed an invalid event: {:?}.",
+                    peer_list.our_pub_id(),
+                    error
+                );
+                (None, None)
+            });
+        let cache = Cache::new(
+            hash,
+            &content,
+            self_parent,
+            other_parent,
+            forking_peers,
+            peer_list,
+        );
 
         Self {
             content,
@@ -317,27 +348,20 @@ impl Event<Transaction, PeerId> {
         index_by_creator: usize,
         last_ancestors: BTreeMap<PeerId, usize>,
     ) -> Self {
-        let payload_hash = if let CauseInput::Observation(ref observation) = cause {
-            ObservationHash::from(observation)
-        } else {
-            ObservationHash::ZERO
-        };
-
+        let cause = Cause::new_from_dot_input(
+            cause,
+            creator,
+            self_parent.map(|p| p.1),
+            other_parent.map(|p| p.1),
+        );
+        let payload_hash = compute_payload_hash(&cause);
         let content = Content {
             creator: creator.clone(),
-            cause: Cause::new_from_dot_input(
-                cause,
-                creator,
-                self_parent.map(|p| p.1),
-                other_parent.map(|p| p.1),
-            ),
+            cause,
         };
-
-        let serialised_content = serialise(&content);
-        let signature = creator.sign_detached(&serialised_content);
-
+        let (hash, signature) = compute_event_hash_and_signature(&content, creator);
         let cache = Cache {
-            hash: EventHash(Hash::from(serialised_content.as_slice())),
+            hash,
             self_parent: self_parent.map(|p| p.0),
             other_parent: other_parent.map(|p| p.0),
             index_by_creator,
@@ -378,147 +402,104 @@ struct Cache<P: PublicId> {
     // Peers with a fork having both sides seen by this event.
     forking_peers: BTreeSet<P>,
     // Hash of the payload
-    payload_hash: ObservationHash,
+    payload_hash: Option<ObservationHash>,
 }
 
 impl<P: PublicId> Cache<P> {
-    fn unpack<T, S>(
-        packed_event: &PackedEvent<T, P>,
-        graph: &Graph<T, P>,
-        peer_list: &PeerList<S>,
-        forking_peers: &BTreeSet<P>,
-    ) -> Result<Option<Cache<P>>, Error>
-    where
-        T: NetworkEvent,
-        S: SecretId<PublicId = P>,
-    {
-        let serialised_content = serialise(&packed_event.content);
-        let hash = if packed_event
-            .content
-            .creator
-            .verify_signature(&packed_event.signature, &serialised_content)
-        {
-            EventHash(Hash::from(serialised_content.as_slice()))
-        } else {
-            return Err(Error::SignatureFailure);
-        };
-
-        if graph.get_index(&hash).is_some() {
-            return Ok(None);
-        }
-
-        let (self_parent_index, other_parent_index) =
-            get_parents(&packed_event.content, graph, peer_list)?;
-        let self_parent = self_parent_index
-            .and_then(|index| graph.get(index))
-            .map(|e| e.inner());
-        let other_parent = other_parent_index
-            .and_then(|index| graph.get(index))
-            .map(|e| e.inner());
-
-        let (index_by_creator, last_ancestors) = index_by_creator_and_last_ancestors(
-            &packed_event.content.creator,
-            self_parent,
-            other_parent,
-            peer_list,
-        );
-        let forking_peers = join_forking_peers(self_parent, other_parent, forking_peers);
-        let payload_hash = compute_payload_hash(&packed_event.content.cause);
-
-        Ok(Some(Self {
-            hash,
-            self_parent: self_parent_index,
-            other_parent: other_parent_index,
-            index_by_creator,
-            last_ancestors,
-            forking_peers,
-            payload_hash,
-        }))
-    }
-
-    fn our<T: NetworkEvent, S: SecretId<PublicId = P>>(
+    fn new<T: NetworkEvent, S: SecretId<PublicId = P>>(
+        hash: EventHash,
         content: &Content<T, P>,
-        graph: &Graph<T, P>,
-        peer_list: &PeerList<S>,
+        self_parent: Option<IndexedEventRef<T, P>>,
+        other_parent: Option<IndexedEventRef<T, P>>,
         forking_peers: &BTreeSet<P>,
-    ) -> (Self, P::Signature) {
-        let serialised_content = serialise(&content);
-
-        let (self_parent_index, other_parent_index) = get_parents(content, graph, peer_list)
-            .unwrap_or_else(|error| {
-                log_or_panic!(
-                    "{:?} constructed an invalid event: {:?}.",
-                    peer_list.our_pub_id(),
-                    error
-                );
-                (None, None)
-            });
-
-        let self_parent = self_parent_index
-            .and_then(|index| graph.get(index))
-            .map(|e| e.inner());
-        let other_parent = other_parent_index
-            .and_then(|index| graph.get(index))
-            .map(|e| e.inner());
-
+        peer_list: &PeerList<S>,
+    ) -> Self {
         let (index_by_creator, last_ancestors) = index_by_creator_and_last_ancestors(
             &content.creator,
-            self_parent,
-            other_parent,
+            self_parent.map(|e| e.inner()),
+            other_parent.map(|e| e.inner()),
             peer_list,
         );
-        let forking_peers = join_forking_peers(self_parent, other_parent, forking_peers);
-        let signature = peer_list.our_id().sign_detached(&serialised_content);
+        let forking_peers = join_forking_peers(
+            self_parent.map(|e| e.inner()),
+            other_parent.map(|e| e.inner()),
+            forking_peers,
+        );
         let payload_hash = compute_payload_hash(&content.cause);
 
-        let cache = Self {
-            hash: EventHash(Hash::from(serialised_content.as_slice())),
-            self_parent: self_parent_index,
-            other_parent: other_parent_index,
+        Self {
+            hash,
+            self_parent: self_parent.map(|e| e.event_index()),
+            other_parent: other_parent.map(|e| e.event_index()),
             index_by_creator,
             last_ancestors,
             forking_peers,
             payload_hash,
-        };
-
-        (cache, signature)
+        }
     }
 }
 
-fn get_parents<T: NetworkEvent, S: SecretId>(
-    content: &Content<T, S::PublicId>,
-    graph: &Graph<T, S::PublicId>,
-    peer_list: &PeerList<S>,
-) -> Result<(Option<EventIndex>, Option<EventIndex>), Error> {
-    let self_parent = if let Some(hash) = content.self_parent() {
-        Some(graph.get_index(hash).ok_or_else(|| {
-            debug!(
-                "{:?} missing self parent for {:?}",
-                peer_list.our_pub_id(),
-                content
-            );
+type OptionalParents<'a, T, P> = (
+    Option<IndexedEventRef<'a, T, P>>,
+    Option<IndexedEventRef<'a, T, P>>,
+);
 
-            Error::UnknownParent
-        })?)
-    } else {
-        None
-    };
-
-    let other_parent = if let Some(hash) = content.other_parent() {
-        Some(graph.get_index(hash).ok_or_else(|| {
-            debug!(
-                "{:?} missing other parent for {:?}",
-                peer_list.our_pub_id(),
-                content
-            );
-
-            Error::UnknownParent
-        })?)
-    } else {
-        None
-    };
-
+fn get_parents<'a, T: NetworkEvent, P: PublicId>(
+    content: &Content<T, P>,
+    graph: &'a Graph<T, P>,
+    our_id: &P,
+) -> Result<OptionalParents<'a, T, P>, Error> {
+    let self_parent = get_parent(Parent::Self_, content, graph, our_id)?;
+    let other_parent = get_parent(Parent::Other, content, graph, our_id)?;
     Ok((self_parent, other_parent))
+}
+
+fn get_parent<'a, T: NetworkEvent, P: PublicId>(
+    parent: Parent,
+    content: &Content<T, P>,
+    graph: &'a Graph<T, P>,
+    our_id: &P,
+) -> Result<Option<IndexedEventRef<'a, T, P>>, Error> {
+    if let Some(hash) = parent.hash(content) {
+        Ok(Some(
+            graph
+                .get_index(hash)
+                .and_then(|index| graph.get(index))
+                .ok_or_else(|| {
+                    debug!("{:?} missing {} parent for {:?}", our_id, parent, content);
+                    Error::UnknownParent
+                })?,
+        ))
+    } else {
+        Ok(None)
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Parent {
+    Self_, // `Self` is reserved.
+    Other,
+}
+
+impl Parent {
+    fn hash<'a, T: NetworkEvent, P: PublicId>(
+        self,
+        content: &'a Content<T, P>,
+    ) -> Option<&'a EventHash> {
+        match self {
+            Parent::Self_ => content.self_parent(),
+            Parent::Other => content.other_parent(),
+        }
+    }
+}
+
+impl fmt::Display for Parent {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        match *self {
+            Parent::Self_ => write!(formatter, "self"),
+            Parent::Other => write!(formatter, "other"),
+        }
+    }
 }
 
 fn index_by_creator_and_last_ancestors<T: NetworkEvent, S: SecretId>(
@@ -576,11 +557,39 @@ fn join_forking_peers<T: NetworkEvent, P: PublicId>(
     forking_peers
 }
 
-fn compute_payload_hash<T: NetworkEvent, P: PublicId>(cause: &Cause<T, P>) -> ObservationHash {
+fn compute_payload_hash<T: NetworkEvent, P: PublicId>(
+    cause: &Cause<T, P>,
+) -> Option<ObservationHash> {
     if let Cause::Observation { ref vote, .. } = cause {
-        ObservationHash::from(vote.payload())
+        Some(ObservationHash::from(vote.payload()))
     } else {
-        ObservationHash::ZERO
+        None
+    }
+}
+
+fn compute_event_hash_and_signature<T: NetworkEvent, S: SecretId>(
+    content: &Content<T, S::PublicId>,
+    our_id: &S,
+) -> (EventHash, <S::PublicId as PublicId>::Signature) {
+    let serialised_content = serialise(&content);
+    let hash = EventHash(Hash::from(serialised_content.as_slice()));
+    let signature = our_id.sign_detached(&serialised_content);
+
+    (hash, signature)
+}
+
+fn compute_event_hash_and_verify_signature<T: NetworkEvent, P: PublicId>(
+    content: &Content<T, P>,
+    signature: &P::Signature,
+) -> Result<EventHash, Error> {
+    let serialised_content = serialise(content);
+    if content
+        .creator
+        .verify_signature(signature, &serialised_content)
+    {
+        Ok(EventHash(Hash::from(serialised_content.as_slice())))
+    } else {
+        Err(Error::SignatureFailure)
     }
 }
 
@@ -904,39 +913,5 @@ mod tests {
         } else {
             panic!("Expected SignatureFailure, but got {:?}", error);
         }
-    }
-
-    #[test]
-    fn event_comparison_and_hashing() {
-        let (_, peer_list) = create_peer_list("Alice");
-        let mut graph = Graph::new();
-
-        let a_0 = Event::new_initial(&peer_list);
-        let a_0_hash = *a_0.hash();
-        let _ = graph.insert(a_0);
-
-        // Create two events that differ only in their topological order.
-        let a_1_0 = Event::new_from_observation(
-            a_0_hash,
-            Observation::OpaquePayload(Transaction::new("stuff")),
-            &graph,
-            &peer_list,
-        );
-        let a_1_0_hash = *a_1_0.hash();
-        let a_1_0_index = graph.insert(a_1_0).event_index();
-        let a_1_0 = unwrap!(graph.get(a_1_0_index));
-
-        let a_1_1 = Event::new_from_observation(
-            a_0_hash,
-            Observation::OpaquePayload(Transaction::new("stuff")),
-            &graph,
-            &peer_list,
-        );
-        let a_1_1_hash = *a_1_1.hash();
-
-        // Assert that they compare equal and their hashes are equal too - in other words, the
-        // topological order doesn't affect comparison nor hashing.
-        assert_eq!(*a_1_0, a_1_1);
-        assert_eq!(a_1_0_hash, a_1_1_hash);
     }
 }

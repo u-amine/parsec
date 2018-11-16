@@ -59,8 +59,13 @@ impl<T: NetworkEvent, P: PublicId> Graph<T, P> {
         let index = match self.indices.entry(*event.hash()) {
             Entry::Occupied(entry) => *entry.get(),
             Entry::Vacant(entry) => {
+                let index = EventIndex(self.events.len());
+
+                #[cfg(any(test, feature = "testing"))]
+                assert_ne!(index, EventIndex::PHONY);
+
                 self.events.push(event);
-                *entry.insert(EventIndex(self.events.len() - 1))
+                *entry.insert(index)
             }
         };
 

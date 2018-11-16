@@ -12,10 +12,9 @@ use std::usize;
 pub(crate) struct EventIndex(pub(super) usize);
 
 impl EventIndex {
+    // Special value used to support partial graphs in tests.
     #[cfg(any(test, feature = "testing"))]
-    pub fn phony(index: usize) -> Self {
-        EventIndex(index)
-    }
+    pub const PHONY: Self = EventIndex(usize::MAX);
 
     pub fn topological_index(self) -> usize {
         self.0
