@@ -572,7 +572,7 @@ mod detail {
                     "{}{}{}",
                     Self::COMMENT,
                     self.indentation(),
-                    hash.0.as_full_string()
+                    hash.0.full_display()
                 ));
             }
             for handle in self.meta_elections.all() {
@@ -612,7 +612,7 @@ mod detail {
                             Self::COMMENT,
                             self.indentation(),
                             hash.round(),
-                            hash.latest_block_hash().0.as_full_string(),
+                            hash.latest_block_hash().0.full_display(),
                         ));
                     }
                     self.dedent();
