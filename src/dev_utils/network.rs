@@ -145,6 +145,11 @@ impl Network {
     }
 
     fn send_message(&mut self, src: PeerId, dst: &PeerId, message: Message, deliver_after: usize) {
+        if self.peer(dst).status != PeerStatus::Active
+            && self.peer(dst).status != PeerStatus::Pending
+        {
+            return;
+        }
         self.msg_queue
             .entry(dst.clone())
             .or_insert_with(Vec::new)
