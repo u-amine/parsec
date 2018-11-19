@@ -6,8 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use gossip::Event;
-use hash::Hash;
+use gossip::Graph;
 use id::SecretId;
 use meta_voting::MetaElections;
 use network_event::NetworkEvent;
@@ -33,7 +32,7 @@ pub(crate) fn init() {
 #[cfg(feature = "dump-graphs")]
 pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
     owner_id: &S::PublicId,
-    gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
+    gossip_graph: &Graph<T, S::PublicId>,
     meta_elections: &MetaElections<S::PublicId>,
     peer_list: &PeerList<S>,
     observations: BTreeMap<&ObservationHash, &Observation<T, S::PublicId>>,
@@ -49,7 +48,7 @@ pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
 #[cfg(not(feature = "dump-graphs"))]
 pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
     _: &S::PublicId,
-    _: &BTreeMap<Hash, Event<T, S::PublicId>>,
+    _: &Graph<T, S::PublicId>,
     _: &MetaElections<S::PublicId>,
     _: &PeerList<S>,
     _: BTreeMap<&ObservationHash, &Observation<T, S::PublicId>>,
@@ -61,10 +60,9 @@ pub use self::detail::DIR;
 
 #[cfg(feature = "dump-graphs")]
 mod detail {
-    use gossip::Event;
-    use hash::Hash;
+    use gossip::{Event, EventHash, EventIndex, Graph, GraphSnapshot, IndexedEventRef};
     use id::{PublicId, SecretId};
-    use meta_voting::{MetaElections, MetaEvent, MetaVotes};
+    use meta_voting::{MetaElections, MetaElectionsSnapshot, MetaEvent, MetaVotes};
     use network_event::NetworkEvent;
     use observation::{Observation, ObservationHash};
     use peer_list::PeerList;
@@ -118,14 +116,19 @@ mod detail {
 
     fn catch_dump<T: NetworkEvent, P: PublicId>(
         mut file_path: PathBuf,
-        gossip_graph: &BTreeMap<Hash, Event<T, P>>,
+        gossip_graph: &Graph<T, P>,
         meta_elections: &MetaElections<P>,
     ) {
         if let Some("dev_utils::dot_parser::tests::dot_parser") = thread::current().name() {
-            let dumped_info = serialise(&(gossip_graph, meta_elections));
+            let snapshot = (
+                GraphSnapshot::new(gossip_graph),
+                MetaElectionsSnapshot::new(meta_elections, gossip_graph),
+            );
+            let snapshot = serialise(&snapshot);
+
             assert!(file_path.set_extension("core"));
             let mut file = unwrap!(File::create(&file_path));
-            unwrap!(file.write_all(&dumped_info));
+            unwrap!(file.write_all(&snapshot));
         }
     }
 
@@ -135,7 +138,7 @@ mod detail {
 
     pub(crate) fn to_file<T: NetworkEvent, S: SecretId>(
         owner_id: &S::PublicId,
-        gossip_graph: &BTreeMap<Hash, Event<T, S::PublicId>>,
+        gossip_graph: &Graph<T, S::PublicId>,
         meta_elections: &MetaElections<S::PublicId>,
         peer_list: &PeerList<S>,
         observations: BTreeMap<&ObservationHash, &Observation<T, S::PublicId>>,
@@ -177,15 +180,15 @@ mod detail {
         let _ = force_symlink_dir(&*ROOT_DIR, ROOT_DIR_PREFIX.join("latest"));
     }
 
-    fn parent_pos(
-        index: u64,
-        parent_hash: Option<&Hash>,
-        positions: &BTreeMap<Hash, u64>,
-    ) -> Option<u64> {
-        if let Some(parent_hash) = parent_hash {
+    fn parent_pos<T: NetworkEvent, P: PublicId>(
+        index: usize,
+        parent: Option<IndexedEventRef<T, P>>,
+        positions: &BTreeMap<EventHash, usize>,
+    ) -> Option<usize> {
+        if let Some(parent_hash) = parent.map(|e| e.inner().hash()) {
             if let Some(parent_pos) = positions.get(parent_hash) {
                 Some(*parent_pos)
-            } else if *parent_hash == Hash::ZERO {
+            } else if *parent_hash == EventHash::ZERO {
                 Some(index)
             } else {
                 None
@@ -292,7 +295,7 @@ mod detail {
 
     struct DotWriter<'a, T: NetworkEvent + 'a, S: SecretId + 'a> {
         file: BufWriter<File>,
-        gossip_graph: &'a BTreeMap<Hash, Event<T, S::PublicId>>,
+        gossip_graph: &'a Graph<T, S::PublicId>,
         meta_elections: &'a MetaElections<S::PublicId>,
         peer_list: &'a PeerList<S>,
         observations: BTreeMap<&'a ObservationHash, &'a Observation<T, S::PublicId>>,
@@ -304,7 +307,7 @@ mod detail {
 
         fn new(
             file_path: &Path,
-            gossip_graph: &'a BTreeMap<Hash, Event<T, S::PublicId>>,
+            gossip_graph: &'a Graph<T, S::PublicId>,
             meta_elections: &'a MetaElections<S::PublicId>,
             peer_list: &'a PeerList<S>,
             observations: BTreeMap<&'a ObservationHash, &'a Observation<T, S::PublicId>>,
@@ -331,8 +334,8 @@ mod detail {
             self.indent -= 2;
         }
 
-        fn hash_to_short_name(&self, hash: &Hash) -> Option<String> {
-            self.gossip_graph.get(hash).map(|event| event.short_name())
+        fn index_to_short_name(&self, index: EventIndex) -> Option<String> {
+            self.gossip_graph.get(index).map(|event| event.short_name())
         }
 
         fn writeln(&mut self, args: fmt::Arguments) -> io::Result<()> {
@@ -391,27 +394,33 @@ mod detail {
             self.writeln(format_args!("{}{}}}", Self::COMMENT, indent))
         }
 
-        fn calculate_positions(&self) -> BTreeMap<Hash, u64> {
+        fn calculate_positions(&self) -> BTreeMap<EventHash, usize> {
             let mut positions = BTreeMap::new();
             while positions.len() < self.gossip_graph.len() {
-                for (hash, event) in self.gossip_graph.iter() {
-                    if !positions.contains_key(hash) {
-                        let self_parent_pos = if let Some(position) =
-                            parent_pos(event.index_by_creator(), event.self_parent(), &positions)
-                        {
+                for event in self.gossip_graph {
+                    if !positions.contains_key(event.hash()) {
+                        let self_parent_pos = if let Some(position) = parent_pos(
+                            event.index_by_creator(),
+                            self.gossip_graph.self_parent(event),
+                            &positions,
+                        ) {
                             position
                         } else {
                             continue;
                         };
-                        let other_parent_pos = if let Some(position) =
-                            parent_pos(event.index_by_creator(), event.other_parent(), &positions)
-                        {
+                        let other_parent_pos = if let Some(position) = parent_pos(
+                            event.index_by_creator(),
+                            self.gossip_graph.other_parent(event),
+                            &positions,
+                        ) {
                             position
                         } else {
                             continue;
                         };
-                        let _ = positions
-                            .insert(*hash, cmp::max(self_parent_pos, other_parent_pos) + 1);
+                        let _ = positions.insert(
+                            *event.hash(),
+                            cmp::max(self_parent_pos, other_parent_pos) + 1,
+                        );
                         break;
                     }
                 }
@@ -422,7 +431,7 @@ mod detail {
         fn write_subgraph(
             &mut self,
             peer_id: &S::PublicId,
-            positions: &BTreeMap<Hash, u64>,
+            positions: &BTreeMap<EventHash, usize>,
         ) -> io::Result<()> {
             self.writeln(format_args!("  style=invis"))?;
             self.writeln(format_args!("  subgraph cluster_{:?} {{", peer_id))?;
@@ -435,7 +444,7 @@ mod detail {
         fn write_self_parents(
             &mut self,
             peer_id: &S::PublicId,
-            positions: &BTreeMap<Hash, u64>,
+            positions: &BTreeMap<EventHash, usize>,
         ) -> io::Result<()> {
             let mut lines = vec![];
             for event in self
@@ -443,11 +452,14 @@ mod detail {
                 .peer_events(peer_id)
                 .filter_map(|hash| self.gossip_graph.get(hash))
             {
-                let (before_arrow, suffix) = match event.self_parent() {
+                let (before_arrow, suffix) = match event
+                    .self_parent()
+                    .and_then(|index| self.gossip_graph.get(index))
+                {
                     None => (format!("\"{:?}\"", peer_id), "[style=invis]".to_string()),
-                    Some(parent_hash) => {
+                    Some(parent) => {
                         let event_pos = *positions.get(event.hash()).unwrap_or(&0);
-                        let parent_pos = *positions.get(parent_hash).unwrap_or(&0);
+                        let parent_pos = *positions.get(parent.hash()).unwrap_or(&0);
                         let minlen = if event_pos > parent_pos {
                             event_pos - parent_pos
                         } else {
@@ -456,7 +468,7 @@ mod detail {
                         (
                             format!(
                                 "\"{}\"",
-                                self.hash_to_short_name(parent_hash)
+                                self.index_to_short_name(parent.event_index())
                                     .unwrap_or_else(|| "???".to_string())
                             ),
                             format!("[minlen={}]", minlen),
@@ -523,11 +535,11 @@ mod detail {
 
         fn write_event_details(&mut self, peer_id: &S::PublicId) -> io::Result<()> {
             let current_meta_events = self.meta_elections.current_meta_events();
-            for event_hash in self.peer_list.peer_events(peer_id) {
-                if let Some(event) = self.gossip_graph.get(event_hash) {
+            for event_index in self.peer_list.peer_events(peer_id) {
+                if let Some(event) = self.gossip_graph.get(event_index) {
                     let attr = EventAttributes::new(
-                        event,
-                        current_meta_events.get(event_hash),
+                        event.inner(),
+                        current_meta_events.get(&event_index),
                         &self.observations,
                     );
                     self.writeln(format_args!(
@@ -619,7 +631,7 @@ mod detail {
                 for (peer, events) in &election.interesting_events {
                     let event_names: Vec<String> = events
                         .iter()
-                        .filter_map(|hash| self.hash_to_short_name(hash))
+                        .filter_map(|index| self.index_to_short_name(*index))
                         .collect();
                     lines.push(format!(
                         "{}{}{:?} -> {:?}",
@@ -679,9 +691,10 @@ mod detail {
                 let meta_events = election
                     .meta_events
                     .iter()
-                    .filter_map(|(hash, mev)| {
-                        self.gossip_graph.get(hash).map(|event| {
-                            let creator_and_index = (event.creator(), event.index_by_creator());
+                    .filter_map(|(index, mev)| {
+                        self.gossip_graph.get(*index).map(|event| {
+                            let creator_and_index =
+                                (event.inner().creator(), event.index_by_creator());
                             let short_name_and_mev = (event.short_name(), mev);
                             (creator_and_index, short_name_and_mev)
                         })

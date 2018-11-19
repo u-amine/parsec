@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use gossip::{CauseInput, Event};
+use gossip::{CauseInput, Event, EventIndex, Graph, IndexedEventRef};
 use hash::Hash;
 use hash::HASH_LEN;
 use meta_voting::{
@@ -21,7 +21,6 @@ use pom::parser::*;
 use pom::Result as PomResult;
 use pom::{DataInput, Parser};
 use round_hash::RoundHash;
-use serialise;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{self, Read};
@@ -259,7 +258,7 @@ fn parse_event_details() -> Parser<u8, BTreeMap<String, EventDetails>> {
 #[derive(Debug)]
 struct EventDetails {
     cause: CauseInput,
-    last_ancestors: BTreeMap<PeerId, u64>,
+    last_ancestors: BTreeMap<PeerId, usize>,
 }
 
 fn skip_brackets() -> Parser<u8, ()> {
@@ -292,12 +291,12 @@ fn parse_cause() -> Parser<u8, CauseInput> {
     prefix * (initial | request | response | observation) - newline()
 }
 
-fn parse_last_ancestors() -> Parser<u8, BTreeMap<PeerId, u64>> {
+fn parse_last_ancestors() -> Parser<u8, BTreeMap<PeerId, usize>> {
     (comment_prefix() * seq(b"last_ancestors: {") * list(
         parse_peer_id() - seq(b": ") + is_a(digit)
             .repeat(1..)
             .convert(String::from_utf8)
-            .convert(|s| u64::from_str(&s)),
+            .convert(|s| usize::from_str(&s)),
         seq(b", "),
     ) - next_line()).map(|v| v.into_iter().collect())
 }
@@ -576,12 +575,8 @@ fn parse_interesting_content() -> Parser<u8, ObservationMap> {
         - next_line()).map(|observations| {
         observations
             .into_iter()
-            .map(|payload| {
-                (
-                    ObservationHash(Hash::from(serialise(&payload).as_slice())),
-                    payload,
-                )
-            }).collect()
+            .map(|payload| (ObservationHash::from(&payload), payload))
+            .collect()
     })
 }
 
@@ -647,7 +642,7 @@ fn parse_end() -> Parser<u8, ()> {
 /// The event graph and associated info that were parsed from the dumped dot file.
 pub(crate) struct ParsedContents {
     pub our_id: PeerId,
-    pub events: BTreeMap<Hash, Event<Transaction, PeerId>>,
+    pub graph: Graph<Transaction, PeerId>,
     pub meta_elections: MetaElections<PeerId>,
     pub peer_list: PeerList<PeerId>,
     pub observation_map: BTreeMap<ObservationHash, Observation<Transaction, PeerId>>,
@@ -661,7 +656,7 @@ impl ParsedContents {
 
         ParsedContents {
             our_id,
-            events: BTreeMap::new(),
+            graph: Graph::new(),
             meta_elections,
             peer_list,
             observation_map: BTreeMap::new(),
@@ -671,16 +666,11 @@ impl ParsedContents {
 
 #[cfg(test)]
 impl ParsedContents {
-    /// Remove and return the latest (newest) event from the `ParsedContents`, if any.
-    pub fn remove_latest_event(&mut self) -> Option<Event<Transaction, PeerId>> {
-        let hash = *self
-            .events
-            .values()
-            .max_by_key(|event| event.topological_index())
-            .map(|event| event.hash())?;
-        let event = self.events.remove(&hash)?;
-
-        self.peer_list.remove_event(&event);
+    /// Remove and return the last (newest) event from the `ParsedContents`, if any.
+    pub fn remove_last_event(&mut self) -> Option<Event<Transaction, PeerId>> {
+        let (index_0, event) = self.graph.remove_last()?;
+        let index_1 = self.peer_list.remove_last_event(event.creator());
+        assert_eq!(Some(index_0), index_1);
 
         Some(event)
     }
@@ -689,10 +679,8 @@ impl ParsedContents {
     /// Insert event into the `ParsedContents`. Note this does not perform any validations whatsoever,
     /// so this is useful for simulating all kinds of invalid or malicious situations.
     pub fn add_event(&mut self, event: Event<Transaction, PeerId>) {
-        unwrap!(self.peer_list.add_event(&event));
-
-        let hash = *event.hash();
-        let _ = self.events.insert(hash, event);
+        let indexed_event = self.graph.insert(event);
+        self.peer_list.add_event(indexed_event);
     }
 }
 
@@ -767,7 +755,7 @@ fn convert_into_parsed_contents(result: ParsedFile) -> ParsedContents {
         .into_iter()
         .map(|(id, data)| (id, (data.state, data.membership_list)))
         .collect();
-    let peer_list = PeerList::new_from_dot_input(our_id, &parsed_contents.events, peer_data);
+    let peer_list = PeerList::new_from_dot_input(our_id, &parsed_contents.graph, peer_data);
 
     parsed_contents.peer_list = peer_list;
     parsed_contents.observation_map = meta_elections
@@ -785,7 +773,7 @@ fn convert_into_parsed_contents(result: ParsedFile) -> ParsedContents {
 
 fn convert_to_meta_elections(
     meta_elections: ParsedMetaElections,
-    event_hashes: &mut BTreeMap<String, Hash>,
+    event_indices: &mut BTreeMap<String, EventIndex>,
 ) -> MetaElections<PeerId> {
     let meta_elections_map = meta_elections
         .meta_elections
@@ -793,7 +781,7 @@ fn convert_to_meta_elections(
         .map(|(handle, election)| {
             (
                 handle,
-                convert_to_meta_election(handle, election, event_hashes),
+                convert_to_meta_election(handle, election, event_indices),
             )
         }).collect();
     MetaElections::from_map_and_history(meta_elections_map, meta_elections.consensus_history)
@@ -802,7 +790,7 @@ fn convert_to_meta_elections(
 fn convert_to_meta_election(
     handle: MetaElectionHandle,
     meta_election: ParsedMetaElection,
-    event_hashes: &mut BTreeMap<String, Hash>,
+    event_indices: &mut BTreeMap<String, EventIndex>,
 ) -> MetaElection<PeerId> {
     MetaElection {
         meta_events: meta_election
@@ -810,9 +798,9 @@ fn convert_to_meta_election(
             .into_iter()
             .map(|(ev_id, mev)| {
                 (
-                    *event_hashes
+                    *event_indices
                         .entry(ev_id.clone())
-                        .or_insert_with(|| Hash::from(ev_id.as_bytes())),
+                        .or_insert_with(|| EventIndex::PHONY),
                     mev,
                 )
             }).collect(),
@@ -829,7 +817,7 @@ fn convert_to_meta_election(
                         .into_iter()
                         .map(|ev_id| {
                             *unwrap!(
-                                event_hashes.get(&ev_id),
+                                event_indices.get(&ev_id),
                                 "Missing {:?} from meta_events section of meta election {:?}.  \
                                 This meta-event must be defined here as it's an Interesting Event.",
                                 ev_id,
@@ -842,7 +830,7 @@ fn convert_to_meta_election(
         start_index: meta_election.start_index,
         payload_hash: meta_election
             .payload
-            .map(|payload| ObservationHash(Hash::from(serialise(&payload).as_slice()))),
+            .map(|payload| ObservationHash::from(&payload)),
     }
 }
 
@@ -850,42 +838,60 @@ fn create_events(
     graph: &mut BTreeMap<String, ParsedEvent>,
     mut details: BTreeMap<String, EventDetails>,
     parsed_contents: &mut ParsedContents,
-) -> BTreeMap<String, Hash> {
-    let mut event_hashes = BTreeMap::new();
+) -> BTreeMap<String, EventIndex> {
     let mut event_indices = BTreeMap::new();
+
     while !graph.is_empty() {
-        let (ev_id, next_parsed_event) = next_topological_event(graph, &event_hashes);
+        let (ev_id, next_parsed_event) = next_topological_event(graph, &event_indices);
         let next_event_details = unwrap!(details.remove(&ev_id));
-        let self_parent_hash = next_parsed_event
-            .self_parent
-            .and_then(|ref id| event_hashes.get(id).cloned());
-        let index = self_parent_hash
-            .and_then(|hash| event_indices.get(&hash))
-            .map(|index| *index + 1)
-            .unwrap_or(0u64);
+
+        let (self_parent, other_parent, index_by_creator) = {
+            let self_parent = next_parsed_event
+                .self_parent
+                .and_then(|ref id| get_event_by_id(&parsed_contents.graph, &event_indices, id));
+
+            let other_parent = next_parsed_event
+                .other_parent
+                .and_then(|ref id| get_event_by_id(&parsed_contents.graph, &event_indices, id));
+
+            let index_by_creator = self_parent
+                .map(|ie| ie.index_by_creator() + 1)
+                .unwrap_or(0usize);
+
+            (
+                self_parent.map(|e| (e.event_index(), *e.hash())),
+                other_parent.map(|e| (e.event_index(), *e.hash())),
+                index_by_creator,
+            )
+        };
+
         let next_event = Event::new_from_dot_input(
             &next_parsed_event.creator,
             next_event_details.cause,
-            self_parent_hash,
-            next_parsed_event
-                .other_parent
-                .and_then(|ref id| event_hashes.get(id).cloned()),
-            parsed_contents.events.len(),
-            index,
+            self_parent,
+            other_parent,
+            index_by_creator,
             next_event_details.last_ancestors.clone(),
         );
-        let _ = event_indices.insert(*next_event.hash(), index);
-        let _ = event_hashes.insert(ev_id, *next_event.hash());
-        let _ = parsed_contents
-            .events
-            .insert(*next_event.hash(), next_event);
+
+        let index = parsed_contents.graph.insert(next_event).event_index();
+        let _ = event_indices.insert(ev_id, index);
     }
-    event_hashes
+
+    event_indices
+}
+
+fn get_event_by_id<'a>(
+    graph: &'a Graph<Transaction, PeerId>,
+    indices: &BTreeMap<String, EventIndex>,
+    id: &str,
+) -> Option<IndexedEventRef<'a, Transaction, PeerId>> {
+    indices.get(id).cloned().and_then(|index| graph.get(index))
 }
 
 fn next_topological_event(
     graph: &mut BTreeMap<String, ParsedEvent>,
-    hashes: &BTreeMap<String, Hash>,
+    indices: &BTreeMap<String, EventIndex>,
 ) -> (String, ParsedEvent) {
     let next_key = unwrap!(
         graph
@@ -893,12 +899,12 @@ fn next_topological_event(
             .filter(|&(_, ref event)| event
                 .self_parent
                 .as_ref()
-                .map(|ev_id| hashes.contains_key(ev_id))
+                .map(|ev_id| indices.contains_key(ev_id))
                 .unwrap_or(true)
                 && event
                     .other_parent
                     .as_ref()
-                    .map(|ev_id| hashes.contains_key(ev_id))
+                    .map(|ev_id| indices.contains_key(ev_id))
                     .unwrap_or(true)).map(|(key, _)| key)
             .next()
     ).clone();
@@ -911,15 +917,13 @@ mod tests {
     use super::*;
     use dev_utils::{Environment, RngChoice, Schedule, ScheduleOptions};
     use dump_graph::DIR;
+    use gossip::GraphSnapshot;
     use maidsafe_utilities::serialisation::deserialise;
-    use meta_voting::MetaElections;
-    use mock::{PeerId, Transaction};
+    use meta_voting::MetaElectionsSnapshot;
+    use mock::PeerId;
     use std::fs;
 
-    type SerialisedGraph = (
-        BTreeMap<Hash, Event<Transaction, PeerId>>,
-        MetaElections<PeerId>,
-    );
+    type Snapshot = (GraphSnapshot, MetaElectionsSnapshot<PeerId>);
 
     // Alter the seed here to reproduce failures
     static SEED: RngChoice = RngChoice::SeededRandom;
@@ -951,16 +955,17 @@ mod tests {
             let mut core_file = unwrap!(File::open(entry.path()));
             let mut core_info = Vec::new();
             assert_ne!(unwrap!(core_file.read_to_end(&mut core_info)), 0);
-
-            let (mut gossip_graph, meta_elections): SerialisedGraph =
-                unwrap!(deserialise(&core_info));
+            let expected_snapshot: Snapshot = unwrap!(deserialise(&core_info));
 
             let mut dot_file_path = entry.path();
             assert!(dot_file_path.set_extension("dot"));
-            let parsed_result = unwrap!(parse_dot_file(&dot_file_path));
+            let parsed = unwrap!(parse_dot_file(&dot_file_path));
+            let actual_snapshot = (
+                GraphSnapshot::new(&parsed.graph),
+                MetaElectionsSnapshot::new(&parsed.meta_elections, &parsed.graph),
+            );
 
-            assert_eq!(gossip_graph, parsed_result.events);
-            assert_eq!(meta_elections, parsed_result.meta_elections);
+            assert_eq!(actual_snapshot, expected_snapshot);
         }
         assert_ne!(num_of_files, 0u8);
     }

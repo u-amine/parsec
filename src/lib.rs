@@ -115,7 +115,7 @@ pub use block::Block;
 #[cfg(feature = "dump-graphs")]
 pub use dump_graph::DIR;
 pub use error::{Error, Result};
-pub use gossip::{PackedEvent, Request, Response};
+pub use gossip::{EventHash, PackedEvent, Request, Response};
 pub use id::{Proof, PublicId, SecretId};
 pub use network_event::NetworkEvent;
 pub use observation::{Malice, Observation};

@@ -8,7 +8,7 @@
 
 #[cfg(any(test, feature = "testing"))]
 use super::event::CauseInput;
-use hash::Hash;
+use super::event_hash::EventHash;
 use id::PublicId;
 #[cfg(any(test, feature = "testing"))]
 use mock::{PeerId, Transaction};
@@ -21,17 +21,17 @@ use vote::Vote;
 pub(super) enum Cause<T: NetworkEvent, P: PublicId> {
     // Hashes are the latest `Event` of own and the peer which sent the request.
     Request {
-        self_parent: Hash,
-        other_parent: Hash,
+        self_parent: EventHash,
+        other_parent: EventHash,
     },
     // Hashes are the latest `Event` of own and the peer which sent the response.
     Response {
-        self_parent: Hash,
-        other_parent: Hash,
+        self_parent: EventHash,
+        other_parent: EventHash,
     },
     // Hash of our latest `Event`. Vote for a single network event of type `T`.
     Observation {
-        self_parent: Hash,
+        self_parent: EventHash,
         vote: Vote<T, P>,
     },
     // Initial empty `Event` of this peer.
@@ -58,13 +58,13 @@ impl Cause<Transaction, PeerId> {
     pub(crate) fn new_from_dot_input(
         input: CauseInput,
         creator: &PeerId,
-        self_parent: Option<Hash>,
-        other_parent: Option<Hash>,
+        self_parent: Option<EventHash>,
+        other_parent: Option<EventHash>,
     ) -> Self {
         // When the dot file contains only partial graph, we have to manually change the info of
         // ancestor to null for some events. In that case, populate ancestors with empty hash.
-        let self_parent = self_parent.unwrap_or(Hash::ZERO);
-        let other_parent = other_parent.unwrap_or(Hash::ZERO);
+        let self_parent = self_parent.unwrap_or(EventHash::ZERO);
+        let other_parent = other_parent.unwrap_or(EventHash::ZERO);
 
         match input {
             CauseInput::Initial => Cause::Initial,
