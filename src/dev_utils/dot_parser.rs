@@ -642,7 +642,7 @@ fn parse_end() -> Parser<u8, ()> {
 /// The event graph and associated info that were parsed from the dumped dot file.
 pub(crate) struct ParsedContents {
     pub our_id: PeerId,
-    pub events: Graph<Transaction, PeerId>,
+    pub graph: Graph<Transaction, PeerId>,
     pub meta_elections: MetaElections<PeerId>,
     pub peer_list: PeerList<PeerId>,
     pub observation_map: BTreeMap<ObservationHash, Observation<Transaction, PeerId>>,
@@ -656,7 +656,7 @@ impl ParsedContents {
 
         ParsedContents {
             our_id,
-            events: Graph::new(),
+            graph: Graph::new(),
             meta_elections,
             peer_list,
             observation_map: BTreeMap::new(),
@@ -668,7 +668,7 @@ impl ParsedContents {
 impl ParsedContents {
     /// Remove and return the last (newest) event from the `ParsedContents`, if any.
     pub fn remove_last_event(&mut self) -> Option<Event<Transaction, PeerId>> {
-        let (index_0, event) = self.events.remove_last()?;
+        let (index_0, event) = self.graph.remove_last()?;
         let index_1 = self.peer_list.remove_last_event(event.creator());
         assert_eq!(Some(index_0), index_1);
 
@@ -679,7 +679,7 @@ impl ParsedContents {
     /// Insert event into the `ParsedContents`. Note this does not perform any validations whatsoever,
     /// so this is useful for simulating all kinds of invalid or malicious situations.
     pub fn add_event(&mut self, event: Event<Transaction, PeerId>) {
-        let indexed_event = self.events.insert(event);
+        let indexed_event = self.graph.insert(event);
         self.peer_list.add_event(indexed_event);
     }
 }
@@ -755,7 +755,7 @@ fn convert_into_parsed_contents(result: ParsedFile) -> ParsedContents {
         .into_iter()
         .map(|(id, data)| (id, (data.state, data.membership_list)))
         .collect();
-    let peer_list = PeerList::new_from_dot_input(our_id, &parsed_contents.events, peer_data);
+    let peer_list = PeerList::new_from_dot_input(our_id, &parsed_contents.graph, peer_data);
 
     parsed_contents.peer_list = peer_list;
     parsed_contents.observation_map = meta_elections
@@ -848,11 +848,11 @@ fn create_events(
         let (self_parent, other_parent, index_by_creator) = {
             let self_parent = next_parsed_event
                 .self_parent
-                .and_then(|ref id| get_event_by_id(&parsed_contents.events, &event_indices, id));
+                .and_then(|ref id| get_event_by_id(&parsed_contents.graph, &event_indices, id));
 
             let other_parent = next_parsed_event
                 .other_parent
-                .and_then(|ref id| get_event_by_id(&parsed_contents.events, &event_indices, id));
+                .and_then(|ref id| get_event_by_id(&parsed_contents.graph, &event_indices, id));
 
             let index_by_creator = self_parent
                 .map(|ie| ie.index_by_creator() + 1)
@@ -874,7 +874,7 @@ fn create_events(
             next_event_details.last_ancestors.clone(),
         );
 
-        let index = parsed_contents.events.insert(next_event).event_index();
+        let index = parsed_contents.graph.insert(next_event).event_index();
         let _ = event_indices.insert(ev_id, index);
     }
 
@@ -961,8 +961,8 @@ mod tests {
             assert!(dot_file_path.set_extension("dot"));
             let parsed = unwrap!(parse_dot_file(&dot_file_path));
             let actual_snapshot = (
-                GraphSnapshot::new(&parsed.events),
-                MetaElectionsSnapshot::new(&parsed.meta_elections, &parsed.events),
+                GraphSnapshot::new(&parsed.graph),
+                MetaElectionsSnapshot::new(&parsed.meta_elections, &parsed.graph),
             );
 
             assert_eq!(actual_snapshot, expected_snapshot);

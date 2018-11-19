@@ -226,7 +226,7 @@ mod tests {
     fn ancestors_iterator() {
         // Generated with RNG seed: [174994228, 1445633118, 3041276290, 90293447].
         let contents = parse_test_dot_file("carol.dot");
-        let graph = contents.events;
+        let graph = contents.graph;
 
         let event = unwrap!(find_event_by_short_name(&graph, "B_4"));
 

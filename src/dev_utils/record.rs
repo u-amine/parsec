@@ -49,7 +49,7 @@ impl From<ParsedContents> for Record {
         // Find the genesis group
         let genesis_group = unwrap!(
             contents
-                .events
+                .graph
                 .iter()
                 .filter_map(|event| extract_genesis_group(event.inner()))
                 .next()
@@ -64,9 +64,9 @@ impl From<ParsedContents> for Record {
 
         let mut actions = Vec::new();
         let mut skip_our_accusations = false;
-        let mut known = vec![false; contents.events.len()];
+        let mut known = vec![false; contents.graph.len()];
 
-        for event in &contents.events {
+        for event in &contents.graph {
             if event.topological_index() == 0 {
                 // Skip the initial event
                 assert!(event.is_initial());
@@ -101,7 +101,7 @@ impl From<ParsedContents> for Record {
                     let other_parent = unwrap!(
                         event
                             .other_parent()
-                            .and_then(|hash| contents.events.get(hash)),
+                            .and_then(|hash| contents.graph.get(hash)),
                         "Sync event without other-parent: {:?}",
                         *event
                     );
@@ -109,7 +109,7 @@ impl From<ParsedContents> for Record {
                     let src = other_parent.creator().clone();
 
                     let mut events_to_gossip = Vec::new();
-                    for event in contents.events.ancestors(other_parent) {
+                    for event in contents.graph.ancestors(other_parent) {
                         if known[event.topological_index()] {
                             continue;
                         } else {
