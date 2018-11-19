@@ -57,6 +57,10 @@ quick_error! {
         DuplicateVote {
             display("Our node has already voted for this network event.")
         }
+        /// The peer sent a message to us before knowing we could handle it.
+        PrematureGossip {
+            display("The peer did not know we could handle a message from it.")
+        }
         /// Logic error.
         Logic {
             display("This a logic error and represents a flaw in the code.")
