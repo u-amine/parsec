@@ -331,9 +331,15 @@ impl<P: PublicId> MetaElections<P> {
     /// Mark the given election as decided by the given peer. If there are no more undecided peers,
     /// the election is removed.
     pub fn mark_as_decided(&mut self, handle: MetaElectionHandle, peer_id: &P) {
+        trace!(
+            "mark_as_decided: Marking meta-election {:?} as decided by {:?}",
+            handle,
+            peer_id
+        );
         if let Entry::Occupied(mut entry) = self.previous_elections.entry(handle) {
             let _ = entry.get_mut().undecided_voters.remove(peer_id);
             if entry.get().undecided_voters.is_empty() {
+                trace!("mark_as_decided: Removing meta-election {:?}", handle);
                 let _ = entry.remove();
             }
         } else {
