@@ -1459,7 +1459,8 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             }).count()
     }
 
-    // Returns whether event X can strongly see the event Y during the evaluation of the given election.
+    // Returns whether event X can strongly see the event Y during the evaluation of the given
+    // election.
     fn strongly_sees<A, B>(&self, election: MetaElectionHandle, x: A, y: B) -> bool
     where
         A: AsRef<Event<T, S::PublicId>>,
@@ -2737,8 +2738,8 @@ mod functional_tests {
                 &carol.peer_list,
             );
 
-            // Check that the first duplicate triggers an accusation by Alice, but that the duplicate is
-            // still added to the graph.
+            // Check that the first duplicate triggers an accusation by Alice, but that the
+            // duplicate is still added to the graph.
             let mut alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
             let carols_valid_vote_hash =
                 *unwrap!(find_event_by_short_name(&alice.graph, "C_4")).hash();
@@ -2750,8 +2751,8 @@ mod functional_tests {
             assert_eq!(alice.pending_accusations, expected_accusations);
             assert!(alice.graph.contains(&first_duplicate_hash));
 
-            // Check that the second one doesn't trigger any further accusation, but is also added to
-            // the graph.
+            // Check that the second one doesn't trigger any further accusation, but is also added
+            // to the graph.
             let second_duplicate_hash = *second_duplicate.hash();
             unwrap!(alice.add_event(second_duplicate));
             assert_eq!(alice.pending_accusations, expected_accusations);
@@ -2777,8 +2778,8 @@ mod functional_tests {
             );
             let c_4_hash = *c_4.hash();
 
-            // Check that adding C_4 triggers an accusation by Alice, but that C_4 is still added to the
-            // graph.
+            // Check that adding C_4 triggers an accusation by Alice, but that C_4 is still added
+            // to the graph.
             let mut alice = Parsec::from_parsed_contents(parse_test_dot_file("alice.dot"));
 
             let expected_accusations = vec![(
@@ -2863,8 +2864,8 @@ mod functional_tests {
                 bob_peer_list.peer_id_hashes().collect::<Vec<_>>()
             );
 
-            // Read the dot file again so we have a set of events we can manually add to Bob instead of
-            // sending gossip.
+            // Read the dot file again so we have a set of events we can manually add to Bob instead
+            // of sending gossip.
             let alice_parsed_contents = parse_test_dot_file("alice.dot");
 
             let c_0_index = unwrap!(find_event_by_short_name(
@@ -2885,8 +2886,8 @@ mod functional_tests {
                 "B_2"
             )).event_index();
 
-            // Carol is marked as active peer so that Bob's peer_list will accept C_0, but Carol is not
-            // part of the membership_list
+            // Carol is marked as active peer so that Bob's peer_list will accept C_0, but Carol is
+            // not part of the membership_list
             let carol_id = PeerId::new("Carol");
             bob.peer_list.add_peer(carol_id, PeerState::active());
             {
@@ -2899,8 +2900,8 @@ mod functional_tests {
                 alice_parsed_contents.graph.into_iter().collect();
 
             // This malice is setup in two events.
-            // A_2 has C_0 from Carol as other parent as Carol has gossiped to Alice. Carol is however
-            // not part of the section and Alice should not have accepted it.
+            // A_2 has C_0 from Carol as other parent as Carol has gossiped to Alice. Carol is
+            // however not part of the section and Alice should not have accepted it.
             let a_2 = unwrap!(alice_events.remove(&a_2_index));
             unwrap!(bob.add_event(a_2));
 
@@ -2908,8 +2909,8 @@ mod functional_tests {
             let b_2 = unwrap!(alice_events.remove(&b_2_index));
             unwrap!(bob.add_event(b_2));
 
-            // Bob should now have seen that Alice in A_2 incorrectly reported gossip from Carol. Check
-            // that this triggers an accusation
+            // Bob should now have seen that Alice in A_2 incorrectly reported gossip from Carol.
+            // Check that this triggers an accusation
             let expected_accusations = (
                 alice.our_pub_id().clone(),
                 Malice::InvalidGossipCreator(a_2_hash),
@@ -3016,8 +3017,8 @@ mod functional_tests {
 
         #[test]
         #[ignore]
-        // Carol received `invalid_accusation` from Alice first, then received gossip from Bob, which
-        // should have raised an accomplice accusation against Alice but didn't.
+        // Carol received `invalid_accusation` from Alice first, then received gossip from Bob,
+        // which should have raised an accomplice accusation against Alice but didn't.
         fn accomplice_separate() {
             let (invalid_accusation, alice) = create_invalid_accusation();
 
@@ -3094,14 +3095,14 @@ mod functional_tests {
 
         #[test]
         fn handle_fork() {
-            // In this scenario, Alice creates two descendants of A_3 and sends one of them to Bob, and
-            // the other one to Dave. When Bob gossips to Dave afterwards, Dave is made aware of both
-            // sides of the fork and should raise an accusation.
+            // In this scenario, Alice creates two descendants of A_3 and sends one of them to Bob,
+            // and the other one to Dave. When Bob gossips to Dave afterwards, Dave is made aware of
+            // both sides of the fork and should raise an accusation.
             let bob_contents = parse_test_dot_file("bob.dot");
             let dave_contents = parse_test_dot_file("dave.dot");
             let a_3_hash = *unwrap!(find_event_by_short_name(&bob_contents.graph, "A_3")).hash();
-            // Bob and Dave have different notions of which event is the fourth one by Alice - here we
-            // save the hashes of these two events that could be considered A_4
+            // Bob and Dave have different notions of which event is the fourth one by Alice - here
+            // we save the hashes of these two events that could be considered A_4.
             let a_4_bob_hash =
                 *unwrap!(find_event_by_short_name(&bob_contents.graph, "A_4")).hash();
             let a_4_dave_hash =
@@ -3136,5 +3137,43 @@ mod functional_tests {
             assert_eq!(*hash, a_3_hash);
         }
 
+        #[test]
+        fn self_parent_by_different_creator() {
+            let test_folder = "parsec_functional_tests_handle_malice_stale_other_parent";
+            let carol = Parsec::from_parsed_contents(parse_dot_file_with_test_name(
+                "carol.dot",
+                test_folder,
+            ));
+
+            // Carol creates an event with one of Bob's as the self-parent.
+            let b_2_hash = *unwrap!(find_event_by_short_name(&carol.graph, "B_2")).hash();
+            let c_4 = Event::new_from_observation(
+                b_2_hash,
+                Observation::OpaquePayload(Transaction::new("ABCD")),
+                &carol.graph,
+                &carol.peer_list,
+            );
+            let c_4_hash = *c_4.hash();
+            let packed_c_4 = c_4.pack();
+
+            let mut alice = Parsec::from_parsed_contents(parse_dot_file_with_test_name(
+                "alice.dot",
+                test_folder,
+            ));
+
+            // Try to add the event.
+            assert_err!(Error::InvalidEvent, alice.add_event(c_4));
+
+            // The invalid event should trigger an accusation vote to be raised immediately, and the
+            // invalid event should not be added to the graph.
+            let a_2 = unwrap!(find_event_by_short_name(&alice.graph, "A_2"));
+            let expected_observation = Observation::Accusation {
+                offender: carol.our_pub_id().clone(),
+                malice: Malice::SelfParentByDifferentCreator(Box::new(packed_c_4)),
+            };
+
+            assert_eq!(*unwrap!(a_2.vote()).payload(), expected_observation);
+            assert!(!alice.graph.contains(&c_4_hash));
+        }
     }
 }
