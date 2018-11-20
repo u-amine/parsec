@@ -511,6 +511,10 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
                     .change_peer_state(&event_creator, PeerState::RECV);
             }
         }
+
+        #[cfg(feature = "malice-detection")]
+        self.detect_premature_gossip()?;
+
         Ok(prev_forking_peers)
     }
 
@@ -1884,6 +1888,11 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         if let Some((offender, event_hash)) = accusation {
             self.accuse(offender, Malice::InvalidGossipCreator(event_hash))
         }
+    }
+
+    fn detect_premature_gossip(&self) -> Result<()> {
+        self.confirm_self_state(PeerState::VOTE)
+            .map_err(|_| Error::PrematureGossip)
     }
 
     fn genesis_group(&self) -> BTreeSet<&S::PublicId> {
