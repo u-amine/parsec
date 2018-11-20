@@ -98,6 +98,9 @@ mod peer_list;
 mod round_hash;
 mod vote;
 
+#[cfg(test)]
+mod functional_tests;
+
 #[doc(hidden)]
 #[cfg(any(test, feature = "testing"))]
 pub mod dev_utils;
