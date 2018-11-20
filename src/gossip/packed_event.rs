@@ -9,8 +9,12 @@
 use super::content::Content;
 #[cfg(all(test, feature = "malice-detection"))]
 use super::event_hash::EventHash;
+#[cfg(all(test, feature = "malice-detection"))]
+use hash::Hash;
 use id::PublicId;
 use network_event::NetworkEvent;
+#[cfg(all(test, feature = "malice-detection"))]
+use serialise;
 use std::fmt::{self, Debug, Formatter};
 
 /// Packed event contains only content and signature.
@@ -38,5 +42,9 @@ impl<T: NetworkEvent, P: PublicId> Debug for PackedEvent<T, P> {
 impl<T: NetworkEvent, P: PublicId> PackedEvent<T, P> {
     pub(crate) fn self_parent(&self) -> Option<&EventHash> {
         self.content.self_parent()
+    }
+
+    pub(crate) fn hash(&self) -> EventHash {
+        EventHash(Hash::from(serialise(&self.content).as_slice()))
     }
 }
