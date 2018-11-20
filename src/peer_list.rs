@@ -574,7 +574,7 @@ impl<P: PublicId> Peer<P> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum MembershipListChange<P> {
     Add(P),
     Remove(P),

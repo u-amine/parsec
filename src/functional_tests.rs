@@ -16,8 +16,7 @@ use mock::{self, PeerId, Transaction};
 use network_event::NetworkEvent;
 use observation::Observation;
 use parsec::TestParsec;
-use peer_list::PeerListSnapshot;
-use peer_list::PeerState;
+use peer_list::{MembershipListChange, PeerListSnapshot, PeerState};
 use std::collections::BTreeSet;
 
 macro_rules! assert_err {
@@ -195,18 +194,38 @@ fn add_peer() {
     // Generated with RNG seed: [411278735, 3293288956, 208850454, 2872654992].
     let mut parsed_contents = parse_test_dot_file("alice.dot");
 
-    // The final decision to add Frank is reached in D_18, so pop this event for now.
+    // The final decision to add Fred is reached in D_18, so pop this event for now.
     let d_18 = unwrap!(parsed_contents.remove_last_event());
 
     let mut alice = TestParsec::from_parsed_contents(parsed_contents);
     let genesis_group: BTreeSet<_> = alice.peer_list().all_ids().cloned().collect();
 
+    let alice_id = PeerId::new("Alice");
+    let bob_id = PeerId::new("Bob");
+    let carol_id = PeerId::new("Carol");
+    let dave_id = PeerId::new("Dave");
+    let eric_id = PeerId::new("Eric");
     let fred_id = PeerId::new("Fred");
+    let event_index = 18;
+    let mut alice_membership_list_for_dave = vec![
+        (event_index, MembershipListChange::Add(alice_id.clone())),
+        (event_index, MembershipListChange::Add(bob_id)),
+        (event_index, MembershipListChange::Add(carol_id)),
+        (event_index, MembershipListChange::Add(dave_id.clone())),
+        (event_index, MembershipListChange::Add(eric_id)),
+    ];
     assert!(
         !alice
             .peer_list()
             .all_ids()
             .any(|peer_id| *peer_id == fred_id)
+    );
+    assert_eq!(
+        alice
+            .peer_list()
+            .peer_membership_list_changes(&dave_id)
+            .to_vec(),
+        alice_membership_list_for_dave
     );
 
     let alice_snapshot = Snapshot::new(&alice);
@@ -224,13 +243,20 @@ fn add_peer() {
             .all_ids()
             .any(|peer_id| *peer_id == fred_id)
     );
+    alice_membership_list_for_dave.push((18, MembershipListChange::Add(fred_id.clone())));
+    assert_eq!(
+        alice
+            .peer_list()
+            .peer_membership_list_changes(&dave_id)
+            .to_vec(),
+        alice_membership_list_for_dave
+    );
 
     // Construct Fred's Parsec instance.
     let mut fred = TestParsec::from_existing(fred_id, &genesis_group, &genesis_group);
 
     // Create a "naughty Carol" instance where the graph only shows four peers existing before
     // adding Fred.
-    let alice_id = PeerId::new("Alice");
     #[cfg(feature = "malice-detection")]
     {
         parsed_contents = parse_test_dot_file("carol.dot");
@@ -261,7 +287,11 @@ fn remove_peer() {
     let a_last = unwrap!(parsed_contents.remove_last_event());
 
     let mut alice = TestParsec::from_parsed_contents(parsed_contents);
+    let alice_id = PeerId::new("Alice");
     let eric_id = PeerId::new("Eric");
+    let event_index = 0;
+    let mut alice_membership_list_for_alice =
+        vec![(event_index, MembershipListChange::Add(alice_id.clone()))];
 
     assert!(
         alice
@@ -273,12 +303,28 @@ fn remove_peer() {
         alice.peer_list().peer_state(&eric_id),
         PeerState::inactive()
     );
+    assert_eq!(
+        alice
+            .peer_list()
+            .peer_membership_list_changes(&alice_id)
+            .to_vec(),
+        alice_membership_list_for_alice
+    );
 
     // Add event now which shall result in Alice removing Eric.
     unwrap!(alice.add_event(a_last));
     assert_eq!(
         alice.peer_list().peer_state(&eric_id),
         PeerState::inactive()
+    );
+    alice_membership_list_for_alice
+        .push((event_index, MembershipListChange::Remove(eric_id.clone())));
+    assert_eq!(
+        alice
+            .peer_list()
+            .peer_membership_list_changes(&alice_id)
+            .to_vec(),
+        alice_membership_list_for_alice
     );
 
     // Try calling `create_gossip()` for Eric shall result in error.
