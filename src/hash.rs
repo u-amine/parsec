@@ -7,7 +7,6 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use std::cmp::Ordering;
-use std::fmt::Display;
 use std::fmt::{self, Debug, Formatter};
 use tiny_keccak;
 
@@ -35,11 +34,6 @@ impl Hash {
     pub fn from_bytes(bytes: [u8; HASH_LEN]) -> Self {
         Hash(bytes)
     }
-
-    #[cfg(feature = "dump-graphs")]
-    pub fn as_full_string(&self) -> String {
-        format!("{}", HashDisplay(self))
-    }
 }
 
 impl<'a> From<&'a [u8]> for Hash {
@@ -49,7 +43,7 @@ impl<'a> From<&'a [u8]> for Hash {
 }
 
 impl Debug for Hash {
-    #[cfg(feature = "dump-graphs")]
+    #[cfg(any(test, feature = "testing", feature = "dump-graphs"))]
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         write!(
             formatter,
@@ -58,19 +52,31 @@ impl Debug for Hash {
         )
     }
 
-    #[cfg(not(feature = "dump-graphs"))]
+    #[cfg(not(any(test, feature = "testing", feature = "dump-graphs")))]
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
-        write!(formatter, "{}", HashDisplay(self))
+        write!(formatter, "{}", self::full::FullDisplay(self))
     }
 }
 
-struct HashDisplay<'a>(&'a Hash);
+#[cfg(any(feature = "dump-graphs", not(any(test, feature = "testing"))))]
+mod full {
+    use super::*;
+    use std::fmt::Display;
 
-impl<'a> Display for HashDisplay<'a> {
-    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
-        for byte in &(self.0).0 {
-            write!(formatter, "{:02x}", byte)?;
+    impl Hash {
+        pub fn full_display(&self) -> FullDisplay {
+            FullDisplay(self)
         }
-        Ok(())
+    }
+
+    pub struct FullDisplay<'a>(pub &'a Hash);
+
+    impl<'a> Display for FullDisplay<'a> {
+        fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+            for byte in &(self.0).0 {
+                write!(formatter, "{:02x}", byte)?;
+            }
+            Ok(())
+        }
     }
 }
