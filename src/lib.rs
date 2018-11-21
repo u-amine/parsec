@@ -98,7 +98,7 @@ mod peer_list;
 mod round_hash;
 mod vote;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 mod functional_tests;
 
 #[doc(hidden)]

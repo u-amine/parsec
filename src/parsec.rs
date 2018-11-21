@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use block::Block;
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 use dev_utils::ParsedContents;
 use dump_graph;
 use error::{Error, Result};
@@ -16,13 +16,13 @@ use gossip::{
 };
 use id::{PublicId, SecretId};
 use meta_voting::{MetaElectionHandle, MetaElections, MetaEvent, MetaEventBuilder, MetaVote, Step};
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 use mock::{PeerId, Transaction};
 use network_event::NetworkEvent;
 use observation::{Malice, Observation, ObservationHash};
 use peer_list::{PeerList, PeerState};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 use std::ops::{Deref, DerefMut};
 use std::{mem, usize};
 use vote::Vote;
@@ -1957,7 +1957,7 @@ impl<T: NetworkEvent, P: PublicId> ObservationInfo<T, P> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 impl Parsec<Transaction, PeerId> {
     pub(crate) fn from_parsed_contents(mut parsed_contents: ParsedContents) -> Self {
         let mut parsec = Parsec::empty(parsed_contents.our_id, &BTreeSet::new(), is_supermajority);
@@ -2006,10 +2006,10 @@ impl Parsec<Transaction, PeerId> {
 }
 
 /// Wrapper around `Parsec` that exposes additional functionality useful for testing.
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 pub(crate) struct TestParsec<T: NetworkEvent, S: SecretId>(Parsec<T, S>);
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 impl<T: NetworkEvent, S: SecretId> TestParsec<T, S> {
     pub fn from_genesis(our_id: S, genesis_group: &BTreeSet<S::PublicId>) -> Self {
         TestParsec(Parsec::from_genesis(
@@ -2117,14 +2117,14 @@ impl<T: NetworkEvent, S: SecretId> TestParsec<T, S> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 impl TestParsec<Transaction, PeerId> {
     pub(crate) fn from_parsed_contents(parsed_contents: ParsedContents) -> Self {
         TestParsec(Parsec::from_parsed_contents(parsed_contents))
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 impl<T: NetworkEvent, S: SecretId> Deref for TestParsec<T, S> {
     type Target = Parsec<T, S>;
 
@@ -2133,7 +2133,7 @@ impl<T: NetworkEvent, S: SecretId> Deref for TestParsec<T, S> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 impl<T: NetworkEvent, S: SecretId> DerefMut for TestParsec<T, S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0

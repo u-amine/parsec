@@ -664,7 +664,7 @@ impl ParsedContents {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 impl ParsedContents {
     /// Remove and return the last (newest) event from the `ParsedContents`, if any.
     pub fn remove_last_event(&mut self) -> Option<Event<Transaction, PeerId>> {
