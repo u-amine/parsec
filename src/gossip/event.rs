@@ -200,6 +200,16 @@ impl<T: NetworkEvent, P: PublicId> Event<T, P> {
         self.cache.other_parent
     }
 
+    #[cfg(test)]
+    pub fn self_parent_hash(&self) -> Option<&EventHash> {
+        self.content.self_parent()
+    }
+
+    #[cfg(test)]
+    pub fn other_parent_hash(&self) -> Option<&EventHash> {
+        self.content.other_parent()
+    }
+
     pub fn hash(&self) -> &EventHash {
         &self.cache.hash
     }
