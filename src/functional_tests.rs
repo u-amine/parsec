@@ -1271,4 +1271,61 @@ mod handle_malice {
         // B_2 should not have been inserted into Alice's graph
         assert!(!alice.graph().contains(&b_2_hash));
     }
+
+    #[test]
+    fn premature_gossip() {
+        // Generated with RNG seed: [411278735, 3293288956, 208850454, 2872654992].
+        // Copied from add_peer
+        let mut parsed_contents = parse_test_dot_file("alice.dot");
+
+        // The final decision to add Frank is reached in D_18, so we remove this event.
+        let _d_18 = unwrap!(parsed_contents.remove_last_event());
+
+        let mut alice = TestParsec::from_parsed_contents(parsed_contents);
+        let genesis_group: BTreeSet<_> = alice.peer_list().all_ids().cloned().collect();
+
+        let alice_id = PeerId::new("Alice");
+        let fred_id = PeerId::new("Fred");
+        assert!(
+            !alice
+                .peer_list()
+                .all_ids()
+                .any(|peer_id| *peer_id == fred_id)
+        );
+
+        let alice_snapshot = Snapshot::new(&alice);
+
+        // Try calling `create_gossip()` for a peer which doesn't exist yet.
+        assert_err!(Error::InvalidPeerState { .. }, alice.create_gossip(Some(&fred_id)));
+        assert_eq!(alice_snapshot, Snapshot::new(&alice));
+
+        // We'll modify Alice's peer list to allow her to create gossip for Fred
+        alice.add_peer(fred_id.clone(), PeerState::RECV | PeerState::VOTE);
+
+        // Construct Fred's Parsec instance.
+        let mut fred = TestParsec::from_existing(fred_id.clone(), &genesis_group, &genesis_group);
+
+        // Check that Fred has no events that Alice has
+        assert!(
+            alice
+                .graph()
+                .iter()
+                .all(|ev| !fred.graph().contains(ev.inner().hash()))
+        );
+
+        // Now Alice will prematurely gossip to Fred
+        let request = unwrap!(alice.create_gossip(Some(&fred_id)));
+        let result = fred.handle_request(&alice_id, request);
+
+        // check that Fred detected premature gossip
+        assert_err!(Error::PrematureGossip, result);
+
+        // Check that Fred has all the events that Alice has
+        assert!(
+            alice
+                .graph()
+                .iter()
+                .all(|ev| fred.graph().contains(ev.inner().hash()))
+        );
+    }
 }
