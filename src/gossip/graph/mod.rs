@@ -201,7 +201,7 @@ impl<'a, T: NetworkEvent, P: PublicId> Iterator for Iter<'a, T, P> {
     }
 }
 
-#[cfg(any(test, feature = "dump-graphs"))]
+#[cfg(any(all(test, feature = "mock"), feature = "dump-graphs"))]
 pub(crate) mod snapshot {
     use super::*;
 

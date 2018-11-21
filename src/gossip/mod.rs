@@ -20,7 +20,7 @@ pub(super) use self::event::find_event_by_short_name;
 pub(super) use self::event::CauseInput;
 pub(super) use self::event::Event;
 pub use self::event_hash::EventHash;
-#[cfg(any(test, feature = "dump-graphs"))]
+#[cfg(any(all(test, feature = "mock"), feature = "dump-graphs"))]
 pub(super) use self::graph::snapshot::GraphSnapshot;
 pub(super) use self::graph::{EventIndex, Graph, IndexedEventRef};
 pub use self::messages::{Request, Response};

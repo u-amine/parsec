@@ -6,7 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mock"))]
 pub(crate) use self::snapshot::PeerListSnapshot;
 use error::Error;
 #[cfg(any(test, feature = "testing"))]
@@ -697,6 +697,7 @@ pub(crate) mod snapshot {
         BTreeMap<P, (PeerState, BTreeSet<(usize, EventHash)>)>,
     );
 
+    #[cfg(feature = "mock")]
     impl<P: PublicId> PeerListSnapshot<P> {
         pub fn new<T: NetworkEvent, S: SecretId<PublicId = P>>(
             peer_list: &PeerList<S>,
