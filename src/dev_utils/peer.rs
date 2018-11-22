@@ -10,7 +10,7 @@ use super::Observation;
 use block::Block;
 use mock::{PeerId, Transaction};
 use observation::{Malice, Observation as ParsecObservation};
-use parsec::{IsInterestingEventFn, Parsec};
+use parsec::{ConsensusMode, Parsec};
 use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
@@ -36,11 +36,11 @@ impl Peer {
     pub fn from_genesis(
         id: PeerId,
         genesis_group: &BTreeSet<PeerId>,
-        is_interesting_event: IsInterestingEventFn<PeerId>,
+        consensus_mode: ConsensusMode,
     ) -> Self {
         Self {
             id: id.clone(),
-            parsec: Parsec::from_genesis(id, genesis_group, is_interesting_event),
+            parsec: Parsec::from_genesis(id, genesis_group, consensus_mode),
             blocks: vec![],
             status: PeerStatus::Active,
             votes_to_make: vec![],
@@ -51,11 +51,11 @@ impl Peer {
         id: PeerId,
         genesis_group: &BTreeSet<PeerId>,
         current_group: &BTreeSet<PeerId>,
-        is_interesting_event: IsInterestingEventFn<PeerId>,
+        consensus_mode: ConsensusMode,
     ) -> Self {
         Self {
             id: id.clone(),
-            parsec: Parsec::from_existing(id, genesis_group, current_group, is_interesting_event),
+            parsec: Parsec::from_existing(id, genesis_group, current_group, consensus_mode),
             blocks: vec![],
             status: PeerStatus::Pending,
             votes_to_make: vec![],

@@ -61,7 +61,7 @@ extern crate unwrap;
 use clap::{App, Arg, ArgMatches};
 use maidsafe_utilities::{log, SeededRng};
 use parsec::mock::{PeerId, Transaction};
-use parsec::{Block, Parsec, Request};
+use parsec::{Block, ConsensusMode, Parsec, Request};
 use rand::Rng;
 use std::collections::BTreeSet;
 use std::fmt::{self, Debug, Formatter};
@@ -106,7 +106,7 @@ impl Peer {
     fn from_genesis(our_id: PeerId, genesis_group: &BTreeSet<PeerId>) -> Self {
         Self {
             id: our_id.clone(),
-            parsec: Parsec::from_genesis(our_id, genesis_group, parsec::is_supermajority),
+            parsec: Parsec::from_genesis(our_id, genesis_group, ConsensusMode::Supermajority),
             observations: vec![],
             blocks: vec![],
         }
@@ -119,7 +119,12 @@ impl Peer {
     ) -> Self {
         Self {
             id: our_id.clone(),
-            parsec: Parsec::from_existing(our_id, genesis_group, section, parsec::is_supermajority),
+            parsec: Parsec::from_existing(
+                our_id,
+                genesis_group,
+                section,
+                ConsensusMode::Supermajority,
+            ),
             observations: vec![],
             blocks: vec![],
         }

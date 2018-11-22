@@ -10,7 +10,7 @@ use super::dot_parser::{parse_dot_file, ParsedContents};
 use gossip::{Event, Request, Response};
 use mock::{PeerId, Transaction};
 use observation::Observation;
-use parsec::{self, Parsec};
+use parsec::{ConsensusMode, Parsec};
 use std::collections::BTreeSet;
 use std::io;
 use std::path::Path;
@@ -33,8 +33,11 @@ impl Record {
     }
 
     pub fn play(self) -> Parsec<Transaction, PeerId> {
-        let mut parsec =
-            Parsec::from_genesis(self.our_id, &self.genesis_group, parsec::is_supermajority);
+        let mut parsec = Parsec::from_genesis(
+            self.our_id,
+            &self.genesis_group,
+            ConsensusMode::Supermajority,
+        );
 
         for action in self.actions {
             action.run(&mut parsec)

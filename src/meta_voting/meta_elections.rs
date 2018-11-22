@@ -95,9 +95,9 @@ impl<P: PublicId> MetaElection<P> {
     fn is_already_interesting_content(&self, creator: &P, payload_hash: &ObservationHash) -> bool {
         self.interesting_events
             .get(creator)
-            .map_or(false, |hashes| {
-                hashes.iter().any(|hash| {
-                    if let Some(meta_event) = self.meta_events.get(hash) {
+            .map_or(false, |indices| {
+                indices.iter().any(|index| {
+                    if let Some(meta_event) = self.meta_events.get(index) {
                         meta_event.interesting_content.contains(payload_hash)
                     } else {
                         false

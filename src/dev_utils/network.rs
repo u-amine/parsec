@@ -14,7 +14,7 @@ use error::Error;
 use gossip::{Request, Response};
 use mock::{PeerId, Transaction};
 use observation::{Malice, Observation as ParsecObservation};
-use parsec::{is_supermajority, IsInterestingEventFn};
+use parsec::ConsensusMode;
 use std::collections::{BTreeMap, BTreeSet};
 
 enum Message {
@@ -32,7 +32,7 @@ pub struct Network {
     pub peers: BTreeMap<PeerId, Peer>,
     genesis: BTreeSet<PeerId>,
     msg_queue: BTreeMap<PeerId, Vec<QueueEntry>>,
-    is_interesting_event: IsInterestingEventFn<PeerId>,
+    consensus_mode: ConsensusMode,
 }
 
 #[derive(Debug)]
@@ -72,19 +72,19 @@ pub enum ConsensusError {
 
 impl Network {
     /// Create an empty test network
-    pub fn new(is_interesting_event: IsInterestingEventFn<PeerId>) -> Self {
+    pub fn new(consensus_mode: ConsensusMode) -> Self {
         Network {
             peers: BTreeMap::new(),
             genesis: BTreeSet::new(),
             msg_queue: BTreeMap::new(),
-            is_interesting_event,
+            consensus_mode,
         }
     }
 
     /// Create a test network with initial peers constructed from the given IDs
     pub fn with_peers<I: IntoIterator<Item = PeerId>>(
         all_ids: I,
-        is_interesting_event: IsInterestingEventFn<PeerId>,
+        consensus_mode: ConsensusMode,
     ) -> Self {
         let genesis_group = all_ids.into_iter().collect::<BTreeSet<_>>();
         let peers = genesis_group
@@ -92,14 +92,14 @@ impl Network {
             .map(|id| {
                 (
                     id.clone(),
-                    Peer::from_genesis(id.clone(), &genesis_group, is_interesting_event),
+                    Peer::from_genesis(id.clone(), &genesis_group, consensus_mode),
                 )
             }).collect();
         Network {
             genesis: genesis_group,
             peers,
             msg_queue: BTreeMap::new(),
-            is_interesting_event,
+            consensus_mode,
         }
     }
 
@@ -278,11 +278,13 @@ impl Network {
                 signatory: pub_id.clone(),
             });
         }
-        let correct_signatories = if let ParsecObservation::OpaquePayload(_) = *block.payload() {
-            (self.is_interesting_event)(&signatories, section)
+
+        let consensus_mode = if let ParsecObservation::OpaquePayload(_) = *block.payload() {
+            self.consensus_mode
         } else {
-            is_supermajority(&signatories, section)
+            ConsensusMode::Supermajority
         };
+        let correct_signatories = consensus_mode.check(signatories.len(), section.len());
         if !correct_signatories {
             return Err(ConsensusError::TooFewSignatures {
                 observation: block.payload().clone(),
@@ -350,11 +352,7 @@ impl Network {
                         .map(|id| {
                             (
                                 id.clone(),
-                                Peer::from_genesis(
-                                    id.clone(),
-                                    &genesis_group,
-                                    self.is_interesting_event,
-                                ),
+                                Peer::from_genesis(id.clone(), &genesis_group, self.consensus_mode),
                             )
                         }).collect();
                     self.peers = peers;
@@ -375,7 +373,7 @@ impl Network {
                             peer.clone(),
                             &self.genesis,
                             &current_peers,
-                            self.is_interesting_event,
+                            self.consensus_mode,
                         ),
                     );
                 }

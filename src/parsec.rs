@@ -27,9 +27,6 @@ use std::ops::{Deref, DerefMut};
 use std::{mem, usize};
 use vote::Vote;
 
-pub type IsInterestingEventFn<P> =
-    fn(peers_that_did_vote: &BTreeSet<P>, peers_that_can_vote: &BTreeSet<P>) -> bool;
-
 type PendingAccusations<T, P> = Vec<(P, Malice<T, P>)>;
 
 /// Returns whether `small` is more than two thirds of `large`.
@@ -37,12 +34,22 @@ pub fn is_more_than_two_thirds(small: usize, large: usize) -> bool {
     3 * small > 2 * large
 }
 
-/// Function which can be used as `is_interesting_event` in
-/// [`Parsec::new()`](struct.Parsec.html#method.new) and which returns `true` if there are >2/3
-/// `did_vote` which are members of `can_vote`.
-pub fn is_supermajority<P: Ord>(did_vote: &BTreeSet<P>, can_vote: &BTreeSet<P>) -> bool {
-    let valid_did_vote_count = can_vote.intersection(did_vote).count();
-    is_more_than_two_thirds(valid_did_vote_count, can_vote.len())
+/// Number of votes necessary to reach consensus on an `OpaquePayload`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ConsensusMode {
+    /// One vote is enough.
+    Single,
+    /// Supermajority (more than 2/3) is required.
+    Supermajority,
+}
+
+impl ConsensusMode {
+    pub(crate) fn check(self, did_vote: usize, can_vote: usize) -> bool {
+        match self {
+            ConsensusMode::Single => did_vote > 0,
+            ConsensusMode::Supermajority => is_more_than_two_thirds(did_vote, can_vote),
+        }
+    }
 }
 
 /// The main object which manages creating and receiving gossip about network events from peers, and
@@ -63,7 +70,7 @@ pub struct Parsec<T: NetworkEvent, S: SecretId> {
     meta_elections: MetaElections<S::PublicId>,
     // Accusations to raise at the end of the processing of current gossip message.
     pending_accusations: PendingAccusations<T, S::PublicId>,
-    is_interesting_event: IsInterestingEventFn<S::PublicId>,
+    consensus_mode: ConsensusMode,
 }
 
 impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
@@ -71,13 +78,13 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     pub fn from_genesis(
         our_id: S,
         genesis_group: &BTreeSet<S::PublicId>,
-        is_interesting_event: IsInterestingEventFn<S::PublicId>,
+        consensus_mode: ConsensusMode,
     ) -> Self {
         if !genesis_group.contains(our_id.public_id()) {
             log_or_panic!("Genesis group must contain us");
         }
 
-        let mut parsec = Self::empty(our_id, genesis_group, is_interesting_event);
+        let mut parsec = Self::empty(our_id, genesis_group, consensus_mode);
 
         for peer_id in genesis_group {
             parsec
@@ -128,7 +135,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         our_id: S,
         genesis_group: &BTreeSet<S::PublicId>,
         section: &BTreeSet<S::PublicId>,
-        is_interesting_event: IsInterestingEventFn<S::PublicId>,
+        consensus_mode: ConsensusMode,
     ) -> Self {
         if genesis_group.is_empty() {
             log_or_panic!("Genesis group can't be empty");
@@ -147,7 +154,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         }
 
         let our_public_id = our_id.public_id().clone();
-        let mut parsec = Self::empty(our_id, genesis_group, is_interesting_event);
+        let mut parsec = Self::empty(our_id, genesis_group, consensus_mode);
 
         // Add ourselves.
         parsec
@@ -193,7 +200,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn empty(
         our_id: S,
         genesis_group: &BTreeSet<S::PublicId>,
-        is_interesting_event: IsInterestingEventFn<S::PublicId>,
+        consensus_mode: ConsensusMode,
     ) -> Self {
         dump_graph::init();
 
@@ -203,7 +210,7 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
             consensused_blocks: VecDeque::new(),
             observations: BTreeMap::new(),
             meta_elections: MetaElections::new(genesis_group.clone()),
-            is_interesting_event,
+            consensus_mode,
             pending_accusations: vec![],
         }
     }
@@ -911,51 +918,52 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
     fn is_interesting_payload(
         &self,
         builder: &MetaEventBuilder<T, S::PublicId>,
-        valid_voters: &BTreeSet<S::PublicId>,
+        peers_that_can_vote: &BTreeSet<S::PublicId>,
         payload_hash: &ObservationHash,
         start_index: usize,
     ) -> bool {
-        let peers_that_did_vote = self.ancestors_carrying_payload(
-            &valid_voters,
+        let num_peers_that_did_vote = self.num_creators_of_ancestors_carrying_payload(
+            peers_that_can_vote,
             &*builder.event(),
             payload_hash,
             start_index,
         );
-        if let Some(&Observation::OpaquePayload(_)) = self
+
+        let consensus_mode = if let Some(&Observation::OpaquePayload(_)) = self
             .observations
             .get(payload_hash)
             .map(|info| &info.observation)
         {
-            (self.is_interesting_event)(&peers_that_did_vote, &valid_voters)
+            self.consensus_mode
         } else {
-            is_supermajority(&peers_that_did_vote, &valid_voters)
-        }
+            ConsensusMode::Supermajority
+        };
+
+        consensus_mode.check(num_peers_that_did_vote, peers_that_can_vote.len())
     }
 
-    fn ancestors_carrying_payload(
+    fn num_creators_of_ancestors_carrying_payload(
         &self,
-        voters: &BTreeSet<S::PublicId>,
+        peers_that_can_vote: &BTreeSet<S::PublicId>,
         event: &Event<T, S::PublicId>,
         payload_hash: &ObservationHash,
         start_index: usize,
-    ) -> BTreeSet<S::PublicId> {
+    ) -> usize {
         let payload = self
             .observations
             .get(payload_hash)
             .map(|info| &info.observation);
 
-        self.peer_list
+        peers_that_can_vote
             .iter()
-            .filter(|(peer_id, _)| voters.contains(peer_id))
-            .filter(|(peer_id, _)| {
+            .filter(|peer_id| {
                 self.graph
                     .iter_from(start_index)
                     .filter(|that_event| that_event.creator() == *peer_id)
                     .any(|that_event| {
                         payload == that_event.vote().map(Vote::payload) && event.sees(that_event)
                     })
-            }).map(|(peer_id, _)| peer_id.clone())
-            .collect()
+            }).count()
     }
 
     fn set_observees(&self, builder: &mut MetaEventBuilder<T, S::PublicId>) {
@@ -1966,7 +1974,11 @@ impl<T: NetworkEvent, P: PublicId> ObservationInfo<T, P> {
 #[cfg(all(test, feature = "mock"))]
 impl Parsec<Transaction, PeerId> {
     pub(crate) fn from_parsed_contents(mut parsed_contents: ParsedContents) -> Self {
-        let mut parsec = Parsec::empty(parsed_contents.our_id, &BTreeSet::new(), is_supermajority);
+        let mut parsec = Parsec::empty(
+            parsed_contents.our_id,
+            &BTreeSet::new(),
+            ConsensusMode::Supermajority,
+        );
 
         // Populate `observations` cache using `interesting_content`, to support partial graphs...
         for meta_event in parsed_contents
@@ -2021,7 +2033,7 @@ impl<T: NetworkEvent, S: SecretId> TestParsec<T, S> {
         TestParsec(Parsec::from_genesis(
             our_id,
             genesis_group,
-            is_supermajority,
+            ConsensusMode::Supermajority,
         ))
     }
 
@@ -2034,7 +2046,7 @@ impl<T: NetworkEvent, S: SecretId> TestParsec<T, S> {
             our_id,
             genesis_group,
             section,
-            is_supermajority,
+            ConsensusMode::Supermajority,
         ))
     }
 
