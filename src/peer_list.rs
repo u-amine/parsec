@@ -55,6 +55,23 @@ impl<S: SecretId> PeerList<S> {
         self.voters().map(|(id, _)| id)
     }
 
+    /// Returns an iterator of peers that we can send gossip to.
+    pub fn gossip_recipient_ids(&self) -> impl Iterator<Item = &S::PublicId> {
+        let ids = if self.our_state().can_send() {
+            let ids = self
+                .peers
+                .iter()
+                .filter(move |(id, peer)| {
+                    *id != self.our_pub_id() && peer.state.can_vote() && peer.state.can_recv()
+                }).map(|(id, _)| id);
+            Some(ids)
+        } else {
+            None
+        };
+
+        ids.into_iter().flat_map(|ids| ids)
+    }
+
     /// Returns an unsorted map of peer_id => Hash(peer_id).
     pub fn peer_id_hashes(&self) -> impl Iterator<Item = (&S::PublicId, &Hash)> {
         self.peers.iter().map(|(id, peer)| (id, &peer.id_hash))

@@ -234,6 +234,12 @@ impl<T: NetworkEvent, S: SecretId> Parsec<T, S> {
         self.add_event(event)
     }
 
+    /// Returns ids of peers who we can send gossips to. Calling `create_gossip` with a peer id
+    /// returned by this function is guaranteed to succeed (assuming no mutation happened in between).
+    pub fn gossip_recipients(&self) -> impl Iterator<Item = &S::PublicId> {
+        self.peer_list.gossip_recipient_ids()
+    }
+
     /// Creates a new message to be gossiped to a peer containing all gossip events this node thinks
     /// that peer needs.  If `peer_id` is `None`, a message containing all known gossip events is
     /// returned.  If `peer_id` is `Some` and the given peer is not an active node, an error is
