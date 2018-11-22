@@ -8,8 +8,7 @@
 
 use dev_utils::network::Network;
 use maidsafe_utilities::SeededRng;
-use mock::PeerId;
-use parsec::{is_supermajority, IsInterestingEventFn};
+use parsec::ConsensusMode;
 use rand::{Rng, SeedableRng, XorShiftRng};
 use std::fmt;
 
@@ -34,10 +33,7 @@ pub enum RngChoice {
 impl Environment {
     /// Initialise the test environment. The random number generator will be seeded with `seed`
     /// or randomly if this is `SeededRandom`.
-    pub fn with_is_interesting_event(
-        seed: RngChoice,
-        is_interesting_event: IsInterestingEventFn<PeerId>,
-    ) -> Self {
+    pub fn with_consensus_mode(seed: RngChoice, consensus_mode: ConsensusMode) -> Self {
         let rng: Box<RngDebug> = match seed {
             RngChoice::SeededRandom => Box::new(SeededRng::new()),
             RngChoice::Seeded(seed) => Box::new(SeededRng::from_seed(seed)),
@@ -48,13 +44,13 @@ impl Environment {
             }
         };
 
-        let network = Network::new(is_interesting_event);
+        let network = Network::new(consensus_mode);
 
         Self { network, rng }
     }
 
     pub fn new(seed: RngChoice) -> Self {
-        Self::with_is_interesting_event(seed, is_supermajority)
+        Self::with_consensus_mode(seed, ConsensusMode::Supermajority)
     }
 }
 

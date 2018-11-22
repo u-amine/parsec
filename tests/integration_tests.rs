@@ -68,10 +68,11 @@ use parsec::dev_utils::{
     ScheduleOptions,
 };
 use parsec::mock::{PeerId, Transaction, NAMES};
+use parsec::ConsensusMode;
 use proptest::prelude::ProptestConfig;
 use proptest::test_runner::FileFailurePersistence;
 use rand::Rng;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 // Alter the seed here to reproduce failures
 static SEED: RngChoice = RngChoice::SeededRandom;
@@ -359,11 +360,7 @@ fn fail_add_remove() {
 
 #[test]
 fn custom_is_interesting_event_that_requires_only_one_vote() {
-    fn at_least_one(did_vote: &BTreeSet<PeerId>, can_vote: &BTreeSet<PeerId>) -> bool {
-        did_vote.intersection(can_vote).next().is_some()
-    }
-
-    let mut env = Environment::with_is_interesting_event(SEED, at_least_one);
+    let mut env = Environment::with_consensus_mode(SEED, ConsensusMode::Single);
     let schedule = Schedule::new(
         &mut env,
         &ScheduleOptions {
