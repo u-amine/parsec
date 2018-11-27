@@ -94,7 +94,7 @@ cargo run --release --example basic --features=mock -- --help
 
 For instance, for an example with 10 peers agreeing on the order of 5 events, run
 ```
-cargo run --release --example basic --features=mock -- -p10 -e5
+cargo run --release --example basic --features=dump-graphs,mock -- -i10 -o5
 ```
 
 # Share your thoughts/questions
